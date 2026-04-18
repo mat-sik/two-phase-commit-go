@@ -36,5 +36,8 @@ func (store *clientRegistrarStore) add(gRPCHost string, client pb.ClientServiceC
 
 func (store *clientRegistrarStore) load(gRPCHost string) (pb.ClientServiceClient, bool) {
 	value, ok := store.store.Load(gRPCHost)
-	return value.(pb.ClientServiceClient), ok
+	if !ok {
+		return nil, false
+	}
+	return value.(pb.ClientServiceClient), true
 }
