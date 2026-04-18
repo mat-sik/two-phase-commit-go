@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package client.v1;
+
+option go_package = "github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/generated/client/v1";
+
+service ClientService {
+  rpc PrepareTransaction (PrepareTransactionRequest) returns (PrepareTransactionResponse);
+  rpc CommitTransaction (CommitTransactionRequest) returns (CommitTransactionResponse);
+  rpc RollbackTransaction (RollbackTransactionRequest) returns (RollbackTransactionResponse);
+}
+
+message PrepareTransactionRequest {
+  string transaction_id = 1;
+  string payload = 2;
+}
+
+message PrepareTransactionResponse {
+}
+
+message CommitTransactionRequest {
+  string transaction_id = 1;
+}
+
+message CommitTransactionResponse {
+}
+
+message RollbackTransactionRequest {
+  string transaction_id = 1;
+}
+
+message RollbackTransactionResponse {
+}
