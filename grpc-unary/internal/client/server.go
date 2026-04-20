@@ -1,54 +1,91 @@
 package client
 
 import (
-	"context"
 	"log/slog"
+	"net"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
 
 	pb "github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/generated/client/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"google.golang.org/grpc"
 )
 
-type Handler struct {
-	pb.UnimplementedClientServiceServer
+func RunServer(listener net.Listener, handler *Handler) error {
+	s := grpc.NewServer()
+	pb.RegisterClientServiceServer(s, handler)
 
-	transactionPreparer   transactionPreparer
-	transactionCommiter   transactionCommiter
-	transactionRollbacker transactionRollbacker
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go stopServerOnInterrupt(&wg, s)
+
+	slog.Info("ClientService gRPC server listening", "addr", listener.Addr().String())
+	if err := s.Serve(listener); err != nil {
+		return err
+	}
+	wg.Wait()
+	return nil
 }
 
-func (h *Handler) PrepareTransaction(ctx context.Context, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
-	slog.Info("PrepareTransaction called", "request", req)
-	ok, err := h.transactionPreparer.prepareTransaction(ctx, req.GetTransactionId(), req.GetPayload())
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if !ok {
-		return nil, status.Error(codes.Aborted, "prepare transaction failed")
-	}
-	return &pb.PrepareTransactionResponse{}, nil
+func stopServerOnInterrupt(wg *sync.WaitGroup, s *grpc.Server) {
+	defer wg.Done()
+	blockUntilSignal()
+	stopServer(s)
 }
 
-func (h *Handler) CommitTransaction(ctx context.Context, req *pb.CommitTransactionRequest) (*pb.CommitTransactionResponse, error) {
-	slog.Info("CommitTransaction called", "request", req)
-	ok, err := h.transactionCommiter.commitTransaction(ctx, req.GetTransactionId())
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if !ok {
-		return nil, status.Error(codes.Aborted, "commit transaction failed")
-	}
-	return &pb.CommitTransactionResponse{}, nil
+func blockUntilSignal() {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
 }
 
-func (h *Handler) RollbackTransaction(ctx context.Context, req *pb.RollbackTransactionRequest) (*pb.RollbackTransactionResponse, error) {
-	slog.Info("RollbackTransaction called", "request", req)
-	ok, err := h.transactionRollbacker.rollbackTransaction(ctx, req.GetTransactionId())
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+func stopServer(s *grpc.Server) {
+	slog.Info("shutting down gRPC server...")
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	var mutex sync.Mutex
+	stoppingStatus := notStopped
+
+	stopWaiting := make(chan struct{}, 1)
+	go func() {
+		defer wg.Done()
+
+		s.GracefulStop()
+
+		mutex.Lock()
+		if stoppingStatus == notStopped {
+			stoppingStatus = stoppedGracefully
+			slog.Info("Stopped gRPC server gracefully")
+		}
+		mutex.Unlock()
+
+		stopWaiting <- struct{}{}
+	}()
+
+	select {
+	case <-time.After(10 * time.Second):
+	case <-stopWaiting:
 	}
-	if !ok {
-		return nil, status.Error(codes.Aborted, "rollback transaction failed")
+
+	mutex.Lock()
+	if stoppingStatus == notStopped {
+		s.Stop()
+		stoppingStatus = stoppedForcefully
+		slog.Warn("Stopped gRPC server forcefully")
 	}
-	return &pb.RollbackTransactionResponse{}, nil
+	mutex.Unlock()
+
+	wg.Wait()
 }
+
+type stopStatus int
+
+const (
+	notStopped stopStatus = iota
+	stoppedGracefully
+	stoppedForcefully
+)
