@@ -14,6 +14,12 @@ type StateLoader struct {
 	transactionStateChecker TransactionStateChecker
 }
 
+func NewStateLoader(transactionStateChecker TransactionStateChecker) StateLoader {
+	return StateLoader{
+		transactionStateChecker: transactionStateChecker,
+	}
+}
+
 func (sl StateLoader) loadState(transactionID string, transactions []Transaction) state {
 	prepared := make(map[string]struct{})
 	prepareFailed := make(map[string]struct{})
