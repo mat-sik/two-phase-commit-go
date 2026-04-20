@@ -2,8 +2,6 @@ package client
 
 import "context"
 
-type operation func(transactionID string) error
-
 type transactionPreparer interface {
 	prepareTransaction(ctx context.Context, transactionID string, payload string) (bool, error)
 }
