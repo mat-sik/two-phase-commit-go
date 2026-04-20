@@ -10,19 +10,27 @@ import (
 )
 
 type OperationHandler struct {
-	stateLoader     stateLoader
-	statePersister  statePersister
+	stateLoader     StateLoader
+	statePersister  StatePersister
 	clientRegistrar clientRegistrar
 }
 
-type statePersister interface {
-	persistState(ctx context.Context, transactionID string, targetHost string, transactionState transactionState) <-chan persistResult
+func NewOperationHandler(stateLoader StateLoader, statePersister StatePersister) *OperationHandler {
+	return &OperationHandler{
+		stateLoader:     stateLoader,
+		statePersister:  statePersister,
+		clientRegistrar: clientRegistrar{store: &clientRegistrarStore{}},
+	}
 }
 
-type persistResult struct {
-	commit   func() error
-	rollback func() error
-	err      error
+type StatePersister interface {
+	PersistState(ctx context.Context, transactionID string, targetHost string, transactionState TransactionState) <-chan PersistResult
+}
+
+type PersistResult struct {
+	Commit   func() error
+	Rollback func() error
+	Err      error
 }
 
 func (oh OperationHandler) HandleRequest(ctx context.Context, request AtomicTransactions) error {
@@ -120,27 +128,27 @@ func (oh OperationHandler) runOperation(ctx context.Context, transactionID strin
 
 	ctx, persistCancel := context.WithTimeout(ctx, persistStateTimeout)
 	defer persistCancel()
-	persistResultCh := oh.statePersister.persistState(ctx, transactionID, operation.targetHost(), operation.postOperationTransactionState())
+	persistResultCh := oh.statePersister.PersistState(ctx, transactionID, operation.targetHost(), operation.postOperationTransactionState())
 
 	err := <-operationSentCh
 	if err != nil {
 		cancel()
 	}
 	result := <-persistResultCh
-	if result.err != nil {
+	if result.Err != nil {
 		if err != nil {
-			return errors.Join(err, result.err)
+			return errors.Join(err, result.Err)
 		}
-		return result.err
+		return result.Err
 	}
 	if err != nil {
-		rollbackErr := result.rollback()
+		rollbackErr := result.Rollback()
 		if rollbackErr != nil {
 			return errors.Join(err, rollbackErr)
 		}
 		return err
 	}
-	return result.commit()
+	return result.Commit()
 }
 
 const persistStateTimeout = 5 * time.Second
@@ -197,7 +205,7 @@ func handleRollbackOperation(ctx context.Context, client pb.ClientServiceClient,
 
 type operation interface {
 	targetHost() string
-	postOperationTransactionState() transactionState
+	postOperationTransactionState() TransactionState
 }
 
 type prepareOperation struct {
@@ -209,7 +217,7 @@ func (o prepareOperation) targetHost() string {
 	return o.trgHost
 }
 
-func (o prepareOperation) postOperationTransactionState() transactionState {
+func (o prepareOperation) postOperationTransactionState() TransactionState {
 	return transactionPrepared
 }
 
@@ -221,7 +229,7 @@ func (o commitOperation) targetHost() string {
 	return o.trgHost
 }
 
-func (o commitOperation) postOperationTransactionState() transactionState {
+func (o commitOperation) postOperationTransactionState() TransactionState {
 	return transactionCommitted
 }
 
@@ -233,6 +241,6 @@ func (o rollbackOperation) targetHost() string {
 	return o.trgHost
 }
 
-func (o rollbackOperation) postOperationTransactionState() transactionState {
+func (o rollbackOperation) postOperationTransactionState() TransactionState {
 	return transactionRolledBack
 }

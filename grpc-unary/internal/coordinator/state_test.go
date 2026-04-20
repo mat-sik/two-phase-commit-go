@@ -7,7 +7,7 @@ import (
 
 func Test_stateLoader_loadState(t *testing.T) {
 	type fields struct {
-		transactionStateChecker transactionStateChecker
+		transactionStateChecker TransactionStateChecker
 	}
 	type args struct {
 		transactionID string
@@ -23,7 +23,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "all prepare failed",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByHost: map[string]transactionState{
+					stateByHost: map[string]TransactionState{
 						"host-a": transactionPrepareFailed,
 						"host-b": transactionPrepareFailed,
 					},
@@ -44,7 +44,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "all prepared",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByHost: map[string]transactionState{
+					stateByHost: map[string]TransactionState{
 						"host-a": transactionPrepared,
 						"host-b": transactionPrepared,
 					},
@@ -65,7 +65,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "mixed states across hosts",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByHost: map[string]transactionState{
+					stateByHost: map[string]TransactionState{
 						"host-a": transactionPrepared,
 						"host-b": transactionPrepared,
 						"host-c": transactionCommitted,
@@ -87,7 +87,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "all rolled back",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByHost: map[string]transactionState{
+					stateByHost: map[string]TransactionState{
 						"host-a": transactionRolledBack,
 						"host-b": transactionRolledBack,
 					},
@@ -108,7 +108,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "empty transactions list",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByHost: map[string]transactionState{},
+					stateByHost: map[string]TransactionState{},
 				},
 			},
 			args: args{
@@ -126,7 +126,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "checker returns state for extra hosts not in transactions — only transactions are mapped",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByHost: map[string]transactionState{
+					stateByHost: map[string]TransactionState{
 						"host-a": transactionPrepared,
 						"host-z": transactionCommitted, // not in transaction list
 					},
@@ -146,7 +146,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sl := stateLoader{
+			sl := StateLoader{
 				transactionStateChecker: tt.fields.transactionStateChecker,
 			}
 			if got := sl.loadState(tt.args.transactionID, tt.args.transactions); !reflect.DeepEqual(got, tt.want) {
@@ -758,10 +758,10 @@ func Test_state_roundTrip(t *testing.T) {
 }
 
 type mockTransactionStateChecker struct {
-	stateByHost map[string]transactionState
+	stateByHost map[string]TransactionState
 }
 
-func (m mockTransactionStateChecker) check(_ string) map[string]transactionState {
+func (m mockTransactionStateChecker) Check(_ string) map[string]TransactionState {
 	return m.stateByHost
 }
 

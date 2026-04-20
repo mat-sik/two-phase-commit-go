@@ -12,8 +12,8 @@ import (
 
 func TestOperationHandler_HandleRequest(t *testing.T) {
 	type fields struct {
-		stateLoader     stateLoader
-		statePersister  statePersister
+		stateLoader     StateLoader
+		statePersister  StatePersister
 		clientRegistrar clientRegistrar
 	}
 	type args struct {
@@ -74,9 +74,9 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 		{
 			name: "already fully committed initial state → no operations, no error",
 			fields: fields{
-				stateLoader: stateLoader{
+				stateLoader: StateLoader{
 					transactionStateChecker: mockTransactionStateChecker{
-						stateByHost: map[string]transactionState{
+						stateByHost: map[string]TransactionState{
 							"host-a": transactionCommitted,
 						},
 					},
@@ -98,9 +98,9 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 		{
 			name: "already fully rolled back initial state → no operations, no error",
 			fields: fields{
-				stateLoader: stateLoader{
+				stateLoader: StateLoader{
 					transactionStateChecker: mockTransactionStateChecker{
-						stateByHost: map[string]transactionState{
+						stateByHost: map[string]TransactionState{
 							"host-a": transactionRolledBack,
 						},
 					},
@@ -122,9 +122,9 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 		{
 			name: "resume from prepared: skips prepare, goes straight to commit → no error",
 			fields: fields{
-				stateLoader: stateLoader{
+				stateLoader: StateLoader{
 					transactionStateChecker: mockTransactionStateChecker{
-						stateByHost: map[string]transactionState{
+						stateByHost: map[string]TransactionState{
 							"host-a": transactionPrepared,
 							"host-b": transactionPrepared,
 						},
@@ -251,19 +251,19 @@ func ctxWithTimeout(ctx context.Context, timeout time.Duration) context.Context 
 }
 
 type mockStatePersister struct {
-	// err is returned as persistResult.err for every call when non-nil.
+	// err is returned as PersistResult.Err for every call when non-nil.
 	// When nil, a successful commit (no-op) is returned.
 	err error
 }
 
-func (m mockStatePersister) persistState(_ context.Context, _ string, _ string, _ transactionState) <-chan persistResult {
-	ch := make(chan persistResult, 1)
+func (m mockStatePersister) PersistState(_ context.Context, _ string, _ string, _ TransactionState) <-chan PersistResult {
+	ch := make(chan PersistResult, 1)
 	if m.err != nil {
-		ch <- persistResult{err: m.err}
+		ch <- PersistResult{Err: m.err}
 	} else {
-		ch <- persistResult{
-			commit:   func() error { return nil },
-			rollback: func() error { return nil },
+		ch <- PersistResult{
+			Commit:   func() error { return nil },
+			Rollback: func() error { return nil },
 		}
 	}
 	return ch
@@ -299,12 +299,12 @@ func newClientRegistrar(hostToClient map[string]pb.ClientServiceClient) clientRe
 	return cr
 }
 
-// allNotStartedLoader returns a stateLoader whose checker reports every host
+// allNotStartedLoader returns a StateLoader whose checker reports every host
 // as not started, so HandleRequest always begins from a clean slate.
-func allNotStartedLoader() stateLoader {
-	return stateLoader{
+func allNotStartedLoader() StateLoader {
+	return StateLoader{
 		transactionStateChecker: mockTransactionStateChecker{
-			stateByHost: map[string]transactionState{},
+			stateByHost: map[string]TransactionState{},
 		},
 	}
 }

@@ -1,9 +1,9 @@
 package coordinator
 
-type transactionState int
+type TransactionState int
 
 const (
-	transactionNotStarted transactionState = iota
+	transactionNotStarted TransactionState = iota
 	transactionPrepared
 	transactionPrepareFailed
 	transactionCommitted

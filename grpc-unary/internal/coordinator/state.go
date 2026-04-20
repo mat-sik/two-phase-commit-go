@@ -6,21 +6,21 @@ import (
 	"maps"
 )
 
-type transactionStateChecker interface {
-	check(transactionID string) map[string]transactionState
+type TransactionStateChecker interface {
+	Check(transactionID string) map[string]TransactionState
 }
 
-type stateLoader struct {
-	transactionStateChecker transactionStateChecker
+type StateLoader struct {
+	transactionStateChecker TransactionStateChecker
 }
 
-func (sl stateLoader) loadState(transactionID string, transactions []Transaction) state {
+func (sl StateLoader) loadState(transactionID string, transactions []Transaction) state {
 	prepared := make(map[string]struct{})
 	prepareFailed := make(map[string]struct{})
 	committed := make(map[string]struct{})
 	rolledBack := make(map[string]struct{})
 
-	stateByTargetHost := sl.transactionStateChecker.check(transactionID)
+	stateByTargetHost := sl.transactionStateChecker.Check(transactionID)
 	for _, op := range transactions {
 		switch stateByTargetHost[op.targetHost] {
 		case transactionNotStarted:
@@ -83,17 +83,17 @@ func (s state) nextState(successfulTransitions []stateTransition, failedTransiti
 	}
 }
 
-func transactionStateAfterSuccessfulTransition(transition stateTransition) transactionState {
+func transactionStateAfterSuccessfulTransition(transition stateTransition) TransactionState {
 	success := true
 	return transactionStateAfterTransition(transition, success)
 }
 
-func transactionStateAfterFailedTransition(transition stateTransition) transactionState {
+func transactionStateAfterFailedTransition(transition stateTransition) TransactionState {
 	success := false
 	return transactionStateAfterTransition(transition, success)
 }
 
-func transactionStateAfterTransition(transition stateTransition, success bool) transactionState {
+func transactionStateAfterTransition(transition stateTransition, success bool) TransactionState {
 	switch transition.(type) {
 	case prepareStateTransition:
 		if success {
@@ -216,16 +216,16 @@ func (s state) buildRollbackStateTransitions(transactions []Transaction) []state
 }
 
 type stateTransition interface {
-	sourceState() transactionState
+	sourceState() TransactionState
 	host() string
 }
 
 type prepareStateTransition struct {
-	preTransitionState transactionState
+	preTransitionState TransactionState
 	transaction        Transaction
 }
 
-func (tr prepareStateTransition) sourceState() transactionState {
+func (tr prepareStateTransition) sourceState() TransactionState {
 	return tr.preTransitionState
 }
 
@@ -234,11 +234,11 @@ func (tr prepareStateTransition) host() string {
 }
 
 type commitStateTransition struct {
-	preTransitionState transactionState
+	preTransitionState TransactionState
 	transaction        Transaction
 }
 
-func (tr commitStateTransition) sourceState() transactionState {
+func (tr commitStateTransition) sourceState() TransactionState {
 	return tr.preTransitionState
 }
 
@@ -247,11 +247,11 @@ func (tr commitStateTransition) host() string {
 }
 
 type rollbackStateTransition struct {
-	preTransitionState transactionState
+	preTransitionState TransactionState
 	transaction        Transaction
 }
 
-func (tr rollbackStateTransition) sourceState() transactionState {
+func (tr rollbackStateTransition) sourceState() TransactionState {
 	return tr.preTransitionState
 }
 
@@ -259,7 +259,7 @@ func (tr rollbackStateTransition) host() string {
 	return tr.transaction.targetHost
 }
 
-func (s state) transactionState(targetHost string) transactionState {
+func (s state) transactionState(targetHost string) TransactionState {
 	if _, ok := s.prepared[targetHost]; ok {
 		return transactionPrepared
 	}
@@ -280,7 +280,7 @@ func deleteValueFromMap(
 	prepareFailed map[string]struct{},
 	committed map[string]struct{},
 	rolledBack map[string]struct{},
-	transactionState transactionState,
+	transactionState TransactionState,
 	targetHost string,
 ) {
 	switch transactionState {
@@ -302,7 +302,7 @@ func addValueToMap(
 	prepareFailed map[string]struct{},
 	committed map[string]struct{},
 	rolledBack map[string]struct{},
-	transactionState transactionState,
+	transactionState TransactionState,
 	targetHost string,
 ) {
 	switch transactionState {
