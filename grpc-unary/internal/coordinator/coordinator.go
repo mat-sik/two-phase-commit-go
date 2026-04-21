@@ -104,7 +104,7 @@ func mapToOperation(transition stateTransition) operation {
 	case commitStateTransition:
 		return commitOperation{trgHost: tr.host()}
 	case rollbackStateTransition:
-		return commitOperation{trgHost: tr.host()}
+		return rollbackOperation{trgHost: tr.host()}
 	default:
 		panic("unknown transition type")
 	}
