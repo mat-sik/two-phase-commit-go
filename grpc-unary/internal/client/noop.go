@@ -74,11 +74,11 @@ func (n *noopTransactionHandler) rollbackTransaction(_ context.Context, transact
 	if status != transactionStatusPrepared {
 		return false, fmt.Errorf("can't rollback %s transaction for '%s'", status, transactionID)
 	}
-	n._commitTransaction(transactionID)
+	n._rollbackTransaction(transactionID)
 	return true, nil
 }
 
-func (n *noopTransactionHandler) _rollbackTransaction(_ context.Context, transactionID string) {
+func (n *noopTransactionHandler) _rollbackTransaction(transactionID string) {
 	slog.Info("rolling back transaction", slog.String("transactionID", transactionID))
 	n.transactionStatusMap.add(transactionID, transactionStatusRolledBacked)
 }
