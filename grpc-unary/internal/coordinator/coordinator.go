@@ -7,6 +7,7 @@ import (
 	"time"
 
 	pb "github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/generated/client/v1"
+	"google.golang.org/grpc"
 )
 
 type OperationHandler struct {
@@ -187,19 +188,19 @@ const sendOperationTimeout = 5 * time.Second
 
 func handlePrepareOperation(ctx context.Context, client pb.ClientServiceClient, transactionID string, operation prepareOperation) error {
 	req := pb.PrepareTransactionRequest{TransactionId: transactionID, Payload: operation.payload}
-	_, err := client.PrepareTransaction(ctx, &req)
+	_, err := client.PrepareTransaction(ctx, &req, grpc.WaitForReady(true))
 	return err
 }
 
 func handleCommitOperation(ctx context.Context, client pb.ClientServiceClient, transactionID string) error {
 	req := pb.CommitTransactionRequest{TransactionId: transactionID}
-	_, err := client.CommitTransaction(ctx, &req)
+	_, err := client.CommitTransaction(ctx, &req, grpc.WaitForReady(true))
 	return err
 }
 
 func handleRollbackOperation(ctx context.Context, client pb.ClientServiceClient, transactionID string) error {
 	req := pb.RollbackTransactionRequest{TransactionId: transactionID}
-	_, err := client.RollbackTransaction(ctx, &req)
+	_, err := client.RollbackTransaction(ctx, &req, grpc.WaitForReady(true))
 	return err
 }
 
