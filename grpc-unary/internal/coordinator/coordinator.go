@@ -34,20 +34,20 @@ type PersistResult struct {
 }
 
 func (oh OperationHandler) HandleRequest(ctx context.Context, request AtomicTransactions) error {
-	initialState := oh.stateLoader.loadState(request.transactionID, request.transactions)
+	initialState := oh.stateLoader.loadState(request.TransactionID, request.Transactions)
 
 	var allErrs []error
 	var successfulTransitions []stateTransition
 	var failedTransitions []stateTransition
-	for currState := initialState; !currState.allFinished(len(request.transactions)); currState = currState.nextState(successfulTransitions, failedTransitions) {
+	for currState := initialState; !currState.allFinished(len(request.Transactions)); currState = currState.nextState(successfulTransitions, failedTransitions) {
 		if err := ctx.Err(); err != nil {
 			return errors.Join(append(allErrs, err)...)
 		}
 
-		transitions := currState.nextStateTransitions(request.transactions)
+		transitions := currState.nextStateTransitions(request.Transactions)
 
 		resultCh := make(chan operationResult, len(transitions))
-		oh.doTransitionsConcurrently(ctx, resultCh, request.transactionID, transitions)
+		oh.doTransitionsConcurrently(ctx, resultCh, request.TransactionID, transitions)
 
 		successfulTransitions = successfulTransitions[:0]
 		failedTransitions = failedTransitions[:0]
@@ -100,7 +100,7 @@ type operationResult struct {
 func mapToOperation(transition stateTransition) operation {
 	switch tr := transition.(type) {
 	case prepareStateTransition:
-		return prepareOperation{trgHost: tr.host(), payload: tr.transaction.payload}
+		return prepareOperation{trgHost: tr.host(), payload: tr.transaction.Payload}
 	case commitStateTransition:
 		return commitOperation{trgHost: tr.host()}
 	case rollbackStateTransition:
@@ -111,13 +111,13 @@ func mapToOperation(transition stateTransition) operation {
 }
 
 type AtomicTransactions struct {
-	transactionID string
-	transactions  []Transaction
+	TransactionID string
+	Transactions  []Transaction
 }
 
 type Transaction struct {
-	targetHost string
-	payload    string
+	TargetHost string
+	Payload    string
 }
 
 func (oh OperationHandler) runOperation(ctx context.Context, transactionID string, operation operation) error {
@@ -183,7 +183,7 @@ func (oh OperationHandler) _sendOperation(ctx context.Context, transactionID str
 	}
 }
 
-const sendOperationTimeout time.Duration = 5 * time.Second
+const sendOperationTimeout = 5 * time.Second
 
 func handlePrepareOperation(ctx context.Context, client pb.ClientServiceClient, transactionID string, operation prepareOperation) error {
 	req := pb.PrepareTransactionRequest{TransactionId: transactionID, Payload: operation.payload}

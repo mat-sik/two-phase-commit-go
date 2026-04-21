@@ -28,17 +28,17 @@ func (sl StateLoader) loadState(transactionID string, transactions []Transaction
 
 	stateByTargetHost := sl.transactionStateChecker.Check(transactionID)
 	for _, op := range transactions {
-		switch stateByTargetHost[op.targetHost] {
+		switch stateByTargetHost[op.TargetHost] {
 		case transactionNotStarted:
 			break
 		case transactionPrepared:
-			prepared[op.targetHost] = struct{}{}
+			prepared[op.TargetHost] = struct{}{}
 		case transactionPrepareFailed:
-			prepareFailed[op.targetHost] = struct{}{}
+			prepareFailed[op.TargetHost] = struct{}{}
 		case transactionCommitted:
-			committed[op.targetHost] = struct{}{}
+			committed[op.TargetHost] = struct{}{}
 		case transactionRolledBack:
-			rolledBack[op.targetHost] = struct{}{}
+			rolledBack[op.TargetHost] = struct{}{}
 		}
 	}
 
@@ -191,9 +191,9 @@ func (s state) allCommitted(transactionCount int) bool {
 func (s state) buildPrepareStateTransitions(transactions []Transaction) []stateTransition {
 	transitions := make([]stateTransition, 0, len(transactions)-len(s.prepared))
 	for _, tr := range transactions {
-		_, ok := s.prepared[tr.targetHost]
+		_, ok := s.prepared[tr.TargetHost]
 		if !ok {
-			transitions = append(transitions, prepareStateTransition{preTransitionState: s.transactionState(tr.targetHost), transaction: tr})
+			transitions = append(transitions, prepareStateTransition{preTransitionState: s.transactionState(tr.TargetHost), transaction: tr})
 		}
 	}
 	return transitions
@@ -202,9 +202,9 @@ func (s state) buildPrepareStateTransitions(transactions []Transaction) []stateT
 func (s state) buildCommitStateTransitions(transactions []Transaction) []stateTransition {
 	transitions := make([]stateTransition, 0, len(transactions)-len(s.committed))
 	for _, tx := range transactions {
-		_, ok := s.committed[tx.targetHost]
+		_, ok := s.committed[tx.TargetHost]
 		if !ok {
-			transitions = append(transitions, commitStateTransition{preTransitionState: s.transactionState(tx.targetHost), transaction: tx})
+			transitions = append(transitions, commitStateTransition{preTransitionState: s.transactionState(tx.TargetHost), transaction: tx})
 		}
 	}
 	return transitions
@@ -213,9 +213,9 @@ func (s state) buildCommitStateTransitions(transactions []Transaction) []stateTr
 func (s state) buildRollbackStateTransitions(transactions []Transaction) []stateTransition {
 	transitions := make([]stateTransition, 0, len(transactions)-len(s.rolledBack))
 	for _, tr := range transactions {
-		_, ok := s.rolledBack[tr.targetHost]
+		_, ok := s.rolledBack[tr.TargetHost]
 		if !ok {
-			transitions = append(transitions, rollbackStateTransition{preTransitionState: s.transactionState(tr.targetHost), transaction: tr})
+			transitions = append(transitions, rollbackStateTransition{preTransitionState: s.transactionState(tr.TargetHost), transaction: tr})
 		}
 	}
 	return transitions
@@ -236,7 +236,7 @@ func (tr prepareStateTransition) sourceState() TransactionState {
 }
 
 func (tr prepareStateTransition) host() string {
-	return tr.transaction.targetHost
+	return tr.transaction.TargetHost
 }
 
 type commitStateTransition struct {
@@ -249,7 +249,7 @@ func (tr commitStateTransition) sourceState() TransactionState {
 }
 
 func (tr commitStateTransition) host() string {
-	return tr.transaction.targetHost
+	return tr.transaction.TargetHost
 }
 
 type rollbackStateTransition struct {
@@ -262,7 +262,7 @@ func (tr rollbackStateTransition) sourceState() TransactionState {
 }
 
 func (tr rollbackStateTransition) host() string {
-	return tr.transaction.targetHost
+	return tr.transaction.TargetHost
 }
 
 func (s state) transactionState(targetHost string) TransactionState {

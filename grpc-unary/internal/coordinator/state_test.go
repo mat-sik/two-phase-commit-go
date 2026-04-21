@@ -778,5 +778,5 @@ func emptyHosts() map[string]struct{} {
 }
 
 func txn(host string) Transaction {
-	return Transaction{targetHost: host}
+	return Transaction{TargetHost: host}
 }

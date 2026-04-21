@@ -43,8 +43,8 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				request: AtomicTransactions{
-					transactionID: "tx-1",
-					transactions:  []Transaction{{targetHost: "host-a", payload: "p1"}},
+					TransactionID: "tx-1",
+					Transactions:  []Transaction{{TargetHost: "host-a", Payload: "p1"}},
 				},
 			},
 			wantErr: false,
@@ -62,10 +62,10 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				request: AtomicTransactions{
-					transactionID: "tx-2",
-					transactions: []Transaction{
-						{targetHost: "host-a", payload: "p1"},
-						{targetHost: "host-b", payload: "p2"},
+					TransactionID: "tx-2",
+					Transactions: []Transaction{
+						{TargetHost: "host-a", Payload: "p1"},
+						{TargetHost: "host-b", Payload: "p2"},
 					},
 				},
 			},
@@ -89,8 +89,8 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				request: AtomicTransactions{
-					transactionID: "tx-3",
-					transactions:  []Transaction{{targetHost: "host-a", payload: "p1"}},
+					TransactionID: "tx-3",
+					Transactions:  []Transaction{{TargetHost: "host-a", Payload: "p1"}},
 				},
 			},
 			wantErr: false,
@@ -113,8 +113,8 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				request: AtomicTransactions{
-					transactionID: "tx-4",
-					transactions:  []Transaction{{targetHost: "host-a", payload: "p1"}},
+					TransactionID: "tx-4",
+					Transactions:  []Transaction{{TargetHost: "host-a", Payload: "p1"}},
 				},
 			},
 			wantErr: false,
@@ -139,10 +139,10 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				request: AtomicTransactions{
-					transactionID: "tx-5",
-					transactions: []Transaction{
-						{targetHost: "host-a", payload: "p1"},
-						{targetHost: "host-b", payload: "p2"},
+					TransactionID: "tx-5",
+					Transactions: []Transaction{
+						{TargetHost: "host-a", Payload: "p1"},
+						{TargetHost: "host-b", Payload: "p2"},
 					},
 				},
 			},
@@ -163,10 +163,10 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				request: AtomicTransactions{
-					transactionID: "tx-6",
-					transactions: []Transaction{
-						{targetHost: "host-a", payload: "p1"},
-						{targetHost: "host-b", payload: "p2"},
+					TransactionID: "tx-6",
+					Transactions: []Transaction{
+						{TargetHost: "host-a", Payload: "p1"},
+						{TargetHost: "host-b", Payload: "p2"},
 					},
 				},
 			},
@@ -185,10 +185,10 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				request: AtomicTransactions{
-					transactionID: "tx-7",
-					transactions: []Transaction{
-						{targetHost: "host-a", payload: "p1"},
-						{targetHost: "host-b", payload: "p2"},
+					TransactionID: "tx-7",
+					Transactions: []Transaction{
+						{TargetHost: "host-a", Payload: "p1"},
+						{TargetHost: "host-b", Payload: "p2"},
 					},
 				},
 			},
@@ -206,8 +206,8 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			args: args{
 				ctx: ctxWithTimeout(context.Background(), time.Second),
 				request: AtomicTransactions{
-					transactionID: "tx-8",
-					transactions:  []Transaction{{targetHost: "host-a", payload: "p1"}},
+					TransactionID: "tx-8",
+					Transactions:  []Transaction{{TargetHost: "host-a", Payload: "p1"}},
 				},
 			},
 			wantErr: true,
@@ -222,8 +222,8 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			args: args{
 				ctx: ctxWithTimeout(context.Background(), time.Second),
 				request: AtomicTransactions{
-					transactionID: "tx-9",
-					transactions:  []Transaction{{targetHost: "host-a", payload: "p1"}},
+					TransactionID: "tx-9",
+					Transactions:  []Transaction{{TargetHost: "host-a", Payload: "p1"}},
 				},
 			},
 			wantErr: true,
