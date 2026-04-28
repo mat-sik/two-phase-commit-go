@@ -68,7 +68,7 @@ func Test_integration(t *testing.T) {
 			},
 		}
 
-		if err := operationHandler.HandleRequest(ctx, req); err != nil {
+		if err = operationHandler.HandleRequest(ctx, req); err != nil {
 			t.Fatal(err)
 		}
 
@@ -83,7 +83,7 @@ func Test_integration(t *testing.T) {
 		}()
 
 		var errs []error
-		for err := range serverErrsChan {
+		for err = range serverErrsChan {
 			if err != nil {
 				errs = append(errs, err)
 			}
