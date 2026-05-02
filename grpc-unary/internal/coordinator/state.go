@@ -62,31 +62,84 @@ func (s state) nextState(successfulTransitions []stateTransition, failedTransiti
 		return s
 	}
 
+	sets := buildStateSets(s, successfulTransitions, failedTransitions)
+
+	return state{
+		prepared:      sets.prepared,
+		prepareFailed: sets.prepareFailed,
+		committed:     sets.committed,
+		rolledBack:    sets.rolledBack,
+	}
+}
+
+func buildStateSets(s state, successfulTransitions []stateTransition, failedTransitions []stateTransition) stateSets {
 	prepared := maps.Clone(s.prepared)
 	prepareFailed := maps.Clone(s.prepareFailed)
 	committed := maps.Clone(s.committed)
 	rolledBack := maps.Clone(s.rolledBack)
 
-	for _, tr := range successfulTransitions {
-		sourceTransactionState := tr.sourceState()
-		targetTransactionState := transactionStateAfterSuccessfulTransition(tr)
-		deleteValueFromSet(prepared, prepareFailed, committed, rolledBack, sourceTransactionState, tr.host())
-		addValueToSet(prepared, prepareFailed, committed, rolledBack, targetTransactionState, tr.host())
-	}
-
-	for _, tr := range failedTransitions {
-		sourceTransactionState := tr.sourceState()
-		targetTransactionState := transactionStateAfterFailedTransition(tr)
-		deleteValueFromSet(prepared, prepareFailed, committed, rolledBack, sourceTransactionState, tr.host())
-		addValueToSet(prepared, prepareFailed, committed, rolledBack, targetTransactionState, tr.host())
-	}
-
-	return state{
+	sets := stateSets{
 		prepared:      prepared,
 		prepareFailed: prepareFailed,
 		committed:     committed,
 		rolledBack:    rolledBack,
 	}
+
+	for _, tr := range successfulTransitions {
+		sourceTransactionState := tr.sourceState()
+		targetTransactionState := transactionStateAfterSuccessfulTransition(tr)
+		deleteValueFromSet(sets, sourceTransactionState, tr.host())
+		addValueToSet(sets, targetTransactionState, tr.host())
+	}
+
+	for _, tr := range failedTransitions {
+		sourceTransactionState := tr.sourceState()
+		targetTransactionState := transactionStateAfterFailedTransition(tr)
+		deleteValueFromSet(sets, sourceTransactionState, tr.host())
+		addValueToSet(sets, targetTransactionState, tr.host())
+	}
+
+	return sets
+}
+
+type stateSets struct {
+	prepared      map[string]struct{}
+	prepareFailed map[string]struct{}
+	committed     map[string]struct{}
+	rolledBack    map[string]struct{}
+}
+
+func deleteValueFromSet(stateSets stateSets, transactionState TransactionState, targetHost string) {
+	set, ok := setByTransactionState(stateSets, transactionState)
+	if !ok {
+		return
+	}
+	delete(set, targetHost)
+}
+
+func addValueToSet(stateSets stateSets, transactionState TransactionState, targetHost string) {
+	set, ok := setByTransactionState(stateSets, transactionState)
+	if !ok {
+		return
+	}
+	set[targetHost] = struct{}{}
+}
+
+func setByTransactionState(sets stateSets, transactionState TransactionState) (map[string]struct{}, bool) {
+	var set map[string]struct{}
+	switch transactionState {
+	case transactionNotStarted:
+		return nil, false
+	case transactionPrepared:
+		set = sets.prepared
+	case transactionPrepareFailed:
+		set = sets.prepareFailed
+	case transactionCommitted:
+		set = sets.committed
+	case transactionRolledBack:
+		set = sets.rolledBack
+	}
+	return set, true
 }
 
 func transactionStateAfterSuccessfulTransition(transition stateTransition) TransactionState {
@@ -279,57 +332,4 @@ func (s state) transactionState(targetHost string) TransactionState {
 		return transactionRolledBack
 	}
 	return transactionNotStarted
-}
-
-func deleteValueFromSet(
-	prepared map[string]struct{},
-	prepareFailed map[string]struct{},
-	committed map[string]struct{},
-	rolledBack map[string]struct{},
-	transactionState TransactionState,
-	targetHost string,
-) {
-	set, ok := setByTransactionState(prepared, prepareFailed, committed, rolledBack, transactionState)
-	if !ok {
-		return
-	}
-	delete(set, targetHost)
-}
-
-func addValueToSet(
-	prepared map[string]struct{},
-	prepareFailed map[string]struct{},
-	committed map[string]struct{},
-	rolledBack map[string]struct{},
-	transactionState TransactionState,
-	targetHost string,
-) {
-	set, ok := setByTransactionState(prepared, prepareFailed, committed, rolledBack, transactionState)
-	if !ok {
-		return
-	}
-	set[targetHost] = struct{}{}
-}
-
-func setByTransactionState(
-	prepared map[string]struct{},
-	prepareFailed map[string]struct{},
-	committed map[string]struct{},
-	rolledBack map[string]struct{},
-	transactionState TransactionState,
-) (map[string]struct{}, bool) {
-	var set map[string]struct{}
-	switch transactionState {
-	case transactionNotStarted:
-		return nil, false
-	case transactionPrepared:
-		set = prepared
-	case transactionPrepareFailed:
-		set = prepareFailed
-	case transactionCommitted:
-		set = committed
-	case transactionRolledBack:
-		set = rolledBack
-	}
-	return set, true
 }
