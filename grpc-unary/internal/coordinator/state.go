@@ -70,15 +70,15 @@ func (s state) nextState(successfulTransitions []stateTransition, failedTransiti
 	for _, tr := range successfulTransitions {
 		sourceTransactionState := tr.sourceState()
 		targetTransactionState := transactionStateAfterSuccessfulTransition(tr)
-		deleteValueFromMap(prepared, prepareFailed, committed, rolledBack, sourceTransactionState, tr.host())
-		addValueToMap(prepared, prepareFailed, committed, rolledBack, targetTransactionState, tr.host())
+		deleteValueFromSet(prepared, prepareFailed, committed, rolledBack, sourceTransactionState, tr.host())
+		addValueToSet(prepared, prepareFailed, committed, rolledBack, targetTransactionState, tr.host())
 	}
 
 	for _, tr := range failedTransitions {
 		sourceTransactionState := tr.sourceState()
 		targetTransactionState := transactionStateAfterFailedTransition(tr)
-		deleteValueFromMap(prepared, prepareFailed, committed, rolledBack, sourceTransactionState, tr.host())
-		addValueToMap(prepared, prepareFailed, committed, rolledBack, targetTransactionState, tr.host())
+		deleteValueFromSet(prepared, prepareFailed, committed, rolledBack, sourceTransactionState, tr.host())
+		addValueToSet(prepared, prepareFailed, committed, rolledBack, targetTransactionState, tr.host())
 	}
 
 	return state{
@@ -281,7 +281,7 @@ func (s state) transactionState(targetHost string) TransactionState {
 	return transactionNotStarted
 }
 
-func deleteValueFromMap(
+func deleteValueFromSet(
 	prepared map[string]struct{},
 	prepareFailed map[string]struct{},
 	committed map[string]struct{},
@@ -289,21 +289,14 @@ func deleteValueFromMap(
 	transactionState TransactionState,
 	targetHost string,
 ) {
-	switch transactionState {
-	case transactionNotStarted:
-		break
-	case transactionPrepared:
-		delete(prepared, targetHost)
-	case transactionPrepareFailed:
-		delete(prepareFailed, targetHost)
-	case transactionCommitted:
-		delete(committed, targetHost)
-	case transactionRolledBack:
-		delete(rolledBack, targetHost)
+	set, ok := setByTransactionState(prepared, prepareFailed, committed, rolledBack, transactionState)
+	if !ok {
+		return
 	}
+	delete(set, targetHost)
 }
 
-func addValueToMap(
+func addValueToSet(
 	prepared map[string]struct{},
 	prepareFailed map[string]struct{},
 	committed map[string]struct{},
@@ -311,16 +304,32 @@ func addValueToMap(
 	transactionState TransactionState,
 	targetHost string,
 ) {
+	set, ok := setByTransactionState(prepared, prepareFailed, committed, rolledBack, transactionState)
+	if !ok {
+		return
+	}
+	set[targetHost] = struct{}{}
+}
+
+func setByTransactionState(
+	prepared map[string]struct{},
+	prepareFailed map[string]struct{},
+	committed map[string]struct{},
+	rolledBack map[string]struct{},
+	transactionState TransactionState,
+) (map[string]struct{}, bool) {
+	var set map[string]struct{}
 	switch transactionState {
 	case transactionNotStarted:
-		break
+		return nil, false
 	case transactionPrepared:
-		prepared[targetHost] = struct{}{}
+		set = prepared
 	case transactionPrepareFailed:
-		prepareFailed[targetHost] = struct{}{}
+		set = prepareFailed
 	case transactionCommitted:
-		committed[targetHost] = struct{}{}
+		set = committed
 	case transactionRolledBack:
-		rolledBack[targetHost] = struct{}{}
+		set = rolledBack
 	}
+	return set, true
 }
