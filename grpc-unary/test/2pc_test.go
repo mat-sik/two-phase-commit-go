@@ -51,7 +51,7 @@ func Test_integration(t *testing.T) {
 			close(serverErrsChan)
 		}()
 
-		operationHandler := coordinator.NewOperationHandler(
+		operationHandler := coordinator.NewCoordinator(
 			coordinator.NewStateLoader(mockTransactionStateChecker{}),
 			mockStatePersister{},
 		)
@@ -59,7 +59,7 @@ func Test_integration(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		req := coordinator.AtomicTransactions{
+		req := coordinator.DistributedTransaction{
 			TransactionID: "tx-1",
 			Transactions: []coordinator.Transaction{
 				{TargetHost: fmt.Sprintf("localhost:%d", firstClientPort), Payload: "one"},
@@ -68,7 +68,7 @@ func Test_integration(t *testing.T) {
 			},
 		}
 
-		if err = operationHandler.HandleRequest(ctx, req); err != nil {
+		if err = operationHandler.Execute(ctx, req); err != nil {
 			t.Fatal(err)
 		}
 

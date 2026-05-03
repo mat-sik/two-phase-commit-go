@@ -10,14 +10,14 @@ import (
 	"google.golang.org/grpc"
 )
 
-type OperationHandler struct {
+type Coordinator struct {
 	stateLoader     StateLoader
 	statePersister  StatePersister
 	clientRegistrar clientRegistrar
 }
 
-func NewOperationHandler(stateLoader StateLoader, statePersister StatePersister) *OperationHandler {
-	return &OperationHandler{
+func NewCoordinator(stateLoader StateLoader, statePersister StatePersister) *Coordinator {
+	return &Coordinator{
 		stateLoader:     stateLoader,
 		statePersister:  statePersister,
 		clientRegistrar: clientRegistrar{store: &clientRegistrarStore{}},
@@ -34,21 +34,24 @@ type PersistResult struct {
 	Err      error
 }
 
-func (oh OperationHandler) HandleRequest(ctx context.Context, request AtomicTransactions) error {
-	initialState := oh.stateLoader.loadState(request.TransactionID, request.Transactions)
+func (oh Coordinator) Execute(
+	ctx context.Context,
+	distributedTransaction DistributedTransaction,
+) error {
+	initialState := oh.stateLoader.loadState(distributedTransaction.TransactionID, distributedTransaction.Transactions)
 
 	var allErrs []error
 	var successfulTransitions []stateTransition
 	var failedTransitions []stateTransition
-	for currState := initialState; !currState.allFinished(len(request.Transactions)); currState = currState.nextState(successfulTransitions, failedTransitions) {
+	for currState := initialState; !currState.allFinished(len(distributedTransaction.Transactions)); currState = currState.nextState(successfulTransitions, failedTransitions) {
 		if err := ctx.Err(); err != nil {
 			return errors.Join(append(allErrs, err)...)
 		}
 
-		transitions := currState.nextStateTransitions(request.Transactions)
+		transitions := currState.nextStateTransitions(distributedTransaction.Transactions)
 
 		resultCh := make(chan operationResult, len(transitions))
-		oh.doTransitionsConcurrently(ctx, resultCh, request.TransactionID, transitions)
+		oh.doTransitionsConcurrently(ctx, resultCh, distributedTransaction.TransactionID, transitions)
 
 		successfulTransitions = successfulTransitions[:0]
 		failedTransitions = failedTransitions[:0]
@@ -69,7 +72,7 @@ func (oh OperationHandler) HandleRequest(ctx context.Context, request AtomicTran
 	return errors.Join(allErrs...)
 }
 
-func (oh OperationHandler) doTransitionsConcurrently(
+func (oh Coordinator) doTransitionsConcurrently(
 	ctx context.Context,
 	resultCh chan<- operationResult,
 	transactionID string,
@@ -111,7 +114,7 @@ func mapToOperation(transition stateTransition) operation {
 	}
 }
 
-type AtomicTransactions struct {
+type DistributedTransaction struct {
 	TransactionID string
 	Transactions  []Transaction
 }
@@ -121,7 +124,7 @@ type Transaction struct {
 	Payload    string
 }
 
-func (oh OperationHandler) runOperation(ctx context.Context, transactionID string, operation operation) error {
+func (oh Coordinator) runOperation(ctx context.Context, transactionID string, operation operation) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -154,7 +157,7 @@ func (oh OperationHandler) runOperation(ctx context.Context, transactionID strin
 
 const persistStateTimeout = 5 * time.Second
 
-func (oh OperationHandler) sendOperation(ctx context.Context, transactionID string, operation operation) <-chan error {
+func (oh Coordinator) sendOperation(ctx context.Context, transactionID string, operation operation) <-chan error {
 	operationDoneCh := make(chan error)
 
 	go func() {
@@ -164,7 +167,7 @@ func (oh OperationHandler) sendOperation(ctx context.Context, transactionID stri
 	return operationDoneCh
 }
 
-func (oh OperationHandler) _sendOperation(ctx context.Context, transactionID string, operation operation) error {
+func (oh Coordinator) _sendOperation(ctx context.Context, transactionID string, operation operation) error {
 	ctx, cancel := context.WithTimeout(ctx, sendOperationTimeout)
 	defer cancel()
 

@@ -18,7 +18,7 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 	}
 	type args struct {
 		ctx     context.Context
-		request AtomicTransactions
+		request DistributedTransaction
 	}
 
 	prepareErr := errors.New("prepare failed")
@@ -42,7 +42,7 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			},
 			args: args{
 				ctx: context.Background(),
-				request: AtomicTransactions{
+				request: DistributedTransaction{
 					TransactionID: "tx-1",
 					Transactions:  []Transaction{{TargetHost: "host-a", Payload: "p1"}},
 				},
@@ -61,7 +61,7 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			},
 			args: args{
 				ctx: context.Background(),
-				request: AtomicTransactions{
+				request: DistributedTransaction{
 					TransactionID: "tx-2",
 					Transactions: []Transaction{
 						{TargetHost: "host-a", Payload: "p1"},
@@ -88,7 +88,7 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			},
 			args: args{
 				ctx: context.Background(),
-				request: AtomicTransactions{
+				request: DistributedTransaction{
 					TransactionID: "tx-3",
 					Transactions:  []Transaction{{TargetHost: "host-a", Payload: "p1"}},
 				},
@@ -112,7 +112,7 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			},
 			args: args{
 				ctx: context.Background(),
-				request: AtomicTransactions{
+				request: DistributedTransaction{
 					TransactionID: "tx-4",
 					Transactions:  []Transaction{{TargetHost: "host-a", Payload: "p1"}},
 				},
@@ -138,7 +138,7 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			},
 			args: args{
 				ctx: context.Background(),
-				request: AtomicTransactions{
+				request: DistributedTransaction{
 					TransactionID: "tx-5",
 					Transactions: []Transaction{
 						{TargetHost: "host-a", Payload: "p1"},
@@ -162,7 +162,7 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			},
 			args: args{
 				ctx: context.Background(),
-				request: AtomicTransactions{
+				request: DistributedTransaction{
 					TransactionID: "tx-6",
 					Transactions: []Transaction{
 						{TargetHost: "host-a", Payload: "p1"},
@@ -184,7 +184,7 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			},
 			args: args{
 				ctx: context.Background(),
-				request: AtomicTransactions{
+				request: DistributedTransaction{
 					TransactionID: "tx-7",
 					Transactions: []Transaction{
 						{TargetHost: "host-a", Payload: "p1"},
@@ -205,7 +205,7 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			},
 			args: args{
 				ctx: ctxWithTimeout(context.Background(), time.Second),
-				request: AtomicTransactions{
+				request: DistributedTransaction{
 					TransactionID: "tx-8",
 					Transactions:  []Transaction{{TargetHost: "host-a", Payload: "p1"}},
 				},
@@ -221,7 +221,7 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			},
 			args: args{
 				ctx: ctxWithTimeout(context.Background(), time.Second),
-				request: AtomicTransactions{
+				request: DistributedTransaction{
 					TransactionID: "tx-9",
 					Transactions:  []Transaction{{TargetHost: "host-a", Payload: "p1"}},
 				},
@@ -232,12 +232,12 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			oh := OperationHandler{
+			oh := Coordinator{
 				stateLoader:     tt.fields.stateLoader,
 				statePersister:  tt.fields.statePersister,
 				clientRegistrar: tt.fields.clientRegistrar,
 			}
-			if err := oh.HandleRequest(tt.args.ctx, tt.args.request); (err != nil) != tt.wantErr {
+			if err := oh.Execute(tt.args.ctx, tt.args.request); (err != nil) != tt.wantErr {
 				t.Errorf("HandleRequest() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
