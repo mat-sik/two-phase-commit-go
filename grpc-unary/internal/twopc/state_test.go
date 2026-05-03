@@ -23,7 +23,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "all prepare failed",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByHost: map[string]TransactionState{
+					stateByClientID: map[ClientID]TransactionState{
 						"host-a": transactionPrepareFailed,
 						"host-b": transactionPrepareFailed,
 					},
@@ -34,17 +34,19 @@ func Test_stateLoader_loadState(t *testing.T) {
 				transactions:  []Transaction{txn("host-a"), txn("host-b")},
 			},
 			want: state{
-				prepared:      emptyHosts(),
-				prepareFailed: hosts("host-a", "host-b"),
-				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      emptyHosts(),
+					prepareFailed: hosts("host-a", "host-b"),
+					committed:     emptyHosts(),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
 			name: "all prepared",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByHost: map[string]TransactionState{
+					stateByClientID: map[ClientID]TransactionState{
 						"host-a": transactionPrepared,
 						"host-b": transactionPrepared,
 					},
@@ -55,17 +57,19 @@ func Test_stateLoader_loadState(t *testing.T) {
 				transactions:  []Transaction{txn("host-a"), txn("host-b")},
 			},
 			want: state{
-				prepared:      hosts("host-a", "host-b"),
-				prepareFailed: emptyHosts(),
-				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      hosts("host-a", "host-b"),
+					prepareFailed: emptyHosts(),
+					committed:     emptyHosts(),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
 			name: "mixed states across hosts",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByHost: map[string]TransactionState{
+					stateByClientID: map[ClientID]TransactionState{
 						"host-a": transactionPrepared,
 						"host-b": transactionPrepared,
 						"host-c": transactionCommitted,
@@ -77,17 +81,19 @@ func Test_stateLoader_loadState(t *testing.T) {
 				transactions:  []Transaction{txn("host-a"), txn("host-b"), txn("host-c")},
 			},
 			want: state{
-				prepared:      hosts("host-a", "host-b"),
-				prepareFailed: emptyHosts(),
-				committed:     hosts("host-c"),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      hosts("host-a", "host-b"),
+					prepareFailed: emptyHosts(),
+					committed:     hosts("host-c"),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
 			name: "all rolled back",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByHost: map[string]TransactionState{
+					stateByClientID: map[ClientID]TransactionState{
 						"host-a": transactionRolledBack,
 						"host-b": transactionRolledBack,
 					},
@@ -98,17 +104,19 @@ func Test_stateLoader_loadState(t *testing.T) {
 				transactions:  []Transaction{txn("host-a"), txn("host-b")},
 			},
 			want: state{
-				prepared:      emptyHosts(),
-				prepareFailed: emptyHosts(),
-				committed:     emptyHosts(),
-				rolledBack:    hosts("host-a", "host-b"),
+				stateSets: stateSets{
+					prepared:      emptyHosts(),
+					prepareFailed: emptyHosts(),
+					committed:     emptyHosts(),
+					rolledBack:    hosts("host-a", "host-b"),
+				},
 			},
 		},
 		{
 			name: "empty transactions list",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByHost: map[string]TransactionState{},
+					stateByClientID: map[ClientID]TransactionState{},
 				},
 			},
 			args: args{
@@ -116,17 +124,19 @@ func Test_stateLoader_loadState(t *testing.T) {
 				transactions:  []Transaction{},
 			},
 			want: state{
-				prepared:      emptyHosts(),
-				prepareFailed: emptyHosts(),
-				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      emptyHosts(),
+					prepareFailed: emptyHosts(),
+					committed:     emptyHosts(),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
 			name: "checker returns state for extra hosts not in transactions — only transactions are mapped",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByHost: map[string]TransactionState{
+					stateByClientID: map[ClientID]TransactionState{
 						"host-a": transactionPrepared,
 						"host-z": transactionCommitted, // not in transaction list
 					},
@@ -137,10 +147,12 @@ func Test_stateLoader_loadState(t *testing.T) {
 				transactions:  []Transaction{txn("host-a")},
 			},
 			want: state{
-				prepared:      hosts("host-a"),
-				prepareFailed: emptyHosts(),
-				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      hosts("host-a"),
+					prepareFailed: emptyHosts(),
+					committed:     emptyHosts(),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 	}
@@ -158,10 +170,10 @@ func Test_stateLoader_loadState(t *testing.T) {
 
 func Test_state_nextState(t *testing.T) {
 	type fields struct {
-		prepared      map[string]struct{}
-		prepareFailed map[string]struct{}
-		committed     map[string]struct{}
-		rolledBack    map[string]struct{}
+		prepared      map[ClientID]struct{}
+		prepareFailed map[ClientID]struct{}
+		committed     map[ClientID]struct{}
+		rolledBack    map[ClientID]struct{}
 	}
 	type args struct {
 		successfulTransitions []stateTransition
@@ -189,10 +201,12 @@ func Test_state_nextState(t *testing.T) {
 				failedTransitions:     nil,
 			},
 			want: state{
-				prepared:      emptyHosts(),
-				prepareFailed: emptyHosts(),
-				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      emptyHosts(),
+					prepareFailed: emptyHosts(),
+					committed:     emptyHosts(),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
@@ -206,10 +220,12 @@ func Test_state_nextState(t *testing.T) {
 				failedTransitions: nil,
 			},
 			want: state{
-				prepared:      hosts("host-a", "host-b"),
-				prepareFailed: emptyHosts(),
-				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      hosts("host-a", "host-b"),
+					prepareFailed: emptyHosts(),
+					committed:     emptyHosts(),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
@@ -222,10 +238,12 @@ func Test_state_nextState(t *testing.T) {
 				},
 			},
 			want: state{
-				prepared:      emptyHosts(),
-				prepareFailed: hosts("host-a"),
-				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      emptyHosts(),
+					prepareFailed: hosts("host-a"),
+					committed:     emptyHosts(),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
@@ -244,10 +262,12 @@ func Test_state_nextState(t *testing.T) {
 				failedTransitions: nil,
 			},
 			want: state{
-				prepared:      emptyHosts(),
-				prepareFailed: emptyHosts(),
-				committed:     hosts("host-a", "host-b"),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      emptyHosts(),
+					prepareFailed: emptyHosts(),
+					committed:     hosts("host-a", "host-b"),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
@@ -267,10 +287,12 @@ func Test_state_nextState(t *testing.T) {
 				},
 			},
 			want: state{
-				prepared:      hosts("host-b"),
-				prepareFailed: emptyHosts(),
-				committed:     hosts("host-a"),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      hosts("host-b"),
+					prepareFailed: emptyHosts(),
+					committed:     hosts("host-a"),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
@@ -288,10 +310,12 @@ func Test_state_nextState(t *testing.T) {
 				failedTransitions: nil,
 			},
 			want: state{
-				prepared:      emptyHosts(),
-				prepareFailed: emptyHosts(),
-				committed:     emptyHosts(),
-				rolledBack:    hosts("host-a"),
+				stateSets: stateSets{
+					prepared:      emptyHosts(),
+					prepareFailed: emptyHosts(),
+					committed:     emptyHosts(),
+					rolledBack:    hosts("host-a"),
+				},
 			},
 		},
 		{
@@ -309,10 +333,12 @@ func Test_state_nextState(t *testing.T) {
 				},
 			},
 			want: state{
-				prepared:      emptyHosts(),
-				prepareFailed: hosts("host-a"),
-				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      emptyHosts(),
+					prepareFailed: hosts("host-a"),
+					committed:     emptyHosts(),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
@@ -332,20 +358,24 @@ func Test_state_nextState(t *testing.T) {
 				},
 			},
 			want: state{
-				prepared:      hosts("host-a"),
-				prepareFailed: hosts("host-b"),
-				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      hosts("host-a"),
+					prepareFailed: hosts("host-b"),
+					committed:     emptyHosts(),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := state{
-				prepared:      tt.fields.prepared,
-				prepareFailed: tt.fields.prepareFailed,
-				committed:     tt.fields.committed,
-				rolledBack:    tt.fields.rolledBack,
+				stateSets: stateSets{
+					prepared:      tt.fields.prepared,
+					prepareFailed: tt.fields.prepareFailed,
+					committed:     tt.fields.committed,
+					rolledBack:    tt.fields.rolledBack,
+				},
 			}
 			if got := s.nextState(tt.args.successfulTransitions, tt.args.failedTransitions); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("nextState() = %v, want %v", got, tt.want)
@@ -356,10 +386,10 @@ func Test_state_nextState(t *testing.T) {
 
 func Test_state_nextStateTransitions(t *testing.T) {
 	type fields struct {
-		prepared      map[string]struct{}
-		prepareFailed map[string]struct{}
-		committed     map[string]struct{}
-		rolledBack    map[string]struct{}
+		prepared      map[ClientID]struct{}
+		prepareFailed map[ClientID]struct{}
+		committed     map[ClientID]struct{}
+		rolledBack    map[ClientID]struct{}
 	}
 	type args struct {
 		transactions []Transaction
@@ -519,10 +549,12 @@ func Test_state_nextStateTransitions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := state{
-				prepared:      tt.fields.prepared,
-				prepareFailed: tt.fields.prepareFailed,
-				committed:     tt.fields.committed,
-				rolledBack:    tt.fields.rolledBack,
+				stateSets: stateSets{
+					prepared:      tt.fields.prepared,
+					prepareFailed: tt.fields.prepareFailed,
+					committed:     tt.fields.committed,
+					rolledBack:    tt.fields.rolledBack,
+				},
 			}
 			got, err := s.tryNextStateTransitions(tt.args.transactions)
 			if (err != nil) != tt.wantErr {
@@ -540,17 +572,17 @@ func Test_state_nextStateTransitions(t *testing.T) {
 
 func Test_state_roundTrip(t *testing.T) {
 	type fields struct {
-		prepared      map[string]struct{}
-		prepareFailed map[string]struct{}
-		committed     map[string]struct{}
-		rolledBack    map[string]struct{}
+		prepared      map[ClientID]struct{}
+		prepareFailed map[ClientID]struct{}
+		committed     map[ClientID]struct{}
+		rolledBack    map[ClientID]struct{}
 	}
 	tests := []struct {
 		name            string
 		initial         fields
 		transactions    []Transaction
-		successfulHosts []string // hosts whose generated transitions succeed this round
-		failedHosts     []string // hosts whose generated transitions fail this round
+		successfulHosts []ClientID
+		failedHosts     []ClientID
 		wantFinalState  state
 	}{
 		{
@@ -562,13 +594,15 @@ func Test_state_roundTrip(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			transactions:    []Transaction{txn("host-a"), txn("host-b")},
-			successfulHosts: []string{"host-a", "host-b"},
+			successfulHosts: []ClientID{"host-a", "host-b"},
 			failedHosts:     nil,
 			wantFinalState: state{
-				prepared:      hosts("host-a", "host-b"),
-				prepareFailed: emptyHosts(),
-				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      hosts("host-a", "host-b"),
+					prepareFailed: emptyHosts(),
+					committed:     emptyHosts(),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
@@ -581,12 +615,14 @@ func Test_state_roundTrip(t *testing.T) {
 			},
 			transactions:    []Transaction{txn("host-a"), txn("host-b")},
 			successfulHosts: nil,
-			failedHosts:     []string{"host-a", "host-b"},
+			failedHosts:     []ClientID{"host-a", "host-b"},
 			wantFinalState: state{
-				prepared:      emptyHosts(),
-				prepareFailed: hosts("host-a", "host-b"),
-				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      emptyHosts(),
+					prepareFailed: hosts("host-a", "host-b"),
+					committed:     emptyHosts(),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
@@ -598,13 +634,15 @@ func Test_state_roundTrip(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			transactions:    []Transaction{txn("host-a"), txn("host-b")},
-			successfulHosts: []string{"host-a"},
-			failedHosts:     []string{"host-b"},
+			successfulHosts: []ClientID{"host-a"},
+			failedHosts:     []ClientID{"host-b"},
 			wantFinalState: state{
-				prepared:      hosts("host-a"),
-				prepareFailed: hosts("host-b"),
-				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      hosts("host-a"),
+					prepareFailed: hosts("host-b"),
+					committed:     emptyHosts(),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
@@ -616,13 +654,15 @@ func Test_state_roundTrip(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			transactions:    []Transaction{txn("host-a"), txn("host-b")},
-			successfulHosts: []string{"host-a", "host-b"},
+			successfulHosts: []ClientID{"host-a", "host-b"},
 			failedHosts:     nil,
 			wantFinalState: state{
-				prepared:      emptyHosts(),
-				prepareFailed: emptyHosts(),
-				committed:     hosts("host-a", "host-b"),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      emptyHosts(),
+					prepareFailed: emptyHosts(),
+					committed:     hosts("host-a", "host-b"),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
@@ -635,12 +675,14 @@ func Test_state_roundTrip(t *testing.T) {
 			},
 			transactions:    []Transaction{txn("host-a"), txn("host-b")},
 			successfulHosts: nil,
-			failedHosts:     []string{"host-a", "host-b"},
+			failedHosts:     []ClientID{"host-a", "host-b"},
 			wantFinalState: state{
-				prepared:      hosts("host-a", "host-b"),
-				prepareFailed: emptyHosts(),
-				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      hosts("host-a", "host-b"),
+					prepareFailed: emptyHosts(),
+					committed:     emptyHosts(),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
@@ -652,13 +694,15 @@ func Test_state_roundTrip(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			transactions:    []Transaction{txn("host-a"), txn("host-b")},
-			successfulHosts: []string{"host-a", "host-b"},
+			successfulHosts: []ClientID{"host-a", "host-b"},
 			failedHosts:     nil,
 			wantFinalState: state{
-				prepared:      emptyHosts(),
-				prepareFailed: emptyHosts(),
-				committed:     emptyHosts(),
-				rolledBack:    hosts("host-a", "host-b"),
+				stateSets: stateSets{
+					prepared:      emptyHosts(),
+					prepareFailed: emptyHosts(),
+					committed:     emptyHosts(),
+					rolledBack:    hosts("host-a", "host-b"),
+				},
 			},
 		},
 		{
@@ -671,13 +715,14 @@ func Test_state_roundTrip(t *testing.T) {
 			},
 			transactions:    []Transaction{txn("host-a"), txn("host-b")},
 			successfulHosts: nil,
-			failedHosts:     []string{"host-a", "host-b"},
-			// failed rollback: prepared→prepareFailed, prepareFailed→prepareFailed
+			failedHosts:     []ClientID{"host-a", "host-b"},
 			wantFinalState: state{
-				prepared:      emptyHosts(),
-				prepareFailed: hosts("host-a", "host-b"),
-				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      emptyHosts(),
+					prepareFailed: hosts("host-a", "host-b"),
+					committed:     emptyHosts(),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
@@ -689,13 +734,15 @@ func Test_state_roundTrip(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			transactions:    []Transaction{txn("host-a"), txn("host-b")},
-			successfulHosts: []string{"host-b"},
+			successfulHosts: []ClientID{"host-b"},
 			failedHosts:     nil,
 			wantFinalState: state{
-				prepared:      emptyHosts(),
-				prepareFailed: emptyHosts(),
-				committed:     hosts("host-a", "host-b"),
-				rolledBack:    emptyHosts(),
+				stateSets: stateSets{
+					prepared:      emptyHosts(),
+					prepareFailed: emptyHosts(),
+					committed:     hosts("host-a", "host-b"),
+					rolledBack:    emptyHosts(),
+				},
 			},
 		},
 		{
@@ -707,13 +754,15 @@ func Test_state_roundTrip(t *testing.T) {
 				rolledBack:    hosts("host-a"),
 			},
 			transactions:    []Transaction{txn("host-a"), txn("host-b")},
-			successfulHosts: []string{"host-b"},
+			successfulHosts: []ClientID{"host-b"},
 			failedHosts:     nil,
 			wantFinalState: state{
-				prepared:      emptyHosts(),
-				prepareFailed: emptyHosts(),
-				committed:     emptyHosts(),
-				rolledBack:    hosts("host-a", "host-b"),
+				stateSets: stateSets{
+					prepared:      emptyHosts(),
+					prepareFailed: emptyHosts(),
+					committed:     emptyHosts(),
+					rolledBack:    hosts("host-a", "host-b"),
+				},
 			},
 		},
 	}
@@ -721,10 +770,12 @@ func Test_state_roundTrip(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := state{
-				prepared:      tt.initial.prepared,
-				prepareFailed: tt.initial.prepareFailed,
-				committed:     tt.initial.committed,
-				rolledBack:    tt.initial.rolledBack,
+				stateSets: stateSets{
+					prepared:      tt.initial.prepared,
+					prepareFailed: tt.initial.prepareFailed,
+					committed:     tt.initial.committed,
+					rolledBack:    tt.initial.rolledBack,
+				},
 			}
 
 			transitions, err := s.tryNextStateTransitions(tt.transactions)
@@ -732,16 +783,14 @@ func Test_state_roundTrip(t *testing.T) {
 				t.Fatalf("tryNextStateTransitions() unexpected error: %v", err)
 			}
 
-			// split generated transitions into successful/failed based on the
-			// host sets declared in the test case
-			successSet := make(map[string]struct{}, len(tt.successfulHosts))
+			successSet := make(map[ClientID]struct{}, len(tt.successfulHosts))
 			for _, h := range tt.successfulHosts {
 				successSet[h] = struct{}{}
 			}
 
 			var successful, failed []stateTransition
 			for _, tr := range transitions {
-				if _, ok := successSet[tr.host()]; ok {
+				if _, ok := successSet[tr.ClientIdentifier()]; ok {
 					successful = append(successful, tr)
 				} else {
 					failed = append(failed, tr)
@@ -758,25 +807,25 @@ func Test_state_roundTrip(t *testing.T) {
 }
 
 type mockTransactionStateChecker struct {
-	stateByHost map[string]TransactionState
+	stateByClientID map[ClientID]TransactionState
 }
 
-func (m mockTransactionStateChecker) Check(_ string) map[string]TransactionState {
-	return m.stateByHost
+func (m mockTransactionStateChecker) Check(_ string) map[ClientID]TransactionState {
+	return m.stateByClientID
 }
 
-func hosts(hs ...string) map[string]struct{} {
-	m := make(map[string]struct{}, len(hs))
-	for _, h := range hs {
-		m[h] = struct{}{}
+func hosts(ids ...ClientID) map[ClientID]struct{} {
+	m := make(map[ClientID]struct{}, len(ids))
+	for _, id := range ids {
+		m[id] = struct{}{}
 	}
 	return m
 }
 
-func emptyHosts() map[string]struct{} {
-	return map[string]struct{}{}
+func emptyHosts() map[ClientID]struct{} {
+	return map[ClientID]struct{}{}
 }
 
-func txn(host string) Transaction {
-	return Transaction{TargetHost: host}
+func txn(clientID ClientID) Transaction {
+	return Transaction{ClientID: clientID}
 }

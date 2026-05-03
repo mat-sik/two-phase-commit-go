@@ -5,9 +5,6 @@ import (
 	"errors"
 	"sync"
 	"time"
-
-	pb "github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/generated/client/v1"
-	"google.golang.org/grpc"
 )
 
 type Coordinator struct {
@@ -16,16 +13,20 @@ type Coordinator struct {
 	clientRegistrar clientRegistrar
 }
 
-func NewCoordinator(stateLoader StateLoader, statePersister StatePersister) *Coordinator {
+func NewCoordinator(
+	stateLoader StateLoader,
+	statePersister StatePersister,
+	newClientFunc func(identifiable ClientRegistrarUsable) (Client, error),
+) *Coordinator {
 	return &Coordinator{
 		stateLoader:     stateLoader,
 		statePersister:  statePersister,
-		clientRegistrar: clientRegistrar{store: &clientRegistrarStore{}},
+		clientRegistrar: newClientRegistrar(newClientFunc),
 	}
 }
 
 type StatePersister interface {
-	PersistState(ctx context.Context, transactionID string, targetHost string, transactionState TransactionState) <-chan PersistResult
+	PersistState(ctx context.Context, transactionID string, clientID ClientID, transactionState TransactionState) <-chan PersistResult
 }
 
 type PersistResult struct {
@@ -43,7 +44,7 @@ func (oh Coordinator) Execute(
 	var allErrs []error
 	var successfulTransitions []stateTransition
 	var failedTransitions []stateTransition
-	for currState := initialState; !currState.allFinished(len(distributedTransaction.Transactions)); currState = currState.nextState(successfulTransitions, failedTransitions) {
+	for currState := initialState; !currState.isTerminalState(len(distributedTransaction.Transactions)); currState = currState.nextState(successfulTransitions, failedTransitions) {
 		if err := ctx.Err(); err != nil {
 			return errors.Join(append(allErrs, err)...)
 		}
@@ -104,11 +105,11 @@ type operationResult struct {
 func mapToOperation(transition stateTransition) operation {
 	switch tr := transition.(type) {
 	case prepareStateTransition:
-		return prepareOperation{trgHost: tr.host(), payload: tr.transaction.Payload}
+		return prepareOperation{clientID: tr.ClientIdentifier(), payload: tr.transaction.Payload}
 	case commitStateTransition:
-		return commitOperation{trgHost: tr.host()}
+		return commitOperation{clientID: tr.ClientIdentifier()}
 	case rollbackStateTransition:
-		return rollbackOperation{trgHost: tr.host()}
+		return rollbackOperation{clientID: tr.ClientIdentifier()}
 	default:
 		panic("unknown transition type")
 	}
@@ -120,8 +121,19 @@ type DistributedTransaction struct {
 }
 
 type Transaction struct {
-	TargetHost string
-	Payload    string
+	ClientID ClientID
+	Payload  string
+}
+
+func NewTransaction(clientIDString string, payload string) Transaction {
+	return Transaction{
+		ClientID: ClientID(clientIDString),
+		Payload:  payload,
+	}
+}
+
+func (t Transaction) ClientIdentifier() ClientID {
+	return t.ClientID
 }
 
 func (oh Coordinator) runOperation(ctx context.Context, transactionID string, operation operation) error {
@@ -132,7 +144,7 @@ func (oh Coordinator) runOperation(ctx context.Context, transactionID string, op
 
 	ctx, persistCancel := context.WithTimeout(ctx, persistStateTimeout)
 	defer persistCancel()
-	persistResultCh := oh.statePersister.PersistState(ctx, transactionID, operation.targetHost(), operation.postOperationTransactionState())
+	persistResultCh := oh.statePersister.PersistState(ctx, transactionID, operation.ClientIdentifier(), operation.postOperationTransactionState())
 
 	err := <-operationSentCh
 	if err != nil {
@@ -171,17 +183,17 @@ func (oh Coordinator) _sendOperation(ctx context.Context, transactionID string, 
 	ctx, cancel := context.WithTimeout(ctx, sendOperationTimeout)
 	defer cancel()
 
-	client, err := oh.clientRegistrar.getClient(operation.targetHost())
+	client, err := oh.clientRegistrar.getClient(operation)
 	if err != nil {
 		return err
 	}
 	switch op := operation.(type) {
 	case prepareOperation:
-		return handlePrepareOperation(ctx, client, transactionID, op)
+		return client.prepareTransaction(ctx, transactionID, op)
 	case commitOperation:
-		return handleCommitOperation(ctx, client, transactionID)
+		return client.commitTransaction(ctx, transactionID)
 	case rollbackOperation:
-		return handleRollbackOperation(ctx, client, transactionID)
+		return client.rollbackTransaction(ctx, transactionID)
 	default:
 		panic(errors.New("unknown operation type"))
 	}
@@ -189,36 +201,18 @@ func (oh Coordinator) _sendOperation(ctx context.Context, transactionID string, 
 
 const sendOperationTimeout = 5 * time.Second
 
-func handlePrepareOperation(ctx context.Context, client pb.ClientServiceClient, transactionID string, operation prepareOperation) error {
-	req := pb.PrepareTransactionRequest{TransactionId: transactionID, Payload: operation.payload}
-	_, err := client.PrepareTransaction(ctx, &req, grpc.WaitForReady(true))
-	return err
-}
-
-func handleCommitOperation(ctx context.Context, client pb.ClientServiceClient, transactionID string) error {
-	req := pb.CommitTransactionRequest{TransactionId: transactionID}
-	_, err := client.CommitTransaction(ctx, &req, grpc.WaitForReady(true))
-	return err
-}
-
-func handleRollbackOperation(ctx context.Context, client pb.ClientServiceClient, transactionID string) error {
-	req := pb.RollbackTransactionRequest{TransactionId: transactionID}
-	_, err := client.RollbackTransaction(ctx, &req, grpc.WaitForReady(true))
-	return err
-}
-
 type operation interface {
-	targetHost() string
+	ClientRegistrarUsable
 	postOperationTransactionState() TransactionState
 }
 
 type prepareOperation struct {
-	trgHost string
-	payload string
+	clientID ClientID
+	payload  string
 }
 
-func (o prepareOperation) targetHost() string {
-	return o.trgHost
+func (o prepareOperation) ClientIdentifier() ClientID {
+	return o.clientID
 }
 
 func (o prepareOperation) postOperationTransactionState() TransactionState {
@@ -226,11 +220,11 @@ func (o prepareOperation) postOperationTransactionState() TransactionState {
 }
 
 type commitOperation struct {
-	trgHost string
+	clientID ClientID
 }
 
-func (o commitOperation) targetHost() string {
-	return o.trgHost
+func (o commitOperation) ClientIdentifier() ClientID {
+	return o.clientID
 }
 
 func (o commitOperation) postOperationTransactionState() TransactionState {
@@ -238,11 +232,11 @@ func (o commitOperation) postOperationTransactionState() TransactionState {
 }
 
 type rollbackOperation struct {
-	trgHost string
+	clientID ClientID
 }
 
-func (o rollbackOperation) targetHost() string {
-	return o.trgHost
+func (o rollbackOperation) ClientIdentifier() ClientID {
+	return o.clientID
 }
 
 func (o rollbackOperation) postOperationTransactionState() TransactionState {

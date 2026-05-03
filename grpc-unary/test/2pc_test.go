@@ -54,6 +54,7 @@ func Test_integration(t *testing.T) {
 		coordinator := twopc.NewCoordinator(
 			twopc.NewStateLoader(mockTransactionStateChecker{}),
 			mockStatePersister{},
+			twopc.GrpcNewClient,
 		)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -62,9 +63,9 @@ func Test_integration(t *testing.T) {
 		req := twopc.DistributedTransaction{
 			TransactionID: "tx-1",
 			Transactions: []twopc.Transaction{
-				{TargetHost: fmt.Sprintf("localhost:%d", firstClientPort), Payload: "one"},
-				{TargetHost: fmt.Sprintf("localhost:%d", secondClientPort), Payload: "two"},
-				{TargetHost: fmt.Sprintf("localhost:%d", thirdClientPort), Payload: "three"},
+				twopc.NewTransaction(fmt.Sprintf("localhost:%d", firstClientPort), "one"),
+				twopc.NewTransaction(fmt.Sprintf("localhost:%d", secondClientPort), "two"),
+				twopc.NewTransaction(fmt.Sprintf("localhost:%d", thirdClientPort), "three"),
 			},
 		}
 
@@ -111,7 +112,7 @@ type mockStatePersister struct {
 	err error
 }
 
-func (m mockStatePersister) PersistState(_ context.Context, _ string, _ string, _ twopc.TransactionState) <-chan twopc.PersistResult {
+func (m mockStatePersister) PersistState(_ context.Context, _ string, _ twopc.ClientID, _ twopc.TransactionState) <-chan twopc.PersistResult {
 	ch := make(chan twopc.PersistResult, 1)
 	if m.err != nil {
 		ch <- twopc.PersistResult{Err: m.err}
@@ -125,9 +126,9 @@ func (m mockStatePersister) PersistState(_ context.Context, _ string, _ string, 
 }
 
 type mockTransactionStateChecker struct {
-	stateByHost map[string]twopc.TransactionState
+	stateByClientID map[twopc.ClientID]twopc.TransactionState
 }
 
-func (m mockTransactionStateChecker) Check(_ string) map[string]twopc.TransactionState {
-	return m.stateByHost
+func (m mockTransactionStateChecker) Check(_ string) map[twopc.ClientID]twopc.TransactionState {
+	return m.stateByClientID
 }

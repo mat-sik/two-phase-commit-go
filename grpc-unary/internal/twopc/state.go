@@ -6,55 +6,8 @@ import (
 	"maps"
 )
 
-type TransactionStateChecker interface {
-	Check(transactionID string) map[string]TransactionState
-}
-
-type StateLoader struct {
-	transactionStateChecker TransactionStateChecker
-}
-
-func NewStateLoader(transactionStateChecker TransactionStateChecker) StateLoader {
-	return StateLoader{
-		transactionStateChecker: transactionStateChecker,
-	}
-}
-
-func (sl StateLoader) loadState(transactionID string, transactions []Transaction) state {
-	prepared := make(map[string]struct{})
-	prepareFailed := make(map[string]struct{})
-	committed := make(map[string]struct{})
-	rolledBack := make(map[string]struct{})
-
-	stateByTargetHost := sl.transactionStateChecker.Check(transactionID)
-	for _, op := range transactions {
-		switch stateByTargetHost[op.TargetHost] {
-		case transactionNotStarted:
-			break
-		case transactionPrepared:
-			prepared[op.TargetHost] = struct{}{}
-		case transactionPrepareFailed:
-			prepareFailed[op.TargetHost] = struct{}{}
-		case transactionCommitted:
-			committed[op.TargetHost] = struct{}{}
-		case transactionRolledBack:
-			rolledBack[op.TargetHost] = struct{}{}
-		}
-	}
-
-	return state{
-		prepared:      prepared,
-		prepareFailed: prepareFailed,
-		committed:     committed,
-		rolledBack:    rolledBack,
-	}
-}
-
 type state struct {
-	prepared      map[string]struct{}
-	prepareFailed map[string]struct{}
-	committed     map[string]struct{}
-	rolledBack    map[string]struct{}
+	stateSets stateSets
 }
 
 func (s state) nextState(successfulTransitions []stateTransition, failedTransitions []stateTransition) state {
@@ -65,81 +18,28 @@ func (s state) nextState(successfulTransitions []stateTransition, failedTransiti
 	sets := buildStateSets(s, successfulTransitions, failedTransitions)
 
 	return state{
-		prepared:      sets.prepared,
-		prepareFailed: sets.prepareFailed,
-		committed:     sets.committed,
-		rolledBack:    sets.rolledBack,
+		stateSets: sets,
 	}
 }
 
 func buildStateSets(s state, successfulTransitions []stateTransition, failedTransitions []stateTransition) stateSets {
-	prepared := maps.Clone(s.prepared)
-	prepareFailed := maps.Clone(s.prepareFailed)
-	committed := maps.Clone(s.committed)
-	rolledBack := maps.Clone(s.rolledBack)
-
-	sets := stateSets{
-		prepared:      prepared,
-		prepareFailed: prepareFailed,
-		committed:     committed,
-		rolledBack:    rolledBack,
-	}
+	clonedStateSets := s.stateSets.clone()
 
 	for _, tr := range successfulTransitions {
 		sourceTransactionState := tr.sourceState()
 		targetTransactionState := transactionStateAfterSuccessfulTransition(tr)
-		deleteValueFromSet(sets, sourceTransactionState, tr.host())
-		addValueToSet(sets, targetTransactionState, tr.host())
+		clonedStateSets.deleteValueFromSet(sourceTransactionState, tr.ClientIdentifier())
+		clonedStateSets.addValueToSet(targetTransactionState, tr.ClientIdentifier())
 	}
 
 	for _, tr := range failedTransitions {
 		sourceTransactionState := tr.sourceState()
 		targetTransactionState := transactionStateAfterFailedTransition(tr)
-		deleteValueFromSet(sets, sourceTransactionState, tr.host())
-		addValueToSet(sets, targetTransactionState, tr.host())
+		clonedStateSets.deleteValueFromSet(sourceTransactionState, tr.ClientIdentifier())
+		clonedStateSets.addValueToSet(targetTransactionState, tr.ClientIdentifier())
 	}
 
-	return sets
-}
-
-type stateSets struct {
-	prepared      map[string]struct{}
-	prepareFailed map[string]struct{}
-	committed     map[string]struct{}
-	rolledBack    map[string]struct{}
-}
-
-func deleteValueFromSet(stateSets stateSets, transactionState TransactionState, targetHost string) {
-	set, ok := setByTransactionState(stateSets, transactionState)
-	if !ok {
-		return
-	}
-	delete(set, targetHost)
-}
-
-func addValueToSet(stateSets stateSets, transactionState TransactionState, targetHost string) {
-	set, ok := setByTransactionState(stateSets, transactionState)
-	if !ok {
-		return
-	}
-	set[targetHost] = struct{}{}
-}
-
-func setByTransactionState(sets stateSets, transactionState TransactionState) (map[string]struct{}, bool) {
-	var set map[string]struct{}
-	switch transactionState {
-	case transactionNotStarted:
-		return nil, false
-	case transactionPrepared:
-		set = sets.prepared
-	case transactionPrepareFailed:
-		set = sets.prepareFailed
-	case transactionCommitted:
-		set = sets.committed
-	case transactionRolledBack:
-		set = sets.rolledBack
-	}
-	return set, true
+	return clonedStateSets
 }
 
 func transactionStateAfterSuccessfulTransition(transition stateTransition) TransactionState {
@@ -187,19 +87,19 @@ func (s state) tryNextStateTransitions(transactions []Transaction) ([]stateTrans
 		return nil, err
 	}
 
-	if s.allFinished(len(transactions)) {
+	if s.stateSets.allFinished(len(transactions)) {
 		return nil, nil
 	}
 
-	if s.anyPreparedFailed() {
+	if s.stateSets.anyPreparedFailed() {
 		return s.buildRollbackStateTransitions(transactions), nil
 	}
 
-	if !s.allPrepared(len(transactions)) && !s.anyCommited() {
+	if !s.stateSets.allPrepared(len(transactions)) && !s.stateSets.anyCommited() {
 		return s.buildPrepareStateTransitions(transactions), nil
 	}
 
-	if !s.allCommitted(len(transactions)) {
+	if !s.stateSets.allCommitted(len(transactions)) {
 		return s.buildCommitStateTransitions(transactions), nil
 	}
 
@@ -207,76 +107,181 @@ func (s state) tryNextStateTransitions(transactions []Transaction) ([]stateTrans
 }
 
 func (s state) isInInvalidState() error {
-	if len(s.committed) > 0 && len(s.rolledBack) > 0 {
-		return invalidStateErr(len(s.prepared), len(s.prepareFailed), len(s.committed), len(s.rolledBack))
+	if s.stateSets.anyCommited() && s.stateSets.anyRolledBack() {
+		return invalidStateErr(s.stateSets)
 	}
-	if len(s.prepareFailed) > 0 && len(s.committed) > 0 {
-		return invalidStateErr(len(s.prepared), len(s.prepareFailed), len(s.committed), len(s.rolledBack))
+	if s.stateSets.anyPreparedFailed() && s.stateSets.anyCommited() {
+		return invalidStateErr(s.stateSets)
 	}
 	return nil
 }
 
-func invalidStateErr(preparedCount, prepareFailedCount, commitedCount, rolledBackCount int) error {
+func invalidStateErr(sets stateSets) error {
 	return fmt.Errorf("invalid state, prepared count: %d, prepareFailedCount: %d, commited count: %d, rolled back count: %d",
-		preparedCount, prepareFailedCount, commitedCount, rolledBackCount)
-}
-
-func (s state) allFinished(transactionsCount int) bool {
-	return len(s.committed) == transactionsCount || len(s.rolledBack) == transactionsCount
-}
-
-func (s state) allPrepared(transactionsCount int) bool {
-	return len(s.prepared) == transactionsCount
-}
-
-func (s state) anyPreparedFailed() bool {
-	return len(s.prepareFailed) > 0
-}
-
-func (s state) anyCommited() bool {
-	return len(s.committed) > 0
-}
-
-func (s state) allCommitted(transactionCount int) bool {
-	return len(s.committed) == transactionCount
+		len(sets.prepared), len(sets.prepareFailed), len(sets.committed), len(sets.rolledBack))
 }
 
 func (s state) buildPrepareStateTransitions(transactions []Transaction) []stateTransition {
-	transitions := make([]stateTransition, 0, len(transactions)-len(s.prepared))
-	for _, tr := range transactions {
-		_, ok := s.prepared[tr.TargetHost]
-		if !ok {
-			transitions = append(transitions, prepareStateTransition{preTransitionState: s.transactionState(tr.TargetHost), transaction: tr})
+	transitions := make([]stateTransition, 0, len(transactions)-s.stateSets.preparedAmount())
+	for _, tx := range transactions {
+		if !s.stateSets.prepared.has(tx.ClientIdentifier()) {
+			txState := s.stateSets.transactionState(tx.ClientIdentifier())
+			transitions = append(transitions, prepareStateTransition{preTransitionState: txState, transaction: tx})
 		}
 	}
 	return transitions
 }
 
 func (s state) buildCommitStateTransitions(transactions []Transaction) []stateTransition {
-	transitions := make([]stateTransition, 0, len(transactions)-len(s.committed))
+	transitions := make([]stateTransition, 0, len(transactions)-s.stateSets.committedAmount())
 	for _, tx := range transactions {
-		_, ok := s.committed[tx.TargetHost]
-		if !ok {
-			transitions = append(transitions, commitStateTransition{preTransitionState: s.transactionState(tx.TargetHost), transaction: tx})
+		if !s.stateSets.committed.has(tx.ClientIdentifier()) {
+			txState := s.stateSets.transactionState(tx.ClientIdentifier())
+			transitions = append(transitions, commitStateTransition{preTransitionState: txState, transaction: tx})
 		}
 	}
 	return transitions
 }
 
 func (s state) buildRollbackStateTransitions(transactions []Transaction) []stateTransition {
-	transitions := make([]stateTransition, 0, len(transactions)-len(s.rolledBack))
-	for _, tr := range transactions {
-		_, ok := s.rolledBack[tr.TargetHost]
-		if !ok {
-			transitions = append(transitions, rollbackStateTransition{preTransitionState: s.transactionState(tr.TargetHost), transaction: tr})
+	transitions := make([]stateTransition, 0, len(transactions)-s.stateSets.rolledBackAmount())
+	for _, tx := range transactions {
+		if !s.stateSets.rolledBack.has(tx.ClientIdentifier()) {
+			txState := s.stateSets.transactionState(tx.ClientIdentifier())
+			transitions = append(transitions, rollbackStateTransition{preTransitionState: txState, transaction: tx})
 		}
 	}
 	return transitions
 }
 
+func (s state) isTerminalState(txAmount int) bool {
+	return s.stateSets.allFinished(txAmount)
+}
+
+type stateSet map[ClientID]struct{}
+
+func (s stateSet) add(clientID ClientID) {
+	s[clientID] = struct{}{}
+}
+
+func (s stateSet) remove(clientID ClientID) {
+	delete(s, clientID)
+}
+
+func (s stateSet) has(clientID ClientID) bool {
+	_, ok := s[clientID]
+	return ok
+}
+
+type stateSets struct {
+	prepared      stateSet
+	prepareFailed stateSet
+	committed     stateSet
+	rolledBack    stateSet
+}
+
+func (ss *stateSets) deleteValueFromSet(transactionState TransactionState, clientID ClientID) {
+	set, ok := stateSetByTransactionState(*ss, transactionState)
+	if !ok {
+		return
+	}
+	set.remove(clientID)
+}
+
+func (ss *stateSets) addValueToSet(transactionState TransactionState, clientID ClientID) {
+	set, ok := stateSetByTransactionState(*ss, transactionState)
+	if !ok {
+		return
+	}
+	set.add(clientID)
+}
+
+func stateSetByTransactionState(sets stateSets, transactionState TransactionState) (stateSet, bool) {
+	var set stateSet
+	switch transactionState {
+	case transactionNotStarted:
+		return nil, false
+	case transactionPrepared:
+		set = sets.prepared
+	case transactionPrepareFailed:
+		set = sets.prepareFailed
+	case transactionCommitted:
+		set = sets.committed
+	case transactionRolledBack:
+		set = sets.rolledBack
+	}
+	return set, true
+}
+
+func (ss *stateSets) transactionState(clientID ClientID) TransactionState {
+	if ss.prepared.has(clientID) {
+		return transactionPrepared
+	}
+	if ss.prepareFailed.has(clientID) {
+		return transactionPrepareFailed
+	}
+	if ss.committed.has(clientID) {
+		return transactionCommitted
+	}
+	if ss.rolledBack.has(clientID) {
+		return transactionRolledBack
+	}
+	return transactionNotStarted
+}
+
+func (ss *stateSets) clone() stateSets {
+	prepared := maps.Clone(ss.prepared)
+	prepareFailed := maps.Clone(ss.prepareFailed)
+	committed := maps.Clone(ss.committed)
+	rolledBack := maps.Clone(ss.rolledBack)
+
+	return stateSets{
+		prepared:      prepared,
+		prepareFailed: prepareFailed,
+		committed:     committed,
+		rolledBack:    rolledBack,
+	}
+}
+
+func (ss *stateSets) allFinished(transactionsCount int) bool {
+	return len(ss.committed) == transactionsCount || len(ss.rolledBack) == transactionsCount
+}
+
+func (ss *stateSets) allPrepared(transactionsCount int) bool {
+	return len(ss.prepared) == transactionsCount
+}
+
+func (ss *stateSets) anyPreparedFailed() bool {
+	return len(ss.prepareFailed) > 0
+}
+
+func (ss *stateSets) anyCommited() bool {
+	return len(ss.committed) > 0
+}
+
+func (ss *stateSets) anyRolledBack() bool {
+	return len(ss.rolledBack) > 0
+}
+
+func (ss *stateSets) allCommitted(transactionCount int) bool {
+	return len(ss.committed) == transactionCount
+}
+
+func (ss *stateSets) preparedAmount() int {
+	return len(ss.prepared)
+}
+
+func (ss *stateSets) committedAmount() int {
+	return len(ss.prepared)
+}
+
+func (ss *stateSets) rolledBackAmount() int {
+	return len(ss.prepared)
+}
+
 type stateTransition interface {
+	ClientRegistrarUsable
 	sourceState() TransactionState
-	host() string
 }
 
 type prepareStateTransition struct {
@@ -288,8 +293,8 @@ func (tr prepareStateTransition) sourceState() TransactionState {
 	return tr.preTransitionState
 }
 
-func (tr prepareStateTransition) host() string {
-	return tr.transaction.TargetHost
+func (tr prepareStateTransition) ClientIdentifier() ClientID {
+	return tr.transaction.ClientIdentifier()
 }
 
 type commitStateTransition struct {
@@ -301,8 +306,8 @@ func (tr commitStateTransition) sourceState() TransactionState {
 	return tr.preTransitionState
 }
 
-func (tr commitStateTransition) host() string {
-	return tr.transaction.TargetHost
+func (tr commitStateTransition) ClientIdentifier() ClientID {
+	return tr.transaction.ClientIdentifier()
 }
 
 type rollbackStateTransition struct {
@@ -314,22 +319,6 @@ func (tr rollbackStateTransition) sourceState() TransactionState {
 	return tr.preTransitionState
 }
 
-func (tr rollbackStateTransition) host() string {
-	return tr.transaction.TargetHost
-}
-
-func (s state) transactionState(targetHost string) TransactionState {
-	if _, ok := s.prepared[targetHost]; ok {
-		return transactionPrepared
-	}
-	if _, ok := s.prepareFailed[targetHost]; ok {
-		return transactionPrepareFailed
-	}
-	if _, ok := s.committed[targetHost]; ok {
-		return transactionCommitted
-	}
-	if _, ok := s.rolledBack[targetHost]; ok {
-		return transactionRolledBack
-	}
-	return transactionNotStarted
+func (tr rollbackStateTransition) ClientIdentifier() ClientID {
+	return tr.transaction.ClientIdentifier()
 }

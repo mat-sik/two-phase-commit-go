@@ -5,9 +5,6 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	pb "github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/generated/client/v1"
-	"google.golang.org/grpc"
 )
 
 func TestOperationHandler_HandleRequest(t *testing.T) {
@@ -36,15 +33,15 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			fields: fields{
 				stateLoader:    allNotStartedLoader(),
 				statePersister: mockStatePersister{},
-				clientRegistrar: newClientRegistrar(map[string]pb.ClientServiceClient{
-					"host-a": &mockGRPCClient{},
+				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+					"host-a": &mockClient{},
 				}),
 			},
 			args: args{
 				ctx: context.Background(),
 				distributedTransaction: DistributedTransaction{
 					TransactionID: "tx-1",
-					Transactions:  []Transaction{{TargetHost: "host-a", Payload: "p1"}},
+					Transactions:  []Transaction{{ClientID: "host-a", Payload: "p1"}},
 				},
 			},
 			wantErr: false,
@@ -54,9 +51,9 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			fields: fields{
 				stateLoader:    allNotStartedLoader(),
 				statePersister: mockStatePersister{},
-				clientRegistrar: newClientRegistrar(map[string]pb.ClientServiceClient{
-					"host-a": &mockGRPCClient{},
-					"host-b": &mockGRPCClient{},
+				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+					"host-a": &mockClient{},
+					"host-b": &mockClient{},
 				}),
 			},
 			args: args{
@@ -64,8 +61,29 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 				distributedTransaction: DistributedTransaction{
 					TransactionID: "tx-2",
 					Transactions: []Transaction{
-						{TargetHost: "host-a", Payload: "p1"},
-						{TargetHost: "host-b", Payload: "p2"},
+						{ClientID: "host-a", Payload: "p1"},
+						{ClientID: "host-b", Payload: "p2"},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "two hosts, host-a needs to be initialized: prepare then commit both succeed → no error",
+			fields: fields{
+				stateLoader:    allNotStartedLoader(),
+				statePersister: mockStatePersister{},
+				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+					"host-b": &mockClient{},
+				}),
+			},
+			args: args{
+				ctx: context.Background(),
+				distributedTransaction: DistributedTransaction{
+					TransactionID: "tx-2",
+					Transactions: []Transaction{
+						{ClientID: "host-a", Payload: "p1"},
+						{ClientID: "host-b", Payload: "p2"},
 					},
 				},
 			},
@@ -76,21 +94,21 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			fields: fields{
 				stateLoader: StateLoader{
 					transactionStateChecker: mockTransactionStateChecker{
-						stateByHost: map[string]TransactionState{
+						stateByClientID: map[ClientID]TransactionState{
 							"host-a": transactionCommitted,
 						},
 					},
 				},
 				statePersister: mockStatePersister{},
-				clientRegistrar: newClientRegistrar(map[string]pb.ClientServiceClient{
-					"host-a": &mockGRPCClient{},
+				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+					"host-a": &mockClient{},
 				}),
 			},
 			args: args{
 				ctx: context.Background(),
 				distributedTransaction: DistributedTransaction{
 					TransactionID: "tx-3",
-					Transactions:  []Transaction{{TargetHost: "host-a", Payload: "p1"}},
+					Transactions:  []Transaction{{ClientID: "host-a", Payload: "p1"}},
 				},
 			},
 			wantErr: false,
@@ -100,21 +118,21 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			fields: fields{
 				stateLoader: StateLoader{
 					transactionStateChecker: mockTransactionStateChecker{
-						stateByHost: map[string]TransactionState{
+						stateByClientID: map[ClientID]TransactionState{
 							"host-a": transactionRolledBack,
 						},
 					},
 				},
 				statePersister: mockStatePersister{},
-				clientRegistrar: newClientRegistrar(map[string]pb.ClientServiceClient{
-					"host-a": &mockGRPCClient{},
+				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+					"host-a": &mockClient{},
 				}),
 			},
 			args: args{
 				ctx: context.Background(),
 				distributedTransaction: DistributedTransaction{
 					TransactionID: "tx-4",
-					Transactions:  []Transaction{{TargetHost: "host-a", Payload: "p1"}},
+					Transactions:  []Transaction{{ClientID: "host-a", Payload: "p1"}},
 				},
 			},
 			wantErr: false,
@@ -124,16 +142,16 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			fields: fields{
 				stateLoader: StateLoader{
 					transactionStateChecker: mockTransactionStateChecker{
-						stateByHost: map[string]TransactionState{
+						stateByClientID: map[ClientID]TransactionState{
 							"host-a": transactionPrepared,
 							"host-b": transactionPrepared,
 						},
 					},
 				},
 				statePersister: mockStatePersister{},
-				clientRegistrar: newClientRegistrar(map[string]pb.ClientServiceClient{
-					"host-a": &mockGRPCClient{},
-					"host-b": &mockGRPCClient{},
+				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+					"host-a": &mockClient{},
+					"host-b": &mockClient{},
 				}),
 			},
 			args: args{
@@ -141,8 +159,8 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 				distributedTransaction: DistributedTransaction{
 					TransactionID: "tx-5",
 					Transactions: []Transaction{
-						{TargetHost: "host-a", Payload: "p1"},
-						{TargetHost: "host-b", Payload: "p2"},
+						{ClientID: "host-a", Payload: "p1"},
+						{ClientID: "host-b", Payload: "p2"},
 					},
 				},
 			},
@@ -155,9 +173,9 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			fields: fields{
 				stateLoader:    allNotStartedLoader(),
 				statePersister: mockStatePersister{},
-				clientRegistrar: newClientRegistrar(map[string]pb.ClientServiceClient{
-					"host-a": &mockGRPCClient{prepareErr: prepareErr},
-					"host-b": &mockGRPCClient{},
+				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+					"host-a": &mockClient{prepareErr: prepareErr},
+					"host-b": &mockClient{},
 				}),
 			},
 			args: args{
@@ -165,8 +183,8 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 				distributedTransaction: DistributedTransaction{
 					TransactionID: "tx-6",
 					Transactions: []Transaction{
-						{TargetHost: "host-a", Payload: "p1"},
-						{TargetHost: "host-b", Payload: "p2"},
+						{ClientID: "host-a", Payload: "p1"},
+						{ClientID: "host-b", Payload: "p2"},
 					},
 				},
 			},
@@ -177,9 +195,9 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			fields: fields{
 				stateLoader:    allNotStartedLoader(),
 				statePersister: mockStatePersister{},
-				clientRegistrar: newClientRegistrar(map[string]pb.ClientServiceClient{
-					"host-a": &mockGRPCClient{prepareErr: prepareErr},
-					"host-b": &mockGRPCClient{prepareErr: prepareErr},
+				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+					"host-a": &mockClient{prepareErr: prepareErr},
+					"host-b": &mockClient{prepareErr: prepareErr},
 				}),
 			},
 			args: args{
@@ -187,8 +205,8 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 				distributedTransaction: DistributedTransaction{
 					TransactionID: "tx-7",
 					Transactions: []Transaction{
-						{TargetHost: "host-a", Payload: "p1"},
-						{TargetHost: "host-b", Payload: "p2"},
+						{ClientID: "host-a", Payload: "p1"},
+						{ClientID: "host-b", Payload: "p2"},
 					},
 				},
 			},
@@ -199,15 +217,15 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			fields: fields{
 				stateLoader:    allNotStartedLoader(),
 				statePersister: mockStatePersister{err: persistErr},
-				clientRegistrar: newClientRegistrar(map[string]pb.ClientServiceClient{
-					"host-a": &mockGRPCClient{},
+				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+					"host-a": &mockClient{},
 				}),
 			},
 			args: args{
 				ctx: ctxWithTimeout(context.Background(), time.Second),
 				distributedTransaction: DistributedTransaction{
 					TransactionID: "tx-8",
-					Transactions:  []Transaction{{TargetHost: "host-a", Payload: "p1"}},
+					Transactions:  []Transaction{{ClientID: "host-a", Payload: "p1"}},
 				},
 			},
 			wantErr: true,
@@ -217,13 +235,13 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			fields: fields{
 				stateLoader:     allNotStartedLoader(),
 				statePersister:  mockStatePersister{},
-				clientRegistrar: newClientRegistrar(map[string]pb.ClientServiceClient{}), // empty — no hosts registered
+				clientRegistrar: newMockFailingOnNewClientClientRegistrar(map[ClientID]Client{}),
 			},
 			args: args{
 				ctx: ctxWithTimeout(context.Background(), time.Second),
 				distributedTransaction: DistributedTransaction{
 					TransactionID: "tx-9",
-					Transactions:  []Transaction{{TargetHost: "host-a", Payload: "p1"}},
+					Transactions:  []Transaction{{ClientID: "host-a", Payload: "p1"}},
 				},
 			},
 			wantErr: true,
@@ -232,12 +250,12 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			coord := Coordinator{
+			coordinator := Coordinator{
 				stateLoader:     tt.fields.stateLoader,
 				statePersister:  tt.fields.statePersister,
 				clientRegistrar: tt.fields.clientRegistrar,
 			}
-			if err := coord.Execute(tt.args.ctx, tt.args.distributedTransaction); (err != nil) != tt.wantErr {
+			if err := coordinator.Execute(tt.args.ctx, tt.args.distributedTransaction); (err != nil) != tt.wantErr {
 				t.Errorf("HandleRequest() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -251,12 +269,10 @@ func ctxWithTimeout(ctx context.Context, timeout time.Duration) context.Context 
 }
 
 type mockStatePersister struct {
-	// err is returned as PersistResult.Err for every call when non-nil.
-	// When nil, a successful commit (no-op) is returned.
 	err error
 }
 
-func (m mockStatePersister) PersistState(_ context.Context, _ string, _ string, _ TransactionState) <-chan PersistResult {
+func (m mockStatePersister) PersistState(_ context.Context, _ string, _ ClientID, _ TransactionState) <-chan PersistResult {
 	ch := make(chan PersistResult, 1)
 	if m.err != nil {
 		ch <- PersistResult{Err: m.err}
@@ -269,42 +285,58 @@ func (m mockStatePersister) PersistState(_ context.Context, _ string, _ string, 
 	return ch
 }
 
-// mockGRPCClient implements pb.ClientServiceClient.
-// Each operation returns the configured error (nil = success).
-type mockGRPCClient struct {
+type mockClient struct {
 	prepareErr  error
 	commitErr   error
 	rollbackErr error
 }
 
-func (m *mockGRPCClient) PrepareTransaction(_ context.Context, _ *pb.PrepareTransactionRequest, _ ...grpc.CallOption) (*pb.PrepareTransactionResponse, error) {
-	return &pb.PrepareTransactionResponse{}, m.prepareErr
+func (m mockClient) prepareTransaction(_ context.Context, _ string, _ prepareOperation) error {
+	return m.prepareErr
 }
 
-func (m *mockGRPCClient) CommitTransaction(_ context.Context, _ *pb.CommitTransactionRequest, _ ...grpc.CallOption) (*pb.CommitTransactionResponse, error) {
-	return &pb.CommitTransactionResponse{}, m.commitErr
+func (m mockClient) commitTransaction(_ context.Context, _ string) error {
+	return m.commitErr
 }
 
-func (m *mockGRPCClient) RollbackTransaction(_ context.Context, _ *pb.RollbackTransactionRequest, _ ...grpc.CallOption) (*pb.RollbackTransactionResponse, error) {
-	return &pb.RollbackTransactionResponse{}, m.rollbackErr
+func (m mockClient) rollbackTransaction(_ context.Context, _ string) error {
+	return m.rollbackErr
 }
 
-// newClientRegistrar pre-populates the store with the provided mock so that
-// getClient never dials a real connection.
-func newClientRegistrar(hostToClient map[string]pb.ClientServiceClient) clientRegistrar {
-	cr := clientRegistrar{store: &clientRegistrarStore{}}
-	for host, client := range hostToClient {
-		cr.store.add(host, client)
+// newMockFailingOnNewClientClientRegistrar always fails on creating new client
+func newMockFailingOnNewClientClientRegistrar(hostToClient map[ClientID]Client) clientRegistrar {
+	newClient := func(identifiable ClientRegistrarUsable) (Client, error) {
+		return mockClient{}, errors.New("failed to create new client")
+	}
+	return newMockClientRegistrarBase(hostToClient, newClient)
+}
+
+// newMockClientRegistrar never fails on creating new client
+func newMockClientRegistrar(hostToClient map[ClientID]Client) clientRegistrar {
+	newClient := func(identifiable ClientRegistrarUsable) (Client, error) {
+		return mockClient{}, nil
+	}
+	return newMockClientRegistrarBase(hostToClient, newClient)
+}
+
+func newMockClientRegistrarBase(
+	hostToClient map[ClientID]Client,
+	newClientFunc func(identifiable ClientRegistrarUsable) (Client, error),
+) clientRegistrar {
+	cr := clientRegistrar{
+		store:     &clientRegistrarStore{},
+		newClient: newClientFunc,
+	}
+	for cID, c := range hostToClient {
+		cr.store.add(cID, c)
 	}
 	return cr
 }
 
-// allNotStartedLoader returns a StateLoader whose checker reports every host
-// as not started, so HandleRequest always begins from a clean slate.
 func allNotStartedLoader() StateLoader {
 	return StateLoader{
 		transactionStateChecker: mockTransactionStateChecker{
-			stateByHost: map[string]TransactionState{},
+			stateByClientID: map[ClientID]TransactionState{},
 		},
 	}
 }

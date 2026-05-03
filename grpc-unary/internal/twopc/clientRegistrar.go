@@ -1,43 +1,59 @@
 package twopc
 
 import (
-	"fmt"
+	"context"
 	"sync"
-
-	pb "github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/generated/client/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
-type clientRegistrar struct {
-	store *clientRegistrarStore
+type Client interface {
+	prepareTransaction(ctx context.Context, transactionID string, operation prepareOperation) error
+	commitTransaction(ctx context.Context, transactionID string) error
+	rollbackTransaction(ctx context.Context, transactionID string) error
 }
 
-func (cr *clientRegistrar) getClient(gRPCHost string) (pb.ClientServiceClient, error) {
-	client, ok := cr.store.load(gRPCHost)
-	if !ok {
-		conn, err := grpc.NewClient(gRPCHost, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			return nil, fmt.Errorf("failed to create client for %s: %w", gRPCHost, err)
-		}
-		client = pb.NewClientServiceClient(conn)
-		cr.store.add(gRPCHost, client)
+type clientRegistrar struct {
+	store     *clientRegistrarStore
+	newClient func(identifiable ClientRegistrarUsable) (Client, error)
+}
+
+func newClientRegistrar(newClientFunc func(identifiable ClientRegistrarUsable) (Client, error)) clientRegistrar {
+	return clientRegistrar{
+		store:     &clientRegistrarStore{},
+		newClient: newClientFunc,
 	}
-	return client, nil
+}
+
+type ClientID string
+
+type ClientRegistrarUsable interface {
+	ClientIdentifier() ClientID
+}
+
+func (cr *clientRegistrar) getClient(identifiable ClientRegistrarUsable) (Client, error) {
+	reusableClient, ok := cr.store.load(identifiable.ClientIdentifier())
+	if !ok {
+		newClient, err := cr.newClient(identifiable)
+		if err != nil {
+			return nil, err
+		}
+		cr.store.add(identifiable.ClientIdentifier(), newClient)
+		reusableClient = newClient
+	}
+	return reusableClient, nil
 }
 
 type clientRegistrarStore struct {
 	store sync.Map
 }
 
-func (store *clientRegistrarStore) add(gRPCHost string, client pb.ClientServiceClient) {
-	store.store.Store(gRPCHost, client)
+func (store *clientRegistrarStore) add(clientID ClientID, client Client) {
+	store.store.Store(clientID, client)
 }
 
-func (store *clientRegistrarStore) load(gRPCHost string) (pb.ClientServiceClient, bool) {
-	value, ok := store.store.Load(gRPCHost)
+func (store *clientRegistrarStore) load(clientID ClientID) (Client, bool) {
+	value, ok := store.store.Load(clientID)
 	if !ok {
 		return nil, false
 	}
-	return value.(pb.ClientServiceClient), true
+	return value.(Client), true
 }
