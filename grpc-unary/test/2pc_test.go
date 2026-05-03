@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/client"
-	"github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/coordinator"
 	pb "github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/generated/client/v1"
+	"github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/twopc"
 	"google.golang.org/grpc"
 )
 
@@ -51,24 +51,24 @@ func Test_integration(t *testing.T) {
 			close(serverErrsChan)
 		}()
 
-		operationHandler := coordinator.NewCoordinator(
-			coordinator.NewStateLoader(mockTransactionStateChecker{}),
+		coordinator := twopc.NewCoordinator(
+			twopc.NewStateLoader(mockTransactionStateChecker{}),
 			mockStatePersister{},
 		)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		req := coordinator.DistributedTransaction{
+		req := twopc.DistributedTransaction{
 			TransactionID: "tx-1",
-			Transactions: []coordinator.Transaction{
+			Transactions: []twopc.Transaction{
 				{TargetHost: fmt.Sprintf("localhost:%d", firstClientPort), Payload: "one"},
 				{TargetHost: fmt.Sprintf("localhost:%d", secondClientPort), Payload: "two"},
 				{TargetHost: fmt.Sprintf("localhost:%d", thirdClientPort), Payload: "three"},
 			},
 		}
 
-		if err = operationHandler.Execute(ctx, req); err != nil {
+		if err = coordinator.Execute(ctx, req); err != nil {
 			t.Fatal(err)
 		}
 
@@ -111,12 +111,12 @@ type mockStatePersister struct {
 	err error
 }
 
-func (m mockStatePersister) PersistState(_ context.Context, _ string, _ string, _ coordinator.TransactionState) <-chan coordinator.PersistResult {
-	ch := make(chan coordinator.PersistResult, 1)
+func (m mockStatePersister) PersistState(_ context.Context, _ string, _ string, _ twopc.TransactionState) <-chan twopc.PersistResult {
+	ch := make(chan twopc.PersistResult, 1)
 	if m.err != nil {
-		ch <- coordinator.PersistResult{Err: m.err}
+		ch <- twopc.PersistResult{Err: m.err}
 	} else {
-		ch <- coordinator.PersistResult{
+		ch <- twopc.PersistResult{
 			Commit:   func() error { return nil },
 			Rollback: func() error { return nil },
 		}
@@ -125,9 +125,9 @@ func (m mockStatePersister) PersistState(_ context.Context, _ string, _ string, 
 }
 
 type mockTransactionStateChecker struct {
-	stateByHost map[string]coordinator.TransactionState
+	stateByHost map[string]twopc.TransactionState
 }
 
-func (m mockTransactionStateChecker) Check(_ string) map[string]coordinator.TransactionState {
+func (m mockTransactionStateChecker) Check(_ string) map[string]twopc.TransactionState {
 	return m.stateByHost
 }
