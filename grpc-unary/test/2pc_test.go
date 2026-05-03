@@ -62,7 +62,7 @@ func Test_integration(t *testing.T) {
 
 		req := twopc.DistributedTransaction{
 			TransactionID: "tx-1",
-			Transactions: []twopc.Transaction{
+			Transactions: []client.ID{
 				twopc.NewTransaction(fmt.Sprintf("localhost:%d", firstClientPort), "one"),
 				twopc.NewTransaction(fmt.Sprintf("localhost:%d", secondClientPort), "two"),
 				twopc.NewTransaction(fmt.Sprintf("localhost:%d", thirdClientPort), "three"),
@@ -112,7 +112,7 @@ type mockStatePersister struct {
 	err error
 }
 
-func (m mockStatePersister) PersistState(_ context.Context, _ string, _ twopc.ClientID, _ twopc.TransactionState) <-chan twopc.PersistResult {
+func (m mockStatePersister) PersistState(_ context.Context, _ string, _ twopc.ClientID, _ client.IDState) <-chan twopc.PersistResult {
 	ch := make(chan twopc.PersistResult, 1)
 	if m.err != nil {
 		ch <- twopc.PersistResult{Err: m.err}
@@ -126,9 +126,9 @@ func (m mockStatePersister) PersistState(_ context.Context, _ string, _ twopc.Cl
 }
 
 type mockTransactionStateChecker struct {
-	stateByClientID map[twopc.ClientID]twopc.TransactionState
+	stateByClientID map[twopc.ClientID]client.IDState
 }
 
-func (m mockTransactionStateChecker) Check(_ string) map[twopc.ClientID]twopc.TransactionState {
+func (m mockTransactionStateChecker) Check(_ string) map[twopc.ClientID]client.IDState {
 	return m.stateByClientID
 }

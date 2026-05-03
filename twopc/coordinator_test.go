@@ -5,13 +5,17 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/mat-sik/two-phase-commit-go/twopc/internal/client"
+	"github.com/mat-sik/two-phase-commit-go/twopc/internal/state"
+	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
 )
 
-func TestOperationHandler_HandleRequest(t *testing.T) {
+func TestCoordinator_Execute(t *testing.T) {
 	type fields struct {
-		stateLoader     StateLoader
-		statePersister  StatePersister
-		clientRegistrar clientRegistrar
+		stateLoader    state.Loader
+		statePersister StatePersister
+		newClientFunc  func(clientID client.ID) (client.Client, error)
 	}
 	type args struct {
 		ctx                    context.Context
@@ -33,7 +37,7 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			fields: fields{
 				stateLoader:    allNotStartedLoader(),
 				statePersister: mockStatePersister{},
-				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+				newClientFunc: newMockNewClientFunc(map[client.ID]client.Client{
 					"host-a": &mockClient{},
 				}),
 			},
@@ -41,7 +45,9 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 				ctx: context.Background(),
 				distributedTransaction: DistributedTransaction{
 					TransactionID: "tx-1",
-					Transactions:  []Transaction{{ClientID: "host-a", Payload: "p1"}},
+					Transactions: []Transaction{
+						{ClientID: "host-a", Payload: "p1"},
+					},
 				},
 			},
 			wantErr: false,
@@ -51,7 +57,7 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			fields: fields{
 				stateLoader:    allNotStartedLoader(),
 				statePersister: mockStatePersister{},
-				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+				newClientFunc: newMockNewClientFunc(map[client.ID]client.Client{
 					"host-a": &mockClient{},
 					"host-b": &mockClient{},
 				}),
@@ -73,7 +79,7 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			fields: fields{
 				stateLoader:    allNotStartedLoader(),
 				statePersister: mockStatePersister{},
-				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+				newClientFunc: newMockNewClientFuncWithFallback(map[client.ID]client.Client{
 					"host-b": &mockClient{},
 				}),
 			},
@@ -92,15 +98,13 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 		{
 			name: "already fully committed initial state → no operations, no error",
 			fields: fields{
-				stateLoader: StateLoader{
-					transactionStateChecker: mockTransactionStateChecker{
-						stateByClientID: map[ClientID]TransactionState{
-							"host-a": transactionCommitted,
-						},
+				stateLoader: state.NewLoader(mockTransactionStateChecker{
+					stateByClientID: map[client.ID]transaction.State{
+						"host-a": transaction.Committed,
 					},
-				},
+				}),
 				statePersister: mockStatePersister{},
-				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+				newClientFunc: newMockNewClientFunc(map[client.ID]client.Client{
 					"host-a": &mockClient{},
 				}),
 			},
@@ -108,7 +112,9 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 				ctx: context.Background(),
 				distributedTransaction: DistributedTransaction{
 					TransactionID: "tx-3",
-					Transactions:  []Transaction{{ClientID: "host-a", Payload: "p1"}},
+					Transactions: []Transaction{
+						{ClientID: "host-a", Payload: "p1"},
+					},
 				},
 			},
 			wantErr: false,
@@ -116,15 +122,13 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 		{
 			name: "already fully rolled back initial state → no operations, no error",
 			fields: fields{
-				stateLoader: StateLoader{
-					transactionStateChecker: mockTransactionStateChecker{
-						stateByClientID: map[ClientID]TransactionState{
-							"host-a": transactionRolledBack,
-						},
+				stateLoader: state.NewLoader(mockTransactionStateChecker{
+					stateByClientID: map[client.ID]transaction.State{
+						"host-a": transaction.RolledBack,
 					},
-				},
+				}),
 				statePersister: mockStatePersister{},
-				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+				newClientFunc: newMockNewClientFunc(map[client.ID]client.Client{
 					"host-a": &mockClient{},
 				}),
 			},
@@ -132,7 +136,9 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 				ctx: context.Background(),
 				distributedTransaction: DistributedTransaction{
 					TransactionID: "tx-4",
-					Transactions:  []Transaction{{ClientID: "host-a", Payload: "p1"}},
+					Transactions: []Transaction{
+						{ClientID: "host-a", Payload: "p1"},
+					},
 				},
 			},
 			wantErr: false,
@@ -140,16 +146,14 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 		{
 			name: "resume from prepared: skips prepare, goes straight to commit → no error",
 			fields: fields{
-				stateLoader: StateLoader{
-					transactionStateChecker: mockTransactionStateChecker{
-						stateByClientID: map[ClientID]TransactionState{
-							"host-a": transactionPrepared,
-							"host-b": transactionPrepared,
-						},
+				stateLoader: state.NewLoader(mockTransactionStateChecker{
+					stateByClientID: map[client.ID]transaction.State{
+						"host-a": transaction.Prepared,
+						"host-b": transaction.Prepared,
 					},
-				},
+				}),
 				statePersister: mockStatePersister{},
-				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+				newClientFunc: newMockNewClientFunc(map[client.ID]client.Client{
 					"host-a": &mockClient{},
 					"host-b": &mockClient{},
 				}),
@@ -173,7 +177,7 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			fields: fields{
 				stateLoader:    allNotStartedLoader(),
 				statePersister: mockStatePersister{},
-				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+				newClientFunc: newMockNewClientFunc(map[client.ID]client.Client{
 					"host-a": &mockClient{prepareErr: prepareErr},
 					"host-b": &mockClient{},
 				}),
@@ -195,7 +199,7 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			fields: fields{
 				stateLoader:    allNotStartedLoader(),
 				statePersister: mockStatePersister{},
-				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+				newClientFunc: newMockNewClientFunc(map[client.ID]client.Client{
 					"host-a": &mockClient{prepareErr: prepareErr},
 					"host-b": &mockClient{prepareErr: prepareErr},
 				}),
@@ -217,7 +221,7 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 			fields: fields{
 				stateLoader:    allNotStartedLoader(),
 				statePersister: mockStatePersister{err: persistErr},
-				clientRegistrar: newMockClientRegistrar(map[ClientID]Client{
+				newClientFunc: newMockNewClientFunc(map[client.ID]client.Client{
 					"host-a": &mockClient{},
 				}),
 			},
@@ -225,7 +229,9 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 				ctx: ctxWithTimeout(context.Background(), time.Second),
 				distributedTransaction: DistributedTransaction{
 					TransactionID: "tx-8",
-					Transactions:  []Transaction{{ClientID: "host-a", Payload: "p1"}},
+					Transactions: []Transaction{
+						{ClientID: "host-a", Payload: "p1"},
+					},
 				},
 			},
 			wantErr: true,
@@ -233,15 +239,19 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 		{
 			name: "client not registered for host → getClient error → returns error",
 			fields: fields{
-				stateLoader:     allNotStartedLoader(),
-				statePersister:  mockStatePersister{},
-				clientRegistrar: newMockFailingOnNewClientClientRegistrar(map[ClientID]Client{}),
+				stateLoader:    allNotStartedLoader(),
+				statePersister: mockStatePersister{},
+				newClientFunc: func(clientID client.ID) (client.Client, error) {
+					return nil, errors.New("failed to create new client")
+				},
 			},
 			args: args{
 				ctx: ctxWithTimeout(context.Background(), time.Second),
 				distributedTransaction: DistributedTransaction{
 					TransactionID: "tx-9",
-					Transactions:  []Transaction{{ClientID: "host-a", Payload: "p1"}},
+					Transactions: []Transaction{
+						{ClientID: "host-a", Payload: "p1"},
+					},
 				},
 			},
 			wantErr: true,
@@ -250,13 +260,13 @@ func TestOperationHandler_HandleRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			coordinator := Coordinator{
-				stateLoader:     tt.fields.stateLoader,
-				statePersister:  tt.fields.statePersister,
-				clientRegistrar: tt.fields.clientRegistrar,
-			}
+			coordinator := NewCoordinator(
+				tt.fields.stateLoader,
+				tt.fields.statePersister,
+				tt.fields.newClientFunc,
+			)
 			if err := coordinator.Execute(tt.args.ctx, tt.args.distributedTransaction); (err != nil) != tt.wantErr {
-				t.Errorf("HandleRequest() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("Execute() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
@@ -272,7 +282,7 @@ type mockStatePersister struct {
 	err error
 }
 
-func (m mockStatePersister) PersistState(_ context.Context, _ string, _ ClientID, _ TransactionState) <-chan PersistResult {
+func (m mockStatePersister) PersistState(_ context.Context, _ string, _ client.ID, _ transaction.State) <-chan PersistResult {
 	ch := make(chan PersistResult, 1)
 	if m.err != nil {
 		ch <- PersistResult{Err: m.err}
@@ -291,52 +301,50 @@ type mockClient struct {
 	rollbackErr error
 }
 
-func (m mockClient) prepareTransaction(_ context.Context, _ string, _ prepareOperation) error {
+func (m mockClient) PrepareTransaction(_ context.Context, _ string, _ client.PreparePayload) error {
 	return m.prepareErr
 }
 
-func (m mockClient) commitTransaction(_ context.Context, _ string) error {
+func (m mockClient) CommitTransaction(_ context.Context, _ string) error {
 	return m.commitErr
 }
 
-func (m mockClient) rollbackTransaction(_ context.Context, _ string) error {
+func (m mockClient) RollbackTransaction(_ context.Context, _ string) error {
 	return m.rollbackErr
 }
 
-// newMockFailingOnNewClientClientRegistrar always fails on creating new client
-func newMockFailingOnNewClientClientRegistrar(hostToClient map[ClientID]Client) clientRegistrar {
-	newClient := func(identifiable ClientRegistrarUsable) (Client, error) {
-		return mockClient{}, errors.New("failed to create new client")
-	}
-	return newMockClientRegistrarBase(hostToClient, newClient)
+func (m mockClient) ClientIdentifier() client.ID {
+	return "mock-client"
 }
 
-// newMockClientRegistrar never fails on creating new client
-func newMockClientRegistrar(hostToClient map[ClientID]Client) clientRegistrar {
-	newClient := func(identifiable ClientRegistrarUsable) (Client, error) {
-		return mockClient{}, nil
+func newMockNewClientFunc(hostToClient map[client.ID]client.Client) func(clientID client.ID) (client.Client, error) {
+	return func(clientID client.ID) (client.Client, error) {
+		if c, ok := hostToClient[clientID]; ok {
+			return c, nil
+		}
+		return &mockClient{}, nil
 	}
-	return newMockClientRegistrarBase(hostToClient, newClient)
 }
 
-func newMockClientRegistrarBase(
-	hostToClient map[ClientID]Client,
-	newClientFunc func(identifiable ClientRegistrarUsable) (Client, error),
-) clientRegistrar {
-	cr := clientRegistrar{
-		store:     &clientRegistrarStore{},
-		newClient: newClientFunc,
+func newMockNewClientFuncWithFallback(hostToClient map[client.ID]client.Client) func(clientID client.ID) (client.Client, error) {
+	return func(clientID client.ID) (client.Client, error) {
+		if c, ok := hostToClient[clientID]; ok {
+			return c, nil
+		}
+		return &mockClient{}, nil
 	}
-	for cID, c := range hostToClient {
-		cr.store.add(cID, c)
-	}
-	return cr
 }
 
-func allNotStartedLoader() StateLoader {
-	return StateLoader{
-		transactionStateChecker: mockTransactionStateChecker{
-			stateByClientID: map[ClientID]TransactionState{},
-		},
-	}
+type mockTransactionStateChecker struct {
+	stateByClientID map[client.ID]transaction.State
+}
+
+func (m mockTransactionStateChecker) Check(_ string) map[client.ID]transaction.State {
+	return m.stateByClientID
+}
+
+func allNotStartedLoader() state.Loader {
+	return state.NewLoader(mockTransactionStateChecker{
+		stateByClientID: map[client.ID]transaction.State{},
+	})
 }
