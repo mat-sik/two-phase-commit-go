@@ -1,24 +1,18 @@
 package twopc
 
-import "github.com/mat-sik/two-phase-commit-go/twopc/internal/client"
-
-type DistributedTransaction struct {
+type DistributedTransaction[ID comparable] struct {
 	TransactionID string
-	Transactions  []Transaction
+	Transactions  []Transaction[ID]
 }
 
-type Transaction struct {
-	ClientID client.ID
+type Transaction[ID comparable] struct {
+	ClientID ID
 	Payload  string
 }
 
-func (t Transaction) ClientIdentifier() client.ID {
-	return t.ClientID
-}
-
-func NewTransaction(clientIDString string, payload string) Transaction {
-	return Transaction{
-		ClientID: client.ID(clientIDString),
+func NewTransaction[ID comparable](clientID ID, payload string) Transaction[ID] {
+	return Transaction[ID]{
+		ClientID: clientID,
 		Payload:  payload,
 	}
 }
