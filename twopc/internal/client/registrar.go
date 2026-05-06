@@ -13,21 +13,19 @@ type Client interface {
 	RollbackTransaction(ctx context.Context, transactionID string) error
 }
 
-type Registrar struct {
-	store     *registrarStore
+type Registrar[ID comparable] struct {
+	store     *registrarStore[ID]
 	newClient func(clientID ID) (Client, error)
 }
 
-func NewRegistrar(newClientFunc func(clientID ID) (Client, error)) Registrar {
-	return Registrar{
-		store:     &registrarStore{},
+func NewRegistrar[ID comparable](newClientFunc func(clientID ID) (Client, error)) Registrar[ID] {
+	return Registrar[ID]{
+		store:     &registrarStore[ID]{},
 		newClient: newClientFunc,
 	}
 }
 
-type ID string
-
-func (cr *Registrar) GetClient(clientID ID) (Client, error) {
+func (cr *Registrar[ID]) GetClient(clientID ID) (Client, error) {
 	reusableClient, ok := cr.store.load(clientID)
 	if !ok {
 		newClient, err := cr.newClient(clientID)
@@ -40,18 +38,20 @@ func (cr *Registrar) GetClient(clientID ID) (Client, error) {
 	return reusableClient, nil
 }
 
-type registrarStore struct {
+type registrarStore[ID comparable] struct {
 	store sync.Map
 }
 
-func (store *registrarStore) add(clientID ID, client Client) {
-	store.store.Store(clientID, client)
+func (s *registrarStore[ID]) add(id ID, client Client) {
+	s.store.Store(id, client)
 }
 
-func (store *registrarStore) load(clientID ID) (Client, bool) {
-	value, ok := store.store.Load(clientID)
+func (s *registrarStore[ID]) load(id ID) (Client, bool) {
+	value, ok := s.store.Load(id)
 	if !ok {
 		return nil, false
 	}
 	return value.(Client), true
 }
+
+type ID string

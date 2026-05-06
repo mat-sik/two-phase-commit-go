@@ -14,7 +14,7 @@ import (
 type Coordinator struct {
 	stateLoader     state.Loader
 	statePersister  StatePersister
-	clientRegistrar client.Registrar
+	clientRegistrar client.Registrar[client.ID]
 }
 
 func NewCoordinator(
