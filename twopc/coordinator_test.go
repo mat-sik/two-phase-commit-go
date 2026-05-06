@@ -6,16 +6,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mat-sik/two-phase-commit-go/twopc/internal/client"
-	"github.com/mat-sik/two-phase-commit-go/twopc/internal/state"
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
 )
 
 func TestCoordinator_Execute(t *testing.T) {
 	type fields struct {
-		stateLoader    state.Loader[string]
-		statePersister StatePersister[string]
-		newClientFunc  func(clientID string) (client.Client, error)
+		transactionStateChecker TransactionStateChecker[string]
+		statePersister          StatePersister[string]
+		newClientFunc           func(clientID string) (Client, error)
 	}
 	type args struct {
 		ctx                    context.Context
@@ -35,9 +33,9 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "single host: prepare then commit both succeed → no error",
 			fields: fields{
-				stateLoader:    allNotStartedLoader(),
-				statePersister: mockStatePersister[string]{},
-				newClientFunc: newMockNewClientFunc(map[string]client.Client{
+				transactionStateChecker: allNotStartedChecker(),
+				statePersister:          mockStatePersister[string]{},
+				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-a": &mockClient{},
 				}),
 			},
@@ -55,9 +53,9 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "two hosts: prepare then commit both succeed → no error",
 			fields: fields{
-				stateLoader:    allNotStartedLoader(),
-				statePersister: mockStatePersister[string]{},
-				newClientFunc: newMockNewClientFunc(map[string]client.Client{
+				transactionStateChecker: allNotStartedChecker(),
+				statePersister:          mockStatePersister[string]{},
+				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-a": &mockClient{},
 					"host-b": &mockClient{},
 				}),
@@ -77,9 +75,9 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "two hosts, host-a needs to be initialized: prepare then commit both succeed → no error",
 			fields: fields{
-				stateLoader:    allNotStartedLoader(),
-				statePersister: mockStatePersister[string]{},
-				newClientFunc: newMockNewClientFuncWithFallback(map[string]client.Client{
+				transactionStateChecker: allNotStartedChecker(),
+				statePersister:          mockStatePersister[string]{},
+				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-b": &mockClient{},
 				}),
 			},
@@ -98,13 +96,13 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "already fully committed initial state → no operations, no error",
 			fields: fields{
-				stateLoader: state.NewLoader[string](mockTransactionStateChecker{
+				transactionStateChecker: mockTransactionStateChecker{
 					stateByClientID: map[string]transaction.State{
 						"host-a": transaction.Committed,
 					},
-				}),
+				},
 				statePersister: mockStatePersister[string]{},
-				newClientFunc: newMockNewClientFunc(map[string]client.Client{
+				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-a": &mockClient{},
 				}),
 			},
@@ -122,13 +120,13 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "already fully rolled back initial state → no operations, no error",
 			fields: fields{
-				stateLoader: state.NewLoader[string](mockTransactionStateChecker{
+				transactionStateChecker: mockTransactionStateChecker{
 					stateByClientID: map[string]transaction.State{
 						"host-a": transaction.RolledBack,
 					},
-				}),
+				},
 				statePersister: mockStatePersister[string]{},
-				newClientFunc: newMockNewClientFunc(map[string]client.Client{
+				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-a": &mockClient{},
 				}),
 			},
@@ -146,14 +144,14 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "resume from prepared: skips prepare, goes straight to commit → no error",
 			fields: fields{
-				stateLoader: state.NewLoader[string](mockTransactionStateChecker{
+				transactionStateChecker: mockTransactionStateChecker{
 					stateByClientID: map[string]transaction.State{
 						"host-a": transaction.Prepared,
 						"host-b": transaction.Prepared,
 					},
-				}),
+				},
 				statePersister: mockStatePersister[string]{},
-				newClientFunc: newMockNewClientFunc(map[string]client.Client{
+				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-a": &mockClient{},
 					"host-b": &mockClient{},
 				}),
@@ -175,9 +173,9 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "prepare fails on one host → rollback issued, returns error",
 			fields: fields{
-				stateLoader:    allNotStartedLoader(),
-				statePersister: mockStatePersister[string]{},
-				newClientFunc: newMockNewClientFunc(map[string]client.Client{
+				transactionStateChecker: allNotStartedChecker(),
+				statePersister:          mockStatePersister[string]{},
+				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-a": &mockClient{prepareErr: prepareErr},
 					"host-b": &mockClient{},
 				}),
@@ -197,9 +195,9 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "prepare fails on all hosts → rollback issued, returns error",
 			fields: fields{
-				stateLoader:    allNotStartedLoader(),
-				statePersister: mockStatePersister[string]{},
-				newClientFunc: newMockNewClientFunc(map[string]client.Client{
+				transactionStateChecker: allNotStartedChecker(),
+				statePersister:          mockStatePersister[string]{},
+				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-a": &mockClient{prepareErr: prepareErr},
 					"host-b": &mockClient{prepareErr: prepareErr},
 				}),
@@ -219,9 +217,9 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "persist fails during prepare → returns error",
 			fields: fields{
-				stateLoader:    allNotStartedLoader(),
-				statePersister: mockStatePersister[string]{err: persistErr},
-				newClientFunc: newMockNewClientFunc(map[string]client.Client{
+				transactionStateChecker: allNotStartedChecker(),
+				statePersister:          mockStatePersister[string]{err: persistErr},
+				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-a": &mockClient{},
 				}),
 			},
@@ -239,9 +237,9 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "client not registered for host → getClient error → returns error",
 			fields: fields{
-				stateLoader:    allNotStartedLoader(),
-				statePersister: mockStatePersister[string]{},
-				newClientFunc: func(clientID string) (client.Client, error) {
+				transactionStateChecker: allNotStartedChecker(),
+				statePersister:          mockStatePersister[string]{},
+				newClientFunc: func(clientID string) (Client, error) {
 					return nil, errors.New("failed to create new client")
 				},
 			},
@@ -261,7 +259,7 @@ func TestCoordinator_Execute(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			coordinator := NewCoordinator(
-				tt.fields.stateLoader,
+				tt.fields.transactionStateChecker,
 				tt.fields.statePersister,
 				tt.fields.newClientFunc,
 			)
@@ -301,29 +299,20 @@ type mockClient struct {
 	rollbackErr error
 }
 
-func (m mockClient) PrepareTransaction(_ context.Context, _ string, _ client.PreparePayload) error {
+func (m *mockClient) PrepareTransaction(_ context.Context, _ string, _ PreparePayload) error {
 	return m.prepareErr
 }
 
-func (m mockClient) CommitTransaction(_ context.Context, _ string) error {
+func (m *mockClient) CommitTransaction(_ context.Context, _ string) error {
 	return m.commitErr
 }
 
-func (m mockClient) RollbackTransaction(_ context.Context, _ string) error {
+func (m *mockClient) RollbackTransaction(_ context.Context, _ string) error {
 	return m.rollbackErr
 }
 
-func newMockNewClientFunc(hostToClient map[string]client.Client) func(clientID string) (client.Client, error) {
-	return func(clientID string) (client.Client, error) {
-		if c, ok := hostToClient[clientID]; ok {
-			return c, nil
-		}
-		return &mockClient{}, nil
-	}
-}
-
-func newMockNewClientFuncWithFallback(hostToClient map[string]client.Client) func(clientID string) (client.Client, error) {
-	return func(clientID string) (client.Client, error) {
+func newMockNewClientFunc(hostToClient map[string]Client) func(clientID string) (Client, error) {
+	return func(clientID string) (Client, error) {
 		if c, ok := hostToClient[clientID]; ok {
 			return c, nil
 		}
@@ -339,8 +328,8 @@ func (m mockTransactionStateChecker) Check(_ string) map[string]transaction.Stat
 	return m.stateByClientID
 }
 
-func allNotStartedLoader() state.Loader[string] {
-	return state.NewLoader[string](mockTransactionStateChecker{
+func allNotStartedChecker() mockTransactionStateChecker {
+	return mockTransactionStateChecker{
 		stateByClientID: map[string]transaction.State{},
-	})
+	}
 }

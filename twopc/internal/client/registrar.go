@@ -53,5 +53,3 @@ func (s *registrarStore[ID]) load(id ID) (Client, bool) {
 	}
 	return value.(Client), true
 }
-
-type ID string

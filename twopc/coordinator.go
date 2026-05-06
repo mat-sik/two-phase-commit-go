@@ -18,25 +18,15 @@ type Coordinator[ID comparable] struct {
 }
 
 func NewCoordinator[ID comparable](
-	stateLoader state.Loader[ID],
+	transactionStateChecker TransactionStateChecker[ID],
 	statePersister StatePersister[ID],
-	newClientFunc func(clientID ID) (client.Client, error),
+	newClientFunc func(clientID ID) (Client, error),
 ) *Coordinator[ID] {
 	return &Coordinator[ID]{
-		stateLoader:     stateLoader,
+		stateLoader:     state.NewLoader(transactionStateChecker),
 		statePersister:  statePersister,
-		clientRegistrar: client.NewRegistrar(newClientFunc),
+		clientRegistrar: client.NewRegistrar[ID](adaptForInternalNewClientFunc(newClientFunc)),
 	}
-}
-
-type StatePersister[ID comparable] interface {
-	PersistState(ctx context.Context, transactionID string, clientID ID, transactionState transaction.State) <-chan PersistResult
-}
-
-type PersistResult struct {
-	Commit   func() error
-	Rollback func() error
-	Err      error
 }
 
 func (oh Coordinator[ID]) Execute(ctx context.Context, distributedTransaction DistributedTransaction[ID]) error {
