@@ -4,29 +4,28 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/mat-sik/two-phase-commit-go/twopc/internal/client"
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
 )
 
 func Test_stateLoader_loadState(t *testing.T) {
 	type fields struct {
-		transactionStateChecker TransactionStateChecker
+		transactionStateChecker TransactionStateChecker[string]
 	}
 	type args struct {
 		transactionID string
-		clientIDS     []client.ID
+		clientIDS     []string
 	}
 	tests := []struct {
 		name   string
 		fields fields
 		args   args
-		want   State
+		want   State[string]
 	}{
 		{
 			name: "all prepare failed",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[client.ID]transaction.State{
+					stateByClientID: map[string]transaction.State{
 						"host-a": transaction.PrepareFailed,
 						"host-b": transaction.PrepareFailed,
 					},
@@ -34,10 +33,10 @@ func Test_stateLoader_loadState(t *testing.T) {
 			},
 			args: args{
 				transactionID: "tx-1",
-				clientIDS:     []client.ID{"host-a", "host-b"},
+				clientIDS:     []string{"host-a", "host-b"},
 			},
-			want: State{
-				stateSets: stateSets{
+			want: State[string]{
+				stateSets: stateSets[string]{
 					prepared:      emptyHosts(),
 					prepareFailed: hosts("host-a", "host-b"),
 					committed:     emptyHosts(),
@@ -49,7 +48,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "all prepared",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[client.ID]transaction.State{
+					stateByClientID: map[string]transaction.State{
 						"host-a": transaction.Prepared,
 						"host-b": transaction.Prepared,
 					},
@@ -57,10 +56,10 @@ func Test_stateLoader_loadState(t *testing.T) {
 			},
 			args: args{
 				transactionID: "tx-2",
-				clientIDS:     []client.ID{"host-a", "host-b"},
+				clientIDS:     []string{"host-a", "host-b"},
 			},
-			want: State{
-				stateSets: stateSets{
+			want: State[string]{
+				stateSets: stateSets[string]{
 					prepared:      hosts("host-a", "host-b"),
 					prepareFailed: emptyHosts(),
 					committed:     emptyHosts(),
@@ -72,7 +71,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "mixed states across hosts",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[client.ID]transaction.State{
+					stateByClientID: map[string]transaction.State{
 						"host-a": transaction.Prepared,
 						"host-b": transaction.Prepared,
 						"host-c": transaction.Committed,
@@ -81,10 +80,10 @@ func Test_stateLoader_loadState(t *testing.T) {
 			},
 			args: args{
 				transactionID: "tx-3",
-				clientIDS:     []client.ID{"host-a", "host-b", "host-c"},
+				clientIDS:     []string{"host-a", "host-b", "host-c"},
 			},
-			want: State{
-				stateSets: stateSets{
+			want: State[string]{
+				stateSets: stateSets[string]{
 					prepared:      hosts("host-a", "host-b"),
 					prepareFailed: emptyHosts(),
 					committed:     hosts("host-c"),
@@ -96,7 +95,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "all rolled back",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[client.ID]transaction.State{
+					stateByClientID: map[string]transaction.State{
 						"host-a": transaction.RolledBack,
 						"host-b": transaction.RolledBack,
 					},
@@ -104,10 +103,10 @@ func Test_stateLoader_loadState(t *testing.T) {
 			},
 			args: args{
 				transactionID: "tx-4",
-				clientIDS:     []client.ID{"host-a", "host-b"},
+				clientIDS:     []string{"host-a", "host-b"},
 			},
-			want: State{
-				stateSets: stateSets{
+			want: State[string]{
+				stateSets: stateSets[string]{
 					prepared:      emptyHosts(),
 					prepareFailed: emptyHosts(),
 					committed:     emptyHosts(),
@@ -119,15 +118,15 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "empty client ids",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[client.ID]transaction.State{},
+					stateByClientID: map[string]transaction.State{},
 				},
 			},
 			args: args{
 				transactionID: "tx-5",
 				clientIDS:     nil,
 			},
-			want: State{
-				stateSets: stateSets{
+			want: State[string]{
+				stateSets: stateSets[string]{
 					prepared:      emptyHosts(),
 					prepareFailed: emptyHosts(),
 					committed:     emptyHosts(),
@@ -139,18 +138,18 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "checker returns state for extra hosts not in client ids — only wanted client ids are mapped",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[client.ID]transaction.State{
+					stateByClientID: map[string]transaction.State{
 						"host-a": transaction.Prepared,
-						"host-z": transaction.Committed, // not client ids
+						"host-z": transaction.Committed, // not in client ids
 					},
 				},
 			},
 			args: args{
 				transactionID: "tx-6",
-				clientIDS:     []client.ID{"host-a"},
+				clientIDS:     []string{"host-a"},
 			},
-			want: State{
-				stateSets: stateSets{
+			want: State[string]{
+				stateSets: stateSets[string]{
 					prepared:      hosts("host-a"),
 					prepareFailed: emptyHosts(),
 					committed:     emptyHosts(),
@@ -161,7 +160,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sl := Loader{
+			sl := Loader[string]{
 				transactionStateChecker: tt.fields.transactionStateChecker,
 			}
 			if got := sl.LoadState(tt.args.transactionID, tt.args.clientIDS); !reflect.DeepEqual(got, tt.want) {
@@ -172,9 +171,9 @@ func Test_stateLoader_loadState(t *testing.T) {
 }
 
 type mockTransactionStateChecker struct {
-	stateByClientID map[client.ID]transaction.State
+	stateByClientID map[string]transaction.State
 }
 
-func (m mockTransactionStateChecker) Check(_ string) map[client.ID]transaction.State {
+func (m mockTransactionStateChecker) Check(_ string) map[string]transaction.State {
 	return m.stateByClientID
 }

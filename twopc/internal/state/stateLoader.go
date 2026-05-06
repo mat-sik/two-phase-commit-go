@@ -1,29 +1,28 @@
 package state
 
 import (
-	"github.com/mat-sik/two-phase-commit-go/twopc/internal/client"
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
 )
 
-type TransactionStateChecker interface {
-	Check(transactionID string) map[client.ID]transaction.State
+type TransactionStateChecker[ID comparable] interface {
+	Check(transactionID string) map[ID]transaction.State
 }
 
-type Loader struct {
-	transactionStateChecker TransactionStateChecker
+type Loader[ID comparable] struct {
+	transactionStateChecker TransactionStateChecker[ID]
 }
 
-func NewLoader(transactionStateChecker TransactionStateChecker) Loader {
-	return Loader{
+func NewLoader[ID comparable](transactionStateChecker TransactionStateChecker[ID]) Loader[ID] {
+	return Loader[ID]{
 		transactionStateChecker: transactionStateChecker,
 	}
 }
 
-func (sl Loader) LoadState(transactionID string, clientIDS []client.ID) State {
-	prepared := make(stateSet)
-	prepareFailed := make(stateSet)
-	committed := make(stateSet)
-	rolledBack := make(stateSet)
+func (sl Loader[ID]) LoadState(transactionID string, clientIDS []ID) State[ID] {
+	prepared := make(stateSet[ID])
+	prepareFailed := make(stateSet[ID])
+	committed := make(stateSet[ID])
+	rolledBack := make(stateSet[ID])
 
 	stateByClientID := sl.transactionStateChecker.Check(transactionID)
 	for _, clientID := range clientIDS {
@@ -41,8 +40,8 @@ func (sl Loader) LoadState(transactionID string, clientIDS []client.ID) State {
 		}
 	}
 
-	return State{
-		stateSets: stateSets{
+	return State[ID]{
+		stateSets: stateSets[ID]{
 			prepared:      prepared,
 			prepareFailed: prepareFailed,
 			committed:     committed,

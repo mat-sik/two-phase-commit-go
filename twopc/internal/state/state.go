@@ -5,27 +5,26 @@ import (
 	"fmt"
 	"maps"
 
-	"github.com/mat-sik/two-phase-commit-go/twopc/internal/client"
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
 )
 
-type State struct {
-	stateSets stateSets
+type State[ID comparable] struct {
+	stateSets stateSets[ID]
 }
 
-func (s State) NextState(successfulTransitions, failedTransitions []Transition) State {
+func (s State[ID]) NextState(successfulTransitions, failedTransitions []Transition[ID]) State[ID] {
 	if len(successfulTransitions) == 0 && len(failedTransitions) == 0 {
 		return s
 	}
 
 	sets := buildStateSets(s, successfulTransitions, failedTransitions)
 
-	return State{
+	return State[ID]{
 		stateSets: sets,
 	}
 }
 
-func buildStateSets(s State, successfulTransitions, failedTransitions []Transition) stateSets {
+func buildStateSets[ID comparable](s State[ID], successfulTransitions, failedTransitions []Transition[ID]) stateSets[ID] {
 	clonedStateSets := s.stateSets.clone()
 
 	for _, tr := range successfulTransitions {
@@ -39,9 +38,9 @@ func buildStateSets(s State, successfulTransitions, failedTransitions []Transiti
 	return clonedStateSets
 }
 
-func updateWithTransitions(
-	stateSets stateSets,
-	tr Transition,
+func updateWithTransitions[ID comparable](
+	stateSets stateSets[ID],
+	tr Transition[ID],
 	currentStateFunc func(targetState transaction.State) transaction.State,
 ) {
 	previousState := tr.sourceState
@@ -82,7 +81,7 @@ func transactionStateAfterTransition(targetState transaction.State, success bool
 	}
 }
 
-func (s State) NextTransitions(transitions []Transition) []Transition {
+func (s State[ID]) NextTransitions(transitions []Transition[ID]) []Transition[ID] {
 	transitions, err := s.tryNextTransitions(transitions)
 	if err != nil {
 		panic(err)
@@ -90,7 +89,7 @@ func (s State) NextTransitions(transitions []Transition) []Transition {
 	return transitions
 }
 
-func (s State) tryNextTransitions(transitions []Transition) ([]Transition, error) {
+func (s State[ID]) tryNextTransitions(transitions []Transition[ID]) ([]Transition[ID], error) {
 	if err := s.isInInvalidState(); err != nil {
 		return nil, err
 	}
@@ -114,7 +113,7 @@ func (s State) tryNextTransitions(transitions []Transition) ([]Transition, error
 	panic(errors.New("should not be possible"))
 }
 
-func (s State) isInInvalidState() error {
+func (s State[ID]) isInInvalidState() error {
 	if s.stateSets.anyCommited() && s.stateSets.anyRolledBack() {
 		return invalidStateErr(s.stateSets)
 	}
@@ -124,29 +123,29 @@ func (s State) isInInvalidState() error {
 	return nil
 }
 
-func invalidStateErr(sets stateSets) error {
+func invalidStateErr[ID comparable](sets stateSets[ID]) error {
 	return fmt.Errorf("invalid state, prepared count: %d, prepareFailedCount: %d, commited count: %d, rolled back count: %d",
 		len(sets.prepared), len(sets.prepareFailed), len(sets.committed), len(sets.rolledBack))
 }
 
-func (s State) nextPrepareTransitions(transitions []Transition) []Transition {
+func (s State[ID]) nextPrepareTransitions(transitions []Transition[ID]) []Transition[ID] {
 	return s.nextTransitions(transitions, s.stateSets.prepared, prepareTransition)
 }
 
-func (s State) nextCommitTransitions(transitions []Transition) []Transition {
+func (s State[ID]) nextCommitTransitions(transitions []Transition[ID]) []Transition[ID] {
 	return s.nextTransitions(transitions, s.stateSets.committed, commitTransition)
 }
 
-func (s State) nextRollbackTransitions(transitions []Transition) []Transition {
+func (s State[ID]) nextRollbackTransitions(transitions []Transition[ID]) []Transition[ID] {
 	return s.nextTransitions(transitions, s.stateSets.rolledBack, rollbackTransition)
 }
 
-func (s State) nextTransitions(
-	transitions []Transition,
-	ignoreSet stateSet,
-	newTransitionFunc func(clientID client.ID, transactionState transaction.State) Transition,
-) []Transition {
-	newTransitions := make([]Transition, 0, len(transitions)-s.stateSets.rolledBackAmount())
+func (s State[ID]) nextTransitions(
+	transitions []Transition[ID],
+	ignoreSet stateSet[ID],
+	newTransitionFunc func(clientID ID, transactionState transaction.State) Transition[ID],
+) []Transition[ID] {
+	newTransitions := make([]Transition[ID], 0, len(transitions)-s.stateSets.rolledBackAmount())
 	for _, tr := range transitions {
 		if !ignoreSet.has(tr.clientID) {
 			sourceState := s.stateSets.transactionState(tr.clientID)
@@ -156,33 +155,33 @@ func (s State) nextTransitions(
 	return newTransitions
 }
 
-func (s State) IsTerminalState(operationAmount int) bool {
+func (s State[ID]) IsTerminalState(operationAmount int) bool {
 	return s.stateSets.allFinished(operationAmount)
 }
 
-type stateSet map[client.ID]struct{}
+type stateSet[ID comparable] map[ID]struct{}
 
-func (s stateSet) add(clientID client.ID) {
+func (s stateSet[ID]) add(clientID ID) {
 	s[clientID] = struct{}{}
 }
 
-func (s stateSet) remove(clientID client.ID) {
+func (s stateSet[ID]) remove(clientID ID) {
 	delete(s, clientID)
 }
 
-func (s stateSet) has(clientID client.ID) bool {
+func (s stateSet[ID]) has(clientID ID) bool {
 	_, ok := s[clientID]
 	return ok
 }
 
-type stateSets struct {
-	prepared      stateSet
-	prepareFailed stateSet
-	committed     stateSet
-	rolledBack    stateSet
+type stateSets[ID comparable] struct {
+	prepared      stateSet[ID]
+	prepareFailed stateSet[ID]
+	committed     stateSet[ID]
+	rolledBack    stateSet[ID]
 }
 
-func (ss *stateSets) deleteValueFromSet(transactionState transaction.State, clientID client.ID) {
+func (ss *stateSets[ID]) deleteValueFromSet(transactionState transaction.State, clientID ID) {
 	set, ok := stateSetByTransactionState(*ss, transactionState)
 	if !ok {
 		return
@@ -190,7 +189,7 @@ func (ss *stateSets) deleteValueFromSet(transactionState transaction.State, clie
 	set.remove(clientID)
 }
 
-func (ss *stateSets) addValueToSet(transactionState transaction.State, clientID client.ID) {
+func (ss *stateSets[ID]) addValueToSet(transactionState transaction.State, clientID ID) {
 	set, ok := stateSetByTransactionState(*ss, transactionState)
 	if !ok {
 		return
@@ -198,8 +197,8 @@ func (ss *stateSets) addValueToSet(transactionState transaction.State, clientID 
 	set.add(clientID)
 }
 
-func stateSetByTransactionState(sets stateSets, transactionState transaction.State) (stateSet, bool) {
-	var set stateSet
+func stateSetByTransactionState[ID comparable](sets stateSets[ID], transactionState transaction.State) (stateSet[ID], bool) {
+	var set stateSet[ID]
 	switch transactionState {
 	case transaction.NotStarted:
 		return nil, false
@@ -215,7 +214,7 @@ func stateSetByTransactionState(sets stateSets, transactionState transaction.Sta
 	return set, true
 }
 
-func (ss *stateSets) transactionState(clientID client.ID) transaction.State {
+func (ss *stateSets[ID]) transactionState(clientID ID) transaction.State {
 	if ss.prepared.has(clientID) {
 		return transaction.Prepared
 	}
@@ -231,13 +230,13 @@ func (ss *stateSets) transactionState(clientID client.ID) transaction.State {
 	return transaction.NotStarted
 }
 
-func (ss *stateSets) clone() stateSets {
+func (ss *stateSets[ID]) clone() stateSets[ID] {
 	prepared := maps.Clone(ss.prepared)
 	prepareFailed := maps.Clone(ss.prepareFailed)
 	committed := maps.Clone(ss.committed)
 	rolledBack := maps.Clone(ss.rolledBack)
 
-	return stateSets{
+	return stateSets[ID]{
 		prepared:      prepared,
 		prepareFailed: prepareFailed,
 		committed:     committed,
@@ -245,74 +244,74 @@ func (ss *stateSets) clone() stateSets {
 	}
 }
 
-func (ss *stateSets) allFinished(transactionsCount int) bool {
+func (ss *stateSets[ID]) allFinished(transactionsCount int) bool {
 	return len(ss.committed) == transactionsCount || len(ss.rolledBack) == transactionsCount
 }
 
-func (ss *stateSets) allPrepared(transactionsCount int) bool {
+func (ss *stateSets[ID]) allPrepared(transactionsCount int) bool {
 	return len(ss.prepared) == transactionsCount
 }
 
-func (ss *stateSets) anyPreparedFailed() bool {
+func (ss *stateSets[ID]) anyPreparedFailed() bool {
 	return len(ss.prepareFailed) > 0
 }
 
-func (ss *stateSets) anyCommited() bool {
+func (ss *stateSets[ID]) anyCommited() bool {
 	return len(ss.committed) > 0
 }
 
-func (ss *stateSets) anyRolledBack() bool {
+func (ss *stateSets[ID]) anyRolledBack() bool {
 	return len(ss.rolledBack) > 0
 }
 
-func (ss *stateSets) allCommitted(transactionCount int) bool {
+func (ss *stateSets[ID]) allCommitted(transactionCount int) bool {
 	return len(ss.committed) == transactionCount
 }
 
-func (ss *stateSets) preparedAmount() int {
+func (ss *stateSets[ID]) preparedAmount() int {
 	return len(ss.prepared)
 }
 
-func (ss *stateSets) committedAmount() int {
+func (ss *stateSets[ID]) committedAmount() int {
 	return len(ss.prepared)
 }
 
-func (ss *stateSets) rolledBackAmount() int {
+func (ss *stateSets[ID]) rolledBackAmount() int {
 	return len(ss.prepared)
 }
 
-type Transition struct {
-	clientID    client.ID
+type Transition[ID comparable] struct {
+	clientID    ID
 	sourceState transaction.State
 	targetState transaction.State
 }
 
-func (t Transition) GetClientID() client.ID {
+func (t Transition[ID]) GetClientID() ID {
 	return t.clientID
 }
 
-func (t Transition) GetSourceState() transaction.State {
+func (t Transition[ID]) GetSourceState() transaction.State {
 	return t.sourceState
 }
 
-func (t Transition) GetTargetState() transaction.State {
+func (t Transition[ID]) GetTargetState() transaction.State {
 	return t.targetState
 }
 
-func prepareTransition(clientID client.ID, sourceState transaction.State) Transition {
+func prepareTransition[ID comparable](clientID ID, sourceState transaction.State) Transition[ID] {
 	return NewTransition(clientID, sourceState, transaction.Prepared)
 }
 
-func commitTransition(clientID client.ID, sourceState transaction.State) Transition {
+func commitTransition[ID comparable](clientID ID, sourceState transaction.State) Transition[ID] {
 	return NewTransition(clientID, sourceState, transaction.Committed)
 }
 
-func rollbackTransition(clientID client.ID, sourceState transaction.State) Transition {
+func rollbackTransition[ID comparable](clientID ID, sourceState transaction.State) Transition[ID] {
 	return NewTransition(clientID, sourceState, transaction.RolledBack)
 }
 
-func NewTransition(clientID client.ID, sourceState transaction.State, targetState transaction.State) Transition {
-	return Transition{
+func NewTransition[ID comparable](clientID ID, sourceState transaction.State, targetState transaction.State) Transition[ID] {
+	return Transition[ID]{
 		clientID:    clientID,
 		sourceState: sourceState,
 		targetState: targetState,
