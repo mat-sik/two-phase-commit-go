@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/client"
-	"github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/coordinator"
-	pb "github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/generated/client/v1"
+	"github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/client"
+	"github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/coordinator"
+	pb "github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/generated/client/v1"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 	"google.golang.org/grpc"
 )

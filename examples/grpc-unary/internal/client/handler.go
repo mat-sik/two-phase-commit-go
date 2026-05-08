@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	pb "github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/generated/client/v1"
+	pb "github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/generated/client/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

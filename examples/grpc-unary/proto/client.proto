@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package client.v1;
 
-option go_package = "github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/generated/client/v1";
+option go_package = "github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/generated/client/v1";
 
 service ClientService {
   rpc PrepareTransaction (PrepareTransactionRequest) returns (PrepareTransactionResponse);

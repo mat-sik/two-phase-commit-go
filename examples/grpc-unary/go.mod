@@ -1,4 +1,4 @@
-module github.com/mat-sik/two-phase-commit-go/grpc-unary
+module github.com/mat-sik/two-phase-commit-go/examples/grpc-unary
 
 go 1.26.2
 
