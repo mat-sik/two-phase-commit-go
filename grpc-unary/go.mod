@@ -3,7 +3,7 @@ module github.com/mat-sik/two-phase-commit-go/grpc-unary
 go 1.26.2
 
 require (
-	github.com/mat-sik/two-phase-commit-go/twopc v0.0.0-20260508162153-61e0364059bf
+	github.com/mat-sik/two-phase-commit-go/twopc v1.0.0
 	google.golang.org/grpc v1.81.0
 	google.golang.org/protobuf v1.36.11
 )
