@@ -53,8 +53,8 @@ func Test_integration(t *testing.T) {
 		}()
 
 		coord := twopc.NewCoordinator(
-			mockTransactionStateChecker{},
-			mockStatePersister{},
+			coordinator.MockTransactionStateChecker{},
+			coordinator.MockStatePersister{},
 			coordinator.NewGRPCClient,
 		)
 
@@ -107,29 +107,4 @@ func newServer(handler *client.Handler) *grpc.Server {
 	server := grpc.NewServer()
 	pb.RegisterClientServiceServer(server, handler)
 	return server
-}
-
-type mockStatePersister struct {
-	err error
-}
-
-func (m mockStatePersister) PersistState(_ context.Context, _ string, _ string, _ twopc.TransactionState) <-chan twopc.PersistResult {
-	ch := make(chan twopc.PersistResult, 1)
-	if m.err != nil {
-		ch <- twopc.PersistResult{Err: m.err}
-	} else {
-		ch <- twopc.PersistResult{
-			Commit:   func() error { return nil },
-			Rollback: func() error { return nil },
-		}
-	}
-	return ch
-}
-
-type mockTransactionStateChecker struct {
-	stateByClientID map[string]twopc.TransactionState
-}
-
-func (m mockTransactionStateChecker) Check(_ string) map[string]twopc.TransactionState {
-	return m.stateByClientID
 }
