@@ -9,8 +9,9 @@ import (
 	"time"
 
 	"github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/client"
+	"github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/coordinator"
 	pb "github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/generated/client/v1"
-	"github.com/mat-sik/two-phase-commit-go/grpc-unary/internal/twopc"
+	"github.com/mat-sik/two-phase-commit-go/twopc"
 	"google.golang.org/grpc"
 )
 
@@ -51,25 +52,25 @@ func Test_integration(t *testing.T) {
 			close(serverErrsChan)
 		}()
 
-		coordinator := twopc.NewCoordinator(
-			twopc.NewStateLoader(mockTransactionStateChecker{}),
+		coord := twopc.NewCoordinator(
+			mockTransactionStateChecker{},
 			mockStatePersister{},
-			twopc.GrpcNewClient,
+			coordinator.NewGRPCClient,
 		)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		req := twopc.DistributedTransaction{
+		req := twopc.DistributedTransaction[string]{
 			TransactionID: "tx-1",
-			Transactions: []client.ID{
+			Transactions: []twopc.Transaction[string]{
 				twopc.NewTransaction(fmt.Sprintf("localhost:%d", firstClientPort), "one"),
 				twopc.NewTransaction(fmt.Sprintf("localhost:%d", secondClientPort), "two"),
 				twopc.NewTransaction(fmt.Sprintf("localhost:%d", thirdClientPort), "three"),
 			},
 		}
 
-		if err = coordinator.Execute(ctx, req); err != nil {
+		if err = coord.Execute(ctx, req); err != nil {
 			t.Fatal(err)
 		}
 
@@ -112,7 +113,7 @@ type mockStatePersister struct {
 	err error
 }
 
-func (m mockStatePersister) PersistState(_ context.Context, _ string, _ twopc.ClientID, _ client.IDState) <-chan twopc.PersistResult {
+func (m mockStatePersister) PersistState(_ context.Context, _ string, _ string, _ twopc.TransactionState) <-chan twopc.PersistResult {
 	ch := make(chan twopc.PersistResult, 1)
 	if m.err != nil {
 		ch <- twopc.PersistResult{Err: m.err}
@@ -126,9 +127,9 @@ func (m mockStatePersister) PersistState(_ context.Context, _ string, _ twopc.Cl
 }
 
 type mockTransactionStateChecker struct {
-	stateByClientID map[twopc.ClientID]client.IDState
+	stateByClientID map[string]twopc.TransactionState
 }
 
-func (m mockTransactionStateChecker) Check(_ string) map[twopc.ClientID]client.IDState {
+func (m mockTransactionStateChecker) Check(_ string) map[string]twopc.TransactionState {
 	return m.stateByClientID
 }
