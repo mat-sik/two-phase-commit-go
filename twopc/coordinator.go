@@ -13,7 +13,7 @@ import (
 
 type Coordinator[ID comparable] struct {
 	stateLoader     state.Loader[ID]
-	statePersister  StatePersister[ID]
+	statePersister  statePersister[ID]
 	clientRegistrar client.Registrar[ID]
 }
 
@@ -23,8 +23,8 @@ func NewCoordinator[ID comparable](
 	newClientFunc func(clientID ID) (Client, error),
 ) *Coordinator[ID] {
 	return &Coordinator[ID]{
-		stateLoader:     state.NewLoader(transactionStateChecker),
-		statePersister:  statePersister,
+		stateLoader:     state.NewLoader(internalTransactionStateCheckerAdapter[ID]{transactionStateChecker: transactionStateChecker}),
+		statePersister:  internalStatePersisterAdapter[ID]{statePersister: statePersister},
 		clientRegistrar: client.NewRegistrar[ID](adaptForInternalNewClientFunc(newClientFunc)),
 	}
 }

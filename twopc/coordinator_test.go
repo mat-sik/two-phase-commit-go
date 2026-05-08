@@ -5,8 +5,6 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
 )
 
 func TestCoordinator_Execute(t *testing.T) {
@@ -97,8 +95,8 @@ func TestCoordinator_Execute(t *testing.T) {
 			name: "already fully committed initial state → no operations, no error",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[string]transaction.State{
-						"host-a": transaction.Committed,
+					stateByClientID: map[string]TransactionState{
+						"host-a": Committed,
 					},
 				},
 				statePersister: mockStatePersister[string]{},
@@ -121,8 +119,8 @@ func TestCoordinator_Execute(t *testing.T) {
 			name: "already fully rolled back initial state → no operations, no error",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[string]transaction.State{
-						"host-a": transaction.RolledBack,
+					stateByClientID: map[string]TransactionState{
+						"host-a": RolledBack,
 					},
 				},
 				statePersister: mockStatePersister[string]{},
@@ -145,9 +143,9 @@ func TestCoordinator_Execute(t *testing.T) {
 			name: "resume from prepared: skips prepare, goes straight to commit → no error",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[string]transaction.State{
-						"host-a": transaction.Prepared,
-						"host-b": transaction.Prepared,
+					stateByClientID: map[string]TransactionState{
+						"host-a": Prepared,
+						"host-b": Prepared,
 					},
 				},
 				statePersister: mockStatePersister[string]{},
@@ -280,7 +278,7 @@ type mockStatePersister[ID comparable] struct {
 	err error
 }
 
-func (m mockStatePersister[ID]) PersistState(_ context.Context, _ string, _ ID, _ transaction.State) <-chan PersistResult {
+func (m mockStatePersister[ID]) PersistState(_ context.Context, _ string, _ ID, _ TransactionState) <-chan PersistResult {
 	ch := make(chan PersistResult, 1)
 	if m.err != nil {
 		ch <- PersistResult{Err: m.err}
@@ -321,15 +319,15 @@ func newMockNewClientFunc(hostToClient map[string]Client) func(clientID string) 
 }
 
 type mockTransactionStateChecker struct {
-	stateByClientID map[string]transaction.State
+	stateByClientID map[string]TransactionState
 }
 
-func (m mockTransactionStateChecker) Check(_ string) map[string]transaction.State {
+func (m mockTransactionStateChecker) Check(_ string) map[string]TransactionState {
 	return m.stateByClientID
 }
 
 func allNotStartedChecker() mockTransactionStateChecker {
 	return mockTransactionStateChecker{
-		stateByClientID: map[string]transaction.State{},
+		stateByClientID: map[string]TransactionState{},
 	}
 }
