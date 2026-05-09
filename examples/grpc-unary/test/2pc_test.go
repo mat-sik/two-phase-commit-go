@@ -64,9 +64,18 @@ func Test_integration(t *testing.T) {
 		req := twopc.DistributedTransaction[string]{
 			TransactionID: "tx-1",
 			Transactions: []twopc.Transaction[string]{
-				twopc.NewTransaction(fmt.Sprintf("localhost:%d", firstClientPort), "one"),
-				twopc.NewTransaction(fmt.Sprintf("localhost:%d", secondClientPort), "two"),
-				twopc.NewTransaction(fmt.Sprintf("localhost:%d", thirdClientPort), "three"),
+				{
+					ClientID: fmt.Sprintf("localhost:%d", firstClientPort),
+					Payload:  "one",
+				},
+				{
+					ClientID: fmt.Sprintf("localhost:%d", secondClientPort),
+					Payload:  "two",
+				},
+				{
+					ClientID: fmt.Sprintf("localhost:%d", thirdClientPort),
+					Payload:  "three",
+				},
 			},
 		}
 
