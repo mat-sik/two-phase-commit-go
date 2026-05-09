@@ -7,12 +7,5 @@ type DistributedTransaction[ID comparable] struct {
 
 type Transaction[ID comparable] struct {
 	ClientID ID
-	Payload  string
-}
-
-func NewTransaction[ID comparable](clientID ID, payload string) Transaction[ID] {
-	return Transaction[ID]{
-		ClientID: clientID,
-		Payload:  payload,
-	}
+	Payload  PreparePayload
 }
