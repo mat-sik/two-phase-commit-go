@@ -18,39 +18,26 @@ import (
 func Test_integration(t *testing.T) {
 	t.Run("foo", func(t *testing.T) {
 		firstClientPort := 30050
-		firstListener, err := net.Listen("tcp", fmt.Sprintf(":%d", firstClientPort))
-		if err != nil {
-			t.Fatalf("failed to listen: %v", err)
-		}
 		secondClientPort := 30051
-		secondListener, err := net.Listen("tcp", fmt.Sprintf(":%d", secondClientPort))
-		if err != nil {
-			t.Fatalf("failed to listen: %v", err)
-		}
 		thirdClientPort := 30052
-		thirdListener, err := net.Listen("tcp", fmt.Sprintf(":%d", thirdClientPort))
+
+		srvBundle, err := runServers([]serverConfig{
+			{
+				port:    firstClientPort,
+				handler: client.NewNoopHandler(),
+			},
+			{
+				port:    secondClientPort,
+				handler: client.NewNoopHandler(),
+			},
+			{
+				port:    thirdClientPort,
+				handler: client.NewNoopHandler(),
+			},
+		})
 		if err != nil {
 			t.Fatalf("failed to listen: %v", err)
 		}
-
-		wg := sync.WaitGroup{}
-		wg.Add(3)
-
-		serverErrsChan := make(chan error, 3)
-
-		firstServer := newServer(client.NewNoopHandler())
-		go runServer(&wg, serverErrsChan, firstListener, firstServer)
-
-		secondServer := newServer(client.NewNoopHandler())
-		go runServer(&wg, serverErrsChan, secondListener, secondServer)
-
-		thirdServer := newServer(client.NewNoopHandler())
-		go runServer(&wg, serverErrsChan, thirdListener, thirdServer)
-
-		go func() {
-			wg.Wait()
-			close(serverErrsChan)
-		}()
 
 		coord := twopc.NewCoordinator(
 			coordinator.MockTransactionStateChecker{},
@@ -83,18 +70,14 @@ func Test_integration(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		go func() {
-			firstServer.GracefulStop()
-		}()
-		go func() {
-			secondServer.GracefulStop()
-		}()
-		go func() {
-			thirdServer.GracefulStop()
-		}()
+		for _, server := range srvBundle.servers {
+			go func() {
+				server.GracefulStop()
+			}()
+		}
 
 		var errs []error
-		for err = range serverErrsChan {
+		for err = range srvBundle.serverErrsChan {
 			if err != nil {
 				errs = append(errs, err)
 			}
@@ -105,15 +88,55 @@ func Test_integration(t *testing.T) {
 	})
 }
 
-func runServer(wg *sync.WaitGroup, errCh chan<- error, lis net.Listener, srv *grpc.Server) {
-	defer wg.Done()
-	if err := srv.Serve(lis); err != nil {
-		errCh <- err
+func runServers(requests []serverConfig) (serverBundle, error) {
+	listeners := make([]net.Listener, 0, len(requests))
+	for _, req := range requests {
+		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", req.port))
+		if err != nil {
+			return serverBundle{}, err
+		}
+		listeners = append(listeners, lis)
 	}
+
+	wg := sync.WaitGroup{}
+	wg.Add(len(requests))
+
+	serverErrsChan := make(chan error, len(requests))
+
+	servers := make([]*grpc.Server, 0, len(requests))
+	for i, lis := range listeners {
+		server := newServer(requests[i].handler)
+		go runServer(&wg, serverErrsChan, lis, server)
+		servers = append(servers, server)
+	}
+
+	go func() {
+		wg.Wait()
+		close(serverErrsChan)
+	}()
+
+	return serverBundle{servers: servers, serverErrsChan: serverErrsChan}, nil
+}
+
+type serverConfig struct {
+	port    int
+	handler *client.Handler
+}
+
+type serverBundle struct {
+	servers        []*grpc.Server
+	serverErrsChan <-chan error
 }
 
 func newServer(handler *client.Handler) *grpc.Server {
 	server := grpc.NewServer()
 	pb.RegisterClientServiceServer(server, handler)
 	return server
+}
+
+func runServer(wg *sync.WaitGroup, errCh chan<- error, lis net.Listener, srv *grpc.Server) {
+	defer wg.Done()
+	if err := srv.Serve(lis); err != nil {
+		errCh <- err
+	}
 }
