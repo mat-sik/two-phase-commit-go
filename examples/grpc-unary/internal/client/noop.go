@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -79,7 +80,7 @@ func (n *noopTransactionHandler) prepareTransaction(_ context.Context, transacti
 
 func (n *noopTransactionHandler) _prepareTransaction(transactionID string, body string) {
 	slog.Info("preparing transaction", slog.String("transactionID", transactionID), slog.String("body", body))
-	time.Sleep(1 * time.Second)
+	randomSleep()
 	n.transactionStatusMap.add(transactionID, transactionStatusPrepared)
 	slog.Info("prepared transaction")
 }
@@ -104,7 +105,9 @@ func (n *noopTransactionHandler) commitTransaction(_ context.Context, transactio
 
 func (n *noopTransactionHandler) _commitTransaction(transactionID string) {
 	slog.Info("committing transaction", slog.String("transactionID", transactionID))
+	randomSleep()
 	n.transactionStatusMap.add(transactionID, transactionStatusCommited)
+	slog.Info("committed transaction")
 }
 
 func (n *noopTransactionHandler) rollbackTransaction(_ context.Context, transactionID string) (bool, error) {
@@ -127,7 +130,14 @@ func (n *noopTransactionHandler) rollbackTransaction(_ context.Context, transact
 
 func (n *noopTransactionHandler) _rollbackTransaction(transactionID string) {
 	slog.Info("rolling back transaction", slog.String("transactionID", transactionID))
+	randomSleep()
 	n.transactionStatusMap.add(transactionID, transactionStatusRolledBacked)
+	slog.Info("rollback transaction")
+}
+
+func randomSleep() {
+	ms := 500 + rand.Int63n(1001)
+	time.Sleep(time.Duration(ms) * time.Millisecond)
 }
 
 var errSimulatedFailure = fmt.Errorf("simulated failure")
