@@ -11,12 +11,29 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
 )
 
+// Coordinator orchestrates a two-phase commit protocol across multiple participants.
+// It manages the full lifecycle of a distributed transaction: preparing all participants,
+// then either committing or rolling back based on the outcomes of the prepare phase.
+//
+// ID is the type used to uniquely identify each participant client.
 type Coordinator[ID comparable] struct {
 	stateLoader     state.Loader[ID]
 	statePersister  statePersister[ID]
 	clientRegistrar client.Registrar[ID]
 }
 
+// NewCoordinator creates a new Coordinator with the provided dependencies.
+//
+// transactionStateChecker is used on startup to recover the current state of
+// an in-flight transaction (e.g. after a coordinator crash).
+//
+// statePersister is called after each phase transition to durably record the
+// new state before the result is considered final. It returns a channel that
+// delivers a PersistResult, which must be committed or rolled back depending
+// on whether the operation to the participant succeeded.
+//
+// newClientFunc is called once per participant ID to construct the gRPC (or
+// other transport) client used to send Prepare, Commit, and Rollback calls.
 func NewCoordinator[ID comparable](
 	transactionStateChecker TransactionStateChecker[ID],
 	statePersister StatePersister[ID],
@@ -29,6 +46,14 @@ func NewCoordinator[ID comparable](
 	}
 }
 
+// Execute runs the two-phase commit protocol for the given distributed transaction.
+//
+// It drives all participant transactions through the Prepare → Commit (or Rollback)
+// state machine concurrently. If the context is canceled between phases, the method
+// returns immediately with a joined error that includes the cancellation cause.
+//
+// Errors from individual participants are accumulated and returned as a single joined
+// error. A nil return means all participants reached a terminal committed state successfully.
 func (oh Coordinator[ID]) Execute(ctx context.Context, distributedTransaction DistributedTransaction[ID]) error {
 	return oh.execute(ctx, distributedTransaction.TransactionID, distributedTransaction.Transactions)
 }
