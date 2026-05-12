@@ -16,76 +16,83 @@ import (
 )
 
 func Test_integration(t *testing.T) {
-	t.Run("foo", func(t *testing.T) {
-		firstClientPort := 30050
-		secondClientPort := 30051
-		thirdClientPort := 30052
-
-		srvBundle, err := runServers([]serverConfig{
-			{
-				port:    firstClientPort,
-				handler: client.NewNoopHandler(),
-			},
-			{
-				port:    secondClientPort,
-				handler: client.NewNoopHandler(),
-			},
-			{
-				port:    thirdClientPort,
-				handler: client.NewNoopHandler(),
-			},
-		})
-		if err != nil {
-			t.Fatalf("failed to listen: %v", err)
-		}
-
-		coord := twopc.NewCoordinator(
-			coordinator.MockTransactionStateChecker{},
-			coordinator.MockStatePersister{},
-			coordinator.NewGRPCClient,
-		)
-
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		req := twopc.DistributedTransaction[string]{
-			TransactionID: "tx-1",
-			Transactions: []twopc.Transaction[string]{
+	tests := []struct {
+		name          string
+		serverConfigs []serverConfig
+		coord         *twopc.Coordinator[string]
+		request       twopc.DistributedTransaction[string]
+	}{
+		{
+			name: "Simple happy path",
+			serverConfigs: []serverConfig{
 				{
-					ClientID: fmt.Sprintf("localhost:%d", firstClientPort),
-					Payload:  "one",
+					port:    30050,
+					handler: client.NewNoopHandler(),
 				},
 				{
-					ClientID: fmt.Sprintf("localhost:%d", secondClientPort),
-					Payload:  "two",
+					port:    30051,
+					handler: client.NewNoopHandler(),
 				},
 				{
-					ClientID: fmt.Sprintf("localhost:%d", thirdClientPort),
-					Payload:  "three",
+					port:    30052,
+					handler: client.NewNoopHandler(),
 				},
 			},
-		}
-
-		if err = coord.Execute(ctx, req); err != nil {
-			t.Fatal(err)
-		}
-
-		for _, server := range srvBundle.servers {
-			go func() {
-				server.GracefulStop()
-			}()
-		}
-
-		var errs []error
-		for err = range srvBundle.serverErrsChan {
+			coord: twopc.NewCoordinator(
+				coordinator.MockTransactionStateChecker{},
+				coordinator.MockStatePersister{},
+				coordinator.NewGRPCClient,
+			),
+			request: twopc.DistributedTransaction[string]{
+				TransactionID: "tx-1",
+				Transactions: []twopc.Transaction[string]{
+					{
+						ClientID: fmt.Sprintf("localhost:%d", 30050),
+						Payload:  "one",
+					},
+					{
+						ClientID: fmt.Sprintf("localhost:%d", 30051),
+						Payload:  "two",
+					},
+					{
+						ClientID: fmt.Sprintf("localhost:%d", 30052),
+						Payload:  "three",
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			srvBundle, err := runServers(tt.serverConfigs)
 			if err != nil {
-				errs = append(errs, err)
+				t.Fatalf("failed to listen: %v", err)
 			}
-		}
-		if len(errs) != 0 {
-			t.Errorf("got %d errors: %v", len(errs), errs)
-		}
-	})
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			if err = tt.coord.Execute(ctx, tt.request); err != nil {
+				t.Fatal(err)
+			}
+
+			for _, server := range srvBundle.servers {
+				go func() {
+					server.GracefulStop()
+				}()
+			}
+
+			var errs []error
+			for err = range srvBundle.serverErrsChan {
+				if err != nil {
+					errs = append(errs, err)
+				}
+			}
+			if len(errs) != 0 {
+				t.Errorf("got %d errors: %v", len(errs), errs)
+			}
+		})
+	}
 }
 
 func runServers(requests []serverConfig) (serverBundle, error) {
