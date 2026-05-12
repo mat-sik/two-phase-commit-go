@@ -91,8 +91,13 @@ func (oh Coordinator[ID]) execute(ctx context.Context, transactionID string, tra
 			allErrs = append(allErrs, errors.Join(errs...))
 		}
 	}
+	allErrs = append(allErrs, ErrRollback)
 	return errors.Join(allErrs...)
 }
+
+// ErrRollback indicates that the distributed transaction failed,
+// but rollback was successfully issued on every participant.
+var ErrRollback = errors.New("distributed transaction rolled back")
 
 func clientIDS[ID comparable](transactions []Transaction[ID]) []ID {
 	ids := make([]ID, 0, len(transactions))
