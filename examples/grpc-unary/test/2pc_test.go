@@ -21,6 +21,7 @@ func Test_integration(t *testing.T) {
 		serverConfigs []serverConfig
 		coord         *twopc.Coordinator[string]
 		request       twopc.DistributedTransaction[string]
+		wantErr       bool
 	}{
 		{
 			name: "Simple happy path",
@@ -60,6 +61,47 @@ func Test_integration(t *testing.T) {
 					},
 				},
 			},
+			wantErr: false,
+		},
+		{
+			name: "One Failing client on prepare",
+			serverConfigs: []serverConfig{
+				{
+					port:    30050,
+					handler: client.NewFailingNoopHandler(3, 0, 0),
+				},
+				{
+					port:    30051,
+					handler: client.NewNoopHandler(),
+				},
+				{
+					port:    30052,
+					handler: client.NewNoopHandler(),
+				},
+			},
+			coord: twopc.NewCoordinator(
+				coordinator.MockTransactionStateChecker{},
+				coordinator.MockStatePersister{},
+				coordinator.NewGRPCClient,
+			),
+			request: twopc.DistributedTransaction[string]{
+				TransactionID: "tx-1",
+				Transactions: []twopc.Transaction[string]{
+					{
+						ClientID: fmt.Sprintf("localhost:%d", 30050),
+						Payload:  "one",
+					},
+					{
+						ClientID: fmt.Sprintf("localhost:%d", 30051),
+						Payload:  "two",
+					},
+					{
+						ClientID: fmt.Sprintf("localhost:%d", 30052),
+						Payload:  "three",
+					},
+				},
+			},
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
@@ -72,8 +114,14 @@ func Test_integration(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			if err = tt.coord.Execute(ctx, tt.request); err != nil {
-				t.Fatal(err)
+			err = tt.coord.Execute(ctx, tt.request)
+
+			if err != nil {
+				if !tt.wantErr {
+					t.Fatal(err)
+				}
+			} else if tt.wantErr {
+				t.Fatal("expected err")
 			}
 
 			for _, server := range srvBundle.servers {

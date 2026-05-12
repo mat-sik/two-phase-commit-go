@@ -115,10 +115,7 @@ func (n *noopTransactionHandler) rollbackTransaction(_ context.Context, transact
 		return false, errSimulatedFailure
 	}
 	status, ok := n.transactionStatusMap.load(transactionID)
-	if !ok {
-		return false, fmt.Errorf("transaction for '%s' not found, can't rollback unprepared transaction", transactionID)
-	}
-	if status == transactionStatusRolledBacked {
+	if !ok || status == transactionStatusRolledBacked {
 		return true, nil
 	}
 	if status != transactionStatusPrepared {
