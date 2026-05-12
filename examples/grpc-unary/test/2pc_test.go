@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -21,7 +22,7 @@ func Test_integration(t *testing.T) {
 		serverConfigs []serverConfig
 		coord         *twopc.Coordinator[string]
 		request       twopc.DistributedTransaction[string]
-		wantErr       bool
+		wantedErr     error
 	}{
 		{
 			name: "Simple happy path",
@@ -61,7 +62,7 @@ func Test_integration(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
+			wantedErr: nil,
 		},
 		{
 			name: "One Failing client on prepare",
@@ -101,7 +102,7 @@ func Test_integration(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantedErr: twopc.ErrRollback,
 		},
 	}
 	for _, tt := range tests {
@@ -117,11 +118,14 @@ func Test_integration(t *testing.T) {
 			err = tt.coord.Execute(ctx, tt.request)
 
 			if err != nil {
-				if !tt.wantErr {
+				if tt.wantedErr == nil {
 					t.Fatal(err)
 				}
-			} else if tt.wantErr {
-				t.Fatal("expected err")
+				if !errors.Is(err, tt.wantedErr) {
+					t.Fatalf("expected error %v, got %v", tt.wantedErr, err)
+				}
+			} else if tt.wantedErr != nil {
+				t.Fatalf("expected error %v, but got no err", tt.wantedErr)
 			}
 
 			for _, server := range srvBundle.servers {
