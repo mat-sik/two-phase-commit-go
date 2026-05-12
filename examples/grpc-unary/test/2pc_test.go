@@ -65,7 +65,7 @@ func Test_integration(t *testing.T) {
 			wantedErr: nil,
 		},
 		{
-			name: "One Failing client on prepare",
+			name: "One Failing client on prepare, but eventually goes through",
 			serverConfigs: []serverConfig{
 				{
 					port:    30050,
