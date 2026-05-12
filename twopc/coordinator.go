@@ -91,7 +91,9 @@ func (oh Coordinator[ID]) execute(ctx context.Context, transactionID string, tra
 			allErrs = append(allErrs, errors.Join(errs...))
 		}
 	}
-	allErrs = append(allErrs, ErrRollback)
+	if len(allErrs) > 0 {
+		allErrs = append(allErrs, ErrRollback)
+	}
 	return errors.Join(allErrs...)
 }
 
