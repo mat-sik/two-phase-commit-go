@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-type PreparePayload interface{}
+type PreparePayload any
 
 type Client interface {
 	PrepareTransaction(ctx context.Context, transactionID string, payload PreparePayload) error
