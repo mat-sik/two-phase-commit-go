@@ -95,7 +95,7 @@ func (s State[ID]) tryNextTransitions(transitions []Transition[ID]) ([]Transitio
 		return s.nextRollbackTransitions(transitions), nil
 	}
 
-	if !s.stateSets.allPrepared(len(transitions)) && !s.stateSets.anyCommited() {
+	if !s.stateSets.allPrepared(len(transitions)) && !s.stateSets.anyCommitted() {
 		return s.nextPrepareTransitions(transitions), nil
 	}
 
@@ -107,17 +107,17 @@ func (s State[ID]) tryNextTransitions(transitions []Transition[ID]) ([]Transitio
 }
 
 func (s State[ID]) isInInvalidState() error {
-	if s.stateSets.anyCommited() && s.stateSets.anyRolledBack() {
+	if s.stateSets.anyCommitted() && s.stateSets.anyRolledBack() {
 		return invalidStateErr(s.stateSets)
 	}
-	if s.stateSets.anyPreparedFailed() && s.stateSets.anyCommited() {
+	if s.stateSets.anyPreparedFailed() && s.stateSets.anyCommitted() {
 		return invalidStateErr(s.stateSets)
 	}
 	return nil
 }
 
 func invalidStateErr[ID comparable](sets stateSets[ID]) error {
-	return fmt.Errorf("invalid state, prepared count: %d, prepareFailedCount: %d, commited count: %d, rolled back count: %d",
+	return fmt.Errorf("invalid state, prepared count: %d, prepareFailedCount: %d, committed count: %d, rolled back count: %d",
 		len(sets.prepared), len(sets.prepareFailed), len(sets.committed), len(sets.rolledBack))
 }
 
@@ -263,7 +263,7 @@ func (ss *stateSets[ID]) anyPreparedFailed() bool {
 	return len(ss.prepareFailed) > 0
 }
 
-func (ss *stateSets[ID]) anyCommited() bool {
+func (ss *stateSets[ID]) anyCommitted() bool {
 	return len(ss.committed) > 0
 }
 
