@@ -180,10 +180,10 @@ func toOperations[ID comparable](
 	nextOps := make([]operation[ID], 0, len(nextTransitions))
 	for _, nextTr := range nextTransitions {
 		nextOp := operation[ID]{
-			clientID:    nextTr.GetClientID(),
-			payload:     payloadByClientID[nextTr.GetClientID()],
-			sourceState: nextTr.GetSourceState(),
-			targetState: nextTr.GetTargetState(),
+			clientID:    nextTr.ClientID(),
+			payload:     payloadByClientID[nextTr.ClientID()],
+			sourceState: nextTr.SourceState(),
+			targetState: nextTr.TargetState(),
 		}
 		nextOps = append(nextOps, nextOp)
 	}

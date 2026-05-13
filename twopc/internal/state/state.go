@@ -271,15 +271,15 @@ type Transition[ID comparable] struct {
 	targetState transaction.State
 }
 
-func (t Transition[ID]) GetClientID() ID {
+func (t Transition[ID]) ClientID() ID {
 	return t.clientID
 }
 
-func (t Transition[ID]) GetSourceState() transaction.State {
+func (t Transition[ID]) SourceState() transaction.State {
 	return t.sourceState
 }
 
-func (t Transition[ID]) GetTargetState() transaction.State {
+func (t Transition[ID]) TargetState() transaction.State {
 	return t.targetState
 }
 
