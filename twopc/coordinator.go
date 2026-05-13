@@ -277,7 +277,7 @@ func (oh Coordinator[ID]) _sendOperation(ctx context.Context, transactionID stri
 	case transaction.RolledBack:
 		return c.RollbackTransaction(ctx, transactionID)
 	default:
-		panic(errors.New("unknown operation type"))
+		panic("unknown operation type")
 	}
 }
 
