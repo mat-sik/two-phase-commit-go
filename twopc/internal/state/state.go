@@ -137,12 +137,12 @@ func (s State[ID]) nextCommitTransitions(transitions []Transition[ID]) []Transit
 
 func (s State[ID]) nextTransitions(
 	transitions []Transition[ID],
-	ignoreSet stateSet[ID],
+	skipSet stateSet[ID],
 	newTransitionFunc func(clientID ID) Transition[ID],
 ) []Transition[ID] {
 	newTransitions := make([]Transition[ID], 0, len(transitions)-s.stateSets.rolledBackAmount())
 	for _, tr := range transitions {
-		if !ignoreSet.has(tr.clientID) {
+		if !skipSet.has(tr.clientID) {
 			newTransitions = append(newTransitions, newTransitionFunc(tr.clientID))
 		}
 	}
