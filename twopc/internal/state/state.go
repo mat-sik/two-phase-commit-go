@@ -177,8 +177,12 @@ func (ss *stateSets[ID]) transactionState(clientID ID) transaction.State {
 	return transaction.NotStarted
 }
 
-func (s State[ID]) IsTerminalState(operationAmount int) bool {
+func (s State[ID]) IsTerminal(operationAmount int) bool {
 	return s.stateSets.allFinished(operationAmount)
+}
+
+func (s State[ID]) IsRolledBack(operationAmount int) bool {
+	return s.stateSets.allRolledBack(operationAmount)
 }
 
 type stateSet[ID comparable] map[ID]struct{}
@@ -251,7 +255,11 @@ func (ss *stateSets[ID]) clone() stateSets[ID] {
 }
 
 func (ss *stateSets[ID]) allFinished(transactionsCount int) bool {
-	return len(ss.committed) == transactionsCount || len(ss.rolledBack) == transactionsCount
+	return ss.allCommitted(transactionsCount) || ss.allRolledBack(transactionsCount)
+}
+
+func (ss *stateSets[ID]) allRolledBack(transactionsCount int) bool {
+	return len(ss.rolledBack) == transactionsCount
 }
 
 func (ss *stateSets[ID]) allPrepared(transactionsCount int) bool {

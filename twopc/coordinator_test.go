@@ -25,7 +25,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		wantErr bool
+		wantErr error
 	}{
 		// ── happy path ────────────────────────────────────────────────────────
 		{
@@ -46,7 +46,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
+			wantErr: nil,
 		},
 		{
 			name: "two hosts: prepare then commit both succeed → no error",
@@ -68,7 +68,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
+			wantErr: nil,
 		},
 		{
 			name: "two hosts, host-a needs to be initialized: prepare then commit both succeed → no error",
@@ -89,7 +89,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
+			wantErr: nil,
 		},
 		{
 			name: "already fully committed initial state → no operations, no error",
@@ -113,10 +113,10 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
+			wantErr: nil,
 		},
 		{
-			name: "already fully rolled back initial state → no operations, no error",
+			name: "already fully rolled back initial state → returns ErrRollback",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
 					stateByClientID: map[string]TransactionState{
@@ -137,7 +137,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
+			wantErr: ErrRollback,
 		},
 		{
 			name: "resume from prepared: skips prepare, goes straight to commit → no error",
@@ -164,12 +164,12 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
+			wantErr: nil,
 		},
 
 		// ── error paths ───────────────────────────────────────────────────────
 		{
-			name: "prepare fails on one host → rollback issued, returns error",
+			name: "prepare fails on one host → rollback issued, returns ErrRollback",
 			fields: fields{
 				transactionStateChecker: allNotStartedChecker(),
 				statePersister:          mockStatePersister[string]{},
@@ -188,10 +188,10 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: ErrRollback,
 		},
 		{
-			name: "prepare fails on all hosts → rollback issued, returns error",
+			name: "prepare fails on all hosts → rollback issued, returns ErrRollback",
 			fields: fields{
 				transactionStateChecker: allNotStartedChecker(),
 				statePersister:          mockStatePersister[string]{},
@@ -210,7 +210,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: ErrRollback,
 		},
 		{
 			name: "persist fails during prepare → returns error",
@@ -230,7 +230,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: errAny,
 		},
 		{
 			name: "client not registered for host → getClient error → returns error",
@@ -250,7 +250,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: errAny,
 		},
 	}
 
@@ -261,12 +261,18 @@ func TestCoordinator_Execute(t *testing.T) {
 				tt.fields.statePersister,
 				tt.fields.newClientFunc,
 			)
-			if err := coordinator.Execute(tt.args.ctx, tt.args.distributedTransaction); (err != nil) != tt.wantErr {
+			err := coordinator.Execute(tt.args.ctx, tt.args.distributedTransaction)
+			if errors.Is(tt.wantErr, errAny) && err != nil {
+				return
+			}
+			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("Execute() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
 }
+
+var errAny = errors.New("any error")
 
 func ctxWithTimeout(ctx context.Context, timeout time.Duration) context.Context {
 	ctx, cancel := context.WithTimeout(ctx, timeout)

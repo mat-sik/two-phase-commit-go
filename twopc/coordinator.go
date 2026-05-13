@@ -60,41 +60,69 @@ func (oh Coordinator[ID]) Execute(ctx context.Context, distributedTransaction Di
 
 func (oh Coordinator[ID]) execute(ctx context.Context, transactionID string, transactions []Transaction[ID]) error {
 	initialState := oh.stateLoader.LoadState(transactionID, clientIDS(transactions))
-	operations := toInitialOperations(transactions)
+	initialOperations := toInitialOperations(transactions)
 
+	return oh.runTransactionLoop(ctx, transactionID, initialState, initialOperations)
+}
+
+func (oh Coordinator[ID]) runTransactionLoop(
+	ctx context.Context,
+	transactionID string,
+	initialState state.State[ID],
+	initialOperations []operation[ID],
+) error {
+	ops := initialOperations
+	var successful, failed []operation[ID]
 	var allErrs []error
-	var successfulOperations []operation[ID]
-	var failedOperations []operation[ID]
-	for currState := initialState; !currState.IsTerminalState(len(transactions)); currState = nextState(currState, successfulOperations, failedOperations) {
+
+	currState := initialState
+	for !currState.IsTerminal(len(initialOperations)) {
 		if err := ctx.Err(); err != nil {
 			return errors.Join(append(allErrs, err)...)
 		}
 
-		operations = nextOperations(currState, operations)
+		ops = nextOperations(currState, ops)
 
-		resultCh := make(chan operationResult[ID], len(operations))
-		oh.runOperationsConcurrently(ctx, resultCh, transactionID, operations)
+		var err error
+		successful, failed, err = oh.executeRound(ctx, transactionID, ops, successful[:0], failed[:0])
 
-		successfulOperations = successfulOperations[:0]
-		failedOperations = failedOperations[:0]
-		var errs []error
-		for result := range resultCh {
-			if result.operationErr != nil {
-				failedOperations = append(failedOperations, result.operation)
-				errs = append(errs, result.operationErr)
-			} else {
-				successfulOperations = append(successfulOperations, result.operation)
-			}
+		if err != nil {
+			allErrs = append(allErrs, err)
 		}
 
-		if len(errs) > 0 {
-			allErrs = append(allErrs, errors.Join(errs...))
-		}
+		currState = nextState(currState, successful, failed)
 	}
-	if len(allErrs) > 0 {
+
+	if currState.IsRolledBack(len(initialOperations)) {
 		allErrs = append(allErrs, ErrRollback)
 	}
 	return errors.Join(allErrs...)
+}
+
+func (oh Coordinator[ID]) executeRound(
+	ctx context.Context,
+	transactionID string,
+	ops, successful, failed []operation[ID],
+) ([]operation[ID], []operation[ID], error) {
+	resultCh := make(chan operationResult[ID], len(ops))
+	oh.runOperationsConcurrently(ctx, resultCh, transactionID, ops)
+
+	var errs []error
+	for result := range resultCh {
+		if result.operationErr != nil {
+			failed = append(failed, result.operation)
+			errs = append(errs, result.operationErr)
+		} else {
+			successful = append(successful, result.operation)
+		}
+	}
+
+	var err error
+	if len(errs) > 0 {
+		err = errors.Join(errs...)
+	}
+
+	return successful, failed, err
 }
 
 // ErrRollback indicates that the distributed transaction failed,
