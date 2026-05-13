@@ -275,10 +275,6 @@ func (ss *stateSets[ID]) allCommitted(transactionCount int) bool {
 	return len(ss.committed) == transactionCount
 }
 
-func (ss *stateSets[ID]) preparedAmount() int {
-	return len(ss.prepared)
-}
-
 func (ss *stateSets[ID]) rolledBackAmount() int {
 	return len(ss.rolledBack)
 }
