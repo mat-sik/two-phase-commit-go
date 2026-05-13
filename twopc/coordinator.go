@@ -59,7 +59,7 @@ func (oh Coordinator[ID]) Execute(ctx context.Context, distributedTransaction Di
 }
 
 func (oh Coordinator[ID]) execute(ctx context.Context, transactionID string, transactions []Transaction[ID]) error {
-	initialState := oh.stateLoader.LoadState(transactionID, clientIDS(transactions))
+	initialState := oh.stateLoader.LoadState(transactionID, clientIDs(transactions))
 	initialOperations := toInitialOperations(transactions)
 
 	return oh.runTransactionLoop(ctx, transactionID, initialState, initialOperations)
@@ -129,7 +129,7 @@ func (oh Coordinator[ID]) executeRound(
 // but rollback was successfully issued on every participant.
 var ErrRollback = errors.New("distributed transaction rolled back")
 
-func clientIDS[ID comparable](transactions []Transaction[ID]) []ID {
+func clientIDs[ID comparable](transactions []Transaction[ID]) []ID {
 	ids := make([]ID, 0, len(transactions))
 	for _, tr := range transactions {
 		ids = append(ids, tr.ClientID)

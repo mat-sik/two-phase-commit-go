@@ -13,7 +13,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 	}
 	type args struct {
 		transactionID string
-		clientIDS     []string
+		clientIDs     []string
 	}
 	tests := []struct {
 		name   string
@@ -33,7 +33,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			},
 			args: args{
 				transactionID: "tx-1",
-				clientIDS:     []string{"host-a", "host-b"},
+				clientIDs:     []string{"host-a", "host-b"},
 			},
 			want: State[string]{
 				stateSets: stateSets[string]{
@@ -56,7 +56,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			},
 			args: args{
 				transactionID: "tx-2",
-				clientIDS:     []string{"host-a", "host-b"},
+				clientIDs:     []string{"host-a", "host-b"},
 			},
 			want: State[string]{
 				stateSets: stateSets[string]{
@@ -80,7 +80,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			},
 			args: args{
 				transactionID: "tx-3",
-				clientIDS:     []string{"host-a", "host-b", "host-c"},
+				clientIDs:     []string{"host-a", "host-b", "host-c"},
 			},
 			want: State[string]{
 				stateSets: stateSets[string]{
@@ -103,7 +103,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			},
 			args: args{
 				transactionID: "tx-4",
-				clientIDS:     []string{"host-a", "host-b"},
+				clientIDs:     []string{"host-a", "host-b"},
 			},
 			want: State[string]{
 				stateSets: stateSets[string]{
@@ -123,7 +123,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			},
 			args: args{
 				transactionID: "tx-5",
-				clientIDS:     nil,
+				clientIDs:     nil,
 			},
 			want: State[string]{
 				stateSets: stateSets[string]{
@@ -146,7 +146,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			},
 			args: args{
 				transactionID: "tx-6",
-				clientIDS:     []string{"host-a"},
+				clientIDs:     []string{"host-a"},
 			},
 			want: State[string]{
 				stateSets: stateSets[string]{
@@ -163,7 +163,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			sl := Loader[string]{
 				transactionStateChecker: tt.fields.transactionStateChecker,
 			}
-			if got := sl.LoadState(tt.args.transactionID, tt.args.clientIDS); !reflect.DeepEqual(got, tt.want) {
+			if got := sl.LoadState(tt.args.transactionID, tt.args.clientIDs); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("LoadState() = %v, want %v", got, tt.want)
 			}
 		})
