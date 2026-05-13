@@ -286,12 +286,8 @@ func (ss *stateSets[ID]) preparedAmount() int {
 	return len(ss.prepared)
 }
 
-func (ss *stateSets[ID]) committedAmount() int {
-	return len(ss.prepared)
-}
-
 func (ss *stateSets[ID]) rolledBackAmount() int {
-	return len(ss.prepared)
+	return len(ss.rolledBack)
 }
 
 type Transition[ID comparable] struct {
