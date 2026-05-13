@@ -1,7 +1,6 @@
 package state
 
 import (
-	"errors"
 	"fmt"
 	"maps"
 
@@ -77,7 +76,7 @@ func transactionStateAfterTransition(targetState transaction.State, success bool
 		}
 		return transaction.PrepareFailed
 	default:
-		panic(errors.New("unsupported target state"))
+		panic("unsupported target state")
 	}
 }
 
@@ -110,7 +109,7 @@ func (s State[ID]) tryNextTransitions(transitions []Transition[ID]) ([]Transitio
 		return s.nextCommitTransitions(transitions), nil
 	}
 
-	panic(errors.New("should not be possible"))
+	panic("should not be possible")
 }
 
 func (s State[ID]) isInInvalidState() error {
