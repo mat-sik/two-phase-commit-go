@@ -27,38 +27,24 @@ func buildStateSets[ID comparable](s State[ID], successful, failed []Transition[
 	clonedStateSets := s.stateSets.clone()
 
 	for _, tr := range successful {
-		updateWithTransitions(clonedStateSets, tr, stateAfterSuccess)
+		updateWithSuccessfulTransitions(clonedStateSets, tr)
 	}
 
 	for _, tr := range failed {
-		updateWithTransitions(clonedStateSets, tr, stateAfterFailure)
+		updateWithFailedTransitions(clonedStateSets, tr)
 	}
 
 	return clonedStateSets
 }
 
-func updateWithTransitions[ID comparable](
-	stateSets stateSets[ID],
-	tr Transition[ID],
-	currentStateFunc func(targetState transaction.State) transaction.State,
-) {
-	previousState := tr.sourceState
-	currentState := currentStateFunc(tr.targetState)
-	stateSets.deleteValueFromSet(previousState, tr.clientID)
-	stateSets.addValueToSet(currentState, tr.clientID)
+func updateWithSuccessfulTransitions[ID comparable](stateSets stateSets[ID], tr Transition[ID]) {
+	stateSets.deleteValueFromSet(tr.sourceState, tr.clientID)
+	stateSets.addValueToSet(tr.targetState, tr.clientID)
 }
 
-func stateAfterSuccess(targetState transaction.State) transaction.State {
-	switch targetState {
-	case transaction.Prepared:
-		return transaction.Prepared
-	case transaction.Committed:
-		return transaction.Committed
-	case transaction.RolledBack:
-		return transaction.RolledBack
-	default:
-		panic("unsupported target state")
-	}
+func updateWithFailedTransitions[ID comparable](stateSets stateSets[ID], tr Transition[ID]) {
+	stateSets.deleteValueFromSet(tr.sourceState, tr.clientID)
+	stateSets.addValueToSet(stateAfterFailure(tr.targetState), tr.clientID)
 }
 
 func stateAfterFailure(targetState transaction.State) transaction.State {
