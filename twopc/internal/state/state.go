@@ -89,7 +89,7 @@ func (s State[ID]) tryNextTransitions(transitions []Transition[ID]) ([]Transitio
 		return s.nextCommitTransitions(transitions), nil
 	}
 
-	panic("should not be possible")
+	panic("unreachable")
 }
 
 func (s State[ID]) isInInvalidState() error {
