@@ -11,27 +11,27 @@ type State[ID comparable] struct {
 	stateSets stateSets[ID]
 }
 
-func (s State[ID]) NextState(successfulTransitions, failedTransitions []Transition[ID]) State[ID] {
-	if len(successfulTransitions) == 0 && len(failedTransitions) == 0 {
+func (s State[ID]) NextState(successful, failed []Transition[ID]) State[ID] {
+	if len(successful) == 0 && len(failed) == 0 {
 		return s
 	}
 
-	sets := buildStateSets(s, successfulTransitions, failedTransitions)
+	sets := buildStateSets(s, successful, failed)
 
 	return State[ID]{
 		stateSets: sets,
 	}
 }
 
-func buildStateSets[ID comparable](s State[ID], successfulTransitions, failedTransitions []Transition[ID]) stateSets[ID] {
+func buildStateSets[ID comparable](s State[ID], successful, failed []Transition[ID]) stateSets[ID] {
 	clonedStateSets := s.stateSets.clone()
 
-	for _, tr := range successfulTransitions {
-		updateWithTransitions(clonedStateSets, tr, currentStateAfterSuccessfulTransition)
+	for _, tr := range successful {
+		updateWithTransitions(clonedStateSets, tr, stateAfterSuccess)
 	}
 
-	for _, tr := range failedTransitions {
-		updateWithTransitions(clonedStateSets, tr, currentStateAfterFailedTransition)
+	for _, tr := range failed {
+		updateWithTransitions(clonedStateSets, tr, stateAfterFailure)
 	}
 
 	return clonedStateSets
@@ -48,32 +48,26 @@ func updateWithTransitions[ID comparable](
 	stateSets.addValueToSet(currentState, tr.clientID)
 }
 
-func currentStateAfterSuccessfulTransition(targetState transaction.State) transaction.State {
-	success := true
-	return transactionStateAfterTransition(targetState, success)
-}
-
-func currentStateAfterFailedTransition(targetState transaction.State) transaction.State {
-	success := false
-	return transactionStateAfterTransition(targetState, success)
-}
-
-func transactionStateAfterTransition(targetState transaction.State, success bool) transaction.State {
+func stateAfterSuccess(targetState transaction.State) transaction.State {
 	switch targetState {
 	case transaction.Prepared:
-		if success {
-			return transaction.Prepared
-		}
+		return transaction.Prepared
+	case transaction.Committed:
+		return transaction.Committed
+	case transaction.RolledBack:
+		return transaction.RolledBack
+	default:
+		panic("unsupported target state")
+	}
+}
+
+func stateAfterFailure(targetState transaction.State) transaction.State {
+	switch targetState {
+	case transaction.Prepared:
 		return transaction.PrepareFailed
 	case transaction.Committed:
-		if success {
-			return transaction.Committed
-		}
 		return transaction.Prepared
 	case transaction.RolledBack:
-		if success {
-			return transaction.RolledBack
-		}
 		return transaction.PrepareFailed
 	default:
 		panic("unsupported target state")
