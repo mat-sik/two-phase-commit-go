@@ -63,7 +63,7 @@ func (sc internalTransactionStateCheckerAdapter[ID]) Check(transactionID string)
 	return mappedToInternal
 }
 
-// StatePersister durably records a participant's state transition before the
+// TransactionStatePersister durably records a participant's state transition before the
 // coordinator considers the transition final.
 //
 // Implementations should write the state change to a durable store (e.g. a
@@ -74,20 +74,20 @@ func (sc internalTransactionStateCheckerAdapter[ID]) Check(transactionID string)
 //
 // PersistState must not block; it should start the work asynchronously and
 // return the channel immediately.
-type StatePersister[ID comparable] interface {
+type TransactionStatePersister[ID comparable] interface {
 	PersistState(ctx context.Context, transactionID string, clientID ID, transactionState TransactionState) <-chan PersistResult
 }
 
-type statePersister[ID comparable] interface {
+type transactionStatePersister[ID comparable] interface {
 	PersistState(ctx context.Context, transactionID string, clientID ID, transactionState transaction.State) <-chan PersistResult
 }
 
 type internalStatePersisterAdapter[ID comparable] struct {
-	statePersister StatePersister[ID]
+	transactionStatePersister TransactionStatePersister[ID]
 }
 
 func (i internalStatePersisterAdapter[ID]) PersistState(ctx context.Context, transactionID string, clientID ID, transactionState transaction.State) <-chan PersistResult {
-	return i.statePersister.PersistState(ctx, transactionID, clientID, toExposed(transactionState))
+	return i.transactionStatePersister.PersistState(ctx, transactionID, clientID, toExposed(transactionState))
 }
 
 func toExposed(transactionState transaction.State) TransactionState {
@@ -107,7 +107,7 @@ func toExposed(transactionState transaction.State) TransactionState {
 	}
 }
 
-// PersistResult is returned by StatePersister.PersistState over a channel.
+// PersistResult is returned by TransactionStatePersister.PersistState over a channel.
 // The coordinator calls either Commit or Rollback exactly once, depending on
 // whether the corresponding network operation to the participant succeeded.
 //

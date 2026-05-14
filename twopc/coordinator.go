@@ -17,9 +17,9 @@ import (
 //
 // ID is the type used to uniquely identify each participant client.
 type Coordinator[ID comparable] struct {
-	stateLoader     state.Loader[ID]
-	statePersister  statePersister[ID]
-	clientRegistrar client.Registrar[ID]
+	stateLoader               state.Loader[ID]
+	transactionStatePersister transactionStatePersister[ID]
+	clientRegistrar           client.Registrar[ID]
 }
 
 // NewCoordinator creates a new Coordinator with the provided dependencies.
@@ -27,7 +27,7 @@ type Coordinator[ID comparable] struct {
 // transactionStateChecker is used on startup to recover the current state of
 // an in-flight transaction (e.g. after a coordinator crash).
 //
-// statePersister is called after each phase transition to durably record the
+// transactionStatePersister is called after each phase transition to durably record the
 // new state before the result is considered final. It returns a channel that
 // delivers a PersistResult, which must be committed or rolled back depending
 // on whether the operation to the participant succeeded.
@@ -36,13 +36,13 @@ type Coordinator[ID comparable] struct {
 // other transport) client used to send Prepare, Commit, and Rollback calls.
 func NewCoordinator[ID comparable](
 	transactionStateChecker TransactionStateChecker[ID],
-	statePersister StatePersister[ID],
+	transactionStatePersister TransactionStatePersister[ID],
 	newClientFunc func(clientID ID) (Client, error),
 ) *Coordinator[ID] {
 	return &Coordinator[ID]{
-		stateLoader:     state.NewLoader(internalTransactionStateCheckerAdapter[ID]{transactionStateChecker: transactionStateChecker}),
-		statePersister:  internalStatePersisterAdapter[ID]{statePersister: statePersister},
-		clientRegistrar: client.NewRegistrar[ID](adaptForInternalNewClientFunc(newClientFunc)),
+		stateLoader:               state.NewLoader(internalTransactionStateCheckerAdapter[ID]{transactionStateChecker: transactionStateChecker}),
+		transactionStatePersister: internalStatePersisterAdapter[ID]{transactionStatePersister: transactionStatePersister},
+		clientRegistrar:           client.NewRegistrar[ID](adaptForInternalNewClientFunc(newClientFunc)),
 	}
 }
 
@@ -226,7 +226,7 @@ func (oh Coordinator[ID]) runOperation(ctx context.Context, transactionID string
 
 	ctx, persistCancel := context.WithTimeout(ctx, persistStateTimeout)
 	defer persistCancel()
-	persistResultCh := oh.statePersister.PersistState(ctx, transactionID, operation.clientID, operation.targetState)
+	persistResultCh := oh.transactionStatePersister.PersistState(ctx, transactionID, operation.clientID, operation.targetState)
 
 	err := <-operationSentCh
 	if err != nil {

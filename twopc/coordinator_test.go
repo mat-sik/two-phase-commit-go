@@ -9,9 +9,9 @@ import (
 
 func TestCoordinator_Execute(t *testing.T) {
 	type fields struct {
-		transactionStateChecker TransactionStateChecker[string]
-		statePersister          StatePersister[string]
-		newClientFunc           func(clientID string) (Client, error)
+		transactionStateChecker   TransactionStateChecker[string]
+		transactionStatePersister TransactionStatePersister[string]
+		newClientFunc             func(clientID string) (Client, error)
 	}
 	type args struct {
 		ctx                    context.Context
@@ -31,8 +31,8 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "single host: prepare then commit both succeed → no error",
 			fields: fields{
-				transactionStateChecker: allNotStartedChecker(),
-				statePersister:          mockStatePersister[string]{},
+				transactionStateChecker:   allNotStartedChecker(),
+				transactionStatePersister: mockStatePersister[string]{},
 				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-a": &mockClient{},
 				}),
@@ -51,8 +51,8 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "two hosts: prepare then commit both succeed → no error",
 			fields: fields{
-				transactionStateChecker: allNotStartedChecker(),
-				statePersister:          mockStatePersister[string]{},
+				transactionStateChecker:   allNotStartedChecker(),
+				transactionStatePersister: mockStatePersister[string]{},
 				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-a": &mockClient{},
 					"host-b": &mockClient{},
@@ -73,8 +73,8 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "two hosts, host-a needs to be initialized: prepare then commit both succeed → no error",
 			fields: fields{
-				transactionStateChecker: allNotStartedChecker(),
-				statePersister:          mockStatePersister[string]{},
+				transactionStateChecker:   allNotStartedChecker(),
+				transactionStatePersister: mockStatePersister[string]{},
 				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-b": &mockClient{},
 				}),
@@ -99,7 +99,7 @@ func TestCoordinator_Execute(t *testing.T) {
 						"host-a": Committed,
 					},
 				},
-				statePersister: mockStatePersister[string]{},
+				transactionStatePersister: mockStatePersister[string]{},
 				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-a": &mockClient{},
 				}),
@@ -123,7 +123,7 @@ func TestCoordinator_Execute(t *testing.T) {
 						"host-a": RolledBack,
 					},
 				},
-				statePersister: mockStatePersister[string]{},
+				transactionStatePersister: mockStatePersister[string]{},
 				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-a": &mockClient{},
 				}),
@@ -148,7 +148,7 @@ func TestCoordinator_Execute(t *testing.T) {
 						"host-b": Prepared,
 					},
 				},
-				statePersister: mockStatePersister[string]{},
+				transactionStatePersister: mockStatePersister[string]{},
 				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-a": &mockClient{},
 					"host-b": &mockClient{},
@@ -171,8 +171,8 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "prepare fails on one host → rollback issued, returns ErrRollback",
 			fields: fields{
-				transactionStateChecker: allNotStartedChecker(),
-				statePersister:          mockStatePersister[string]{},
+				transactionStateChecker:   allNotStartedChecker(),
+				transactionStatePersister: mockStatePersister[string]{},
 				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-a": &mockClient{prepareErr: prepareErr},
 					"host-b": &mockClient{},
@@ -193,8 +193,8 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "prepare fails on all hosts → rollback issued, returns ErrRollback",
 			fields: fields{
-				transactionStateChecker: allNotStartedChecker(),
-				statePersister:          mockStatePersister[string]{},
+				transactionStateChecker:   allNotStartedChecker(),
+				transactionStatePersister: mockStatePersister[string]{},
 				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-a": &mockClient{prepareErr: prepareErr},
 					"host-b": &mockClient{prepareErr: prepareErr},
@@ -215,8 +215,8 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "persist fails during prepare → returns error",
 			fields: fields{
-				transactionStateChecker: allNotStartedChecker(),
-				statePersister:          mockStatePersister[string]{err: persistErr},
+				transactionStateChecker:   allNotStartedChecker(),
+				transactionStatePersister: mockStatePersister[string]{err: persistErr},
 				newClientFunc: newMockNewClientFunc(map[string]Client{
 					"host-a": &mockClient{},
 				}),
@@ -235,8 +235,8 @@ func TestCoordinator_Execute(t *testing.T) {
 		{
 			name: "client not registered for host → getClient error → returns error",
 			fields: fields{
-				transactionStateChecker: allNotStartedChecker(),
-				statePersister:          mockStatePersister[string]{},
+				transactionStateChecker:   allNotStartedChecker(),
+				transactionStatePersister: mockStatePersister[string]{},
 				newClientFunc: func(clientID string) (Client, error) {
 					return nil, errors.New("failed to create new client")
 				},
@@ -258,7 +258,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			coordinator := NewCoordinator(
 				tt.fields.transactionStateChecker,
-				tt.fields.statePersister,
+				tt.fields.transactionStatePersister,
 				tt.fields.newClientFunc,
 			)
 			err := coordinator.Execute(tt.args.ctx, tt.args.distributedTransaction)
