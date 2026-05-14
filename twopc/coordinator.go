@@ -59,7 +59,11 @@ func (oh Coordinator[ID]) Execute(ctx context.Context, distributedTransaction Di
 }
 
 func (oh Coordinator[ID]) execute(ctx context.Context, transactionID string, transactions []Transaction[ID]) error {
-	initialState := oh.stateLoader.LoadState(transactionID, clientIDs(transactions))
+	initialState, err := oh.stateLoader.LoadState(transactionID, clientIDs(transactions))
+	if err != nil {
+		return err
+	}
+
 	initialOperations := toInitialOperations(transactions)
 
 	return oh.runTransactionLoop(ctx, transactionID, initialState, initialOperations)

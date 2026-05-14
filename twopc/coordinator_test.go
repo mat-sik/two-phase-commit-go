@@ -252,6 +252,26 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 			wantErr: errAny,
 		},
+		{
+			name: "failed to load state -> abort",
+			fields: fields{
+				transactionStateChecker:   mockTransactionStateChecker{err: errAny},
+				transactionStatePersister: mockStatePersister[string]{},
+				newClientFunc: newMockNewClientFunc(map[string]Client{
+					"host-a": &mockClient{},
+				}),
+			},
+			args: args{
+				ctx: ctxWithTimeout(context.Background(), time.Second),
+				distributedTransaction: DistributedTransaction[string]{
+					TransactionID: "tx-9",
+					Transactions: []Transaction[string]{
+						{ClientID: "host-a", Payload: "p1"},
+					},
+				},
+			},
+			wantErr: errAny,
+		},
 	}
 
 	for _, tt := range tests {
@@ -326,10 +346,11 @@ func newMockNewClientFunc(hostToClient map[string]Client) func(clientID string) 
 
 type mockTransactionStateChecker struct {
 	stateByClientID map[string]TransactionState
+	err             error
 }
 
-func (m mockTransactionStateChecker) Check(_ string) map[string]TransactionState {
-	return m.stateByClientID
+func (m mockTransactionStateChecker) Check(_ string) (map[string]TransactionState, error) {
+	return m.stateByClientID, m.err
 }
 
 func allNotStartedChecker() mockTransactionStateChecker {

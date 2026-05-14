@@ -1,6 +1,7 @@
 package state
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -16,10 +17,11 @@ func Test_stateLoader_loadState(t *testing.T) {
 		clientIDs     []string
 	}
 	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   State[string]
+		name    string
+		fields  fields
+		args    args
+		want    State[string]
+		wantErr error
 	}{
 		{
 			name: "all prepare failed",
@@ -157,23 +159,42 @@ func Test_stateLoader_loadState(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "checker returns err on loading state",
+			fields: fields{
+				transactionStateChecker: mockTransactionStateChecker{
+					stateByClientID: map[string]transaction.State{},
+					err:             errAny,
+				},
+			},
+			args:    args{},
+			want:    State[string]{},
+			wantErr: errAny,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			sl := Loader[string]{
 				transactionStateChecker: tt.fields.transactionStateChecker,
 			}
-			if got := sl.LoadState(tt.args.transactionID, tt.args.clientIDs); !reflect.DeepEqual(got, tt.want) {
+			got, err := sl.LoadState(tt.args.transactionID, tt.args.clientIDs)
+			if errors.Is(tt.wantErr, errAny) && err == nil {
+				t.Errorf("LoadState() expected err, but got no err")
+			}
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("LoadState() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
+var errAny = errors.New("any error")
+
 type mockTransactionStateChecker struct {
 	stateByClientID map[string]transaction.State
+	err             error
 }
 
-func (m mockTransactionStateChecker) Check(_ string) map[string]transaction.State {
-	return m.stateByClientID
+func (m mockTransactionStateChecker) Check(_ string) (map[string]transaction.State, error) {
+	return m.stateByClientID, m.err
 }
