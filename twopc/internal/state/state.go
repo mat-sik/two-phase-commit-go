@@ -160,6 +160,10 @@ func (s State[ID]) IsTerminal(operationAmount int) bool {
 	return s.stateSets.allFinished(operationAmount)
 }
 
+func (s State[ID]) IsCommitted(operationAmount int) bool {
+	return s.stateSets.allCommitted(operationAmount)
+}
+
 func (s State[ID]) IsRolledBack(operationAmount int) bool {
 	return s.stateSets.allRolledBack(operationAmount)
 }

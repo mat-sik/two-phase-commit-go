@@ -19,31 +19,31 @@ type TransactionStateChecker[ID comparable] interface {
 type TransactionState int
 
 const (
-	// NotStarted means the participant has not yet been contacted.
-	NotStarted TransactionState = iota
-	// Prepared means the participant has successfully completed the prepare phase
+	// TransactionNotStarted means the participant has not yet been contacted.
+	TransactionNotStarted TransactionState = iota
+	// TransactionPrepared means the participant has successfully completed the prepare phase
 	// and is ready to commit.
-	Prepared
-	// PrepareFailed means the participant responded with a failure during the
+	TransactionPrepared
+	// TransactionPrepareFailed means the participant responded with a failure during the
 	// prepare phase, triggering a global rollback.
-	PrepareFailed
-	// Committed means the participant has durably committed the transaction.
-	Committed
-	// RolledBack means the participant has rolled back the transaction.
-	RolledBack
+	TransactionPrepareFailed
+	// TransactionCommitted means the participant has durably committed the transaction.
+	TransactionCommitted
+	// TransactionRolledBack means the participant has rolled back the transaction.
+	TransactionRolledBack
 )
 
 func (ts TransactionState) toInternal() transaction.State {
 	switch ts {
-	case NotStarted:
+	case TransactionNotStarted:
 		return transaction.NotStarted
-	case Prepared:
+	case TransactionPrepared:
 		return transaction.Prepared
-	case PrepareFailed:
+	case TransactionPrepareFailed:
 		return transaction.PrepareFailed
-	case Committed:
+	case TransactionCommitted:
 		return transaction.Committed
-	case RolledBack:
+	case TransactionRolledBack:
 		return transaction.RolledBack
 	default:
 		panic("unsupported TransactionState")
@@ -98,15 +98,15 @@ func (i internalStatePersisterAdapter[ID]) PersistState(ctx context.Context, tra
 func toExposed(transactionState transaction.State) TransactionState {
 	switch transactionState {
 	case transaction.NotStarted:
-		return NotStarted
+		return TransactionNotStarted
 	case transaction.Prepared:
-		return Prepared
+		return TransactionPrepared
 	case transaction.PrepareFailed:
-		return PrepareFailed
+		return TransactionPrepareFailed
 	case transaction.Committed:
-		return Committed
+		return TransactionCommitted
 	case transaction.RolledBack:
-		return RolledBack
+		return TransactionRolledBack
 	default:
 		panic("unsupported transaction.State")
 	}
