@@ -245,16 +245,20 @@ func (ss *stateSets[ID]) allFinished(transactionsCount int) bool {
 	return ss.allCommitted(transactionsCount) || ss.allRolledBack(transactionsCount)
 }
 
+func (ss *stateSets[ID]) allCommitted(transactionCount int) bool {
+	return len(ss.committed) == transactionCount
+}
+
 func (ss *stateSets[ID]) allRolledBack(transactionsCount int) bool {
 	return len(ss.rolledBack) == transactionsCount
 }
 
-func (ss *stateSets[ID]) allPrepared(transactionsCount int) bool {
-	return len(ss.prepared) == transactionsCount
-}
-
 func (ss *stateSets[ID]) anyPreparedFailed() bool {
 	return len(ss.prepareFailed) > 0
+}
+
+func (ss *stateSets[ID]) allPrepared(transactionsCount int) bool {
+	return len(ss.prepared) == transactionsCount
 }
 
 func (ss *stateSets[ID]) anyCommitted() bool {
@@ -263,10 +267,6 @@ func (ss *stateSets[ID]) anyCommitted() bool {
 
 func (ss *stateSets[ID]) anyRolledBack() bool {
 	return len(ss.rolledBack) > 0
-}
-
-func (ss *stateSets[ID]) allCommitted(transactionCount int) bool {
-	return len(ss.committed) == transactionCount
 }
 
 func (ss *stateSets[ID]) rolledBackAmount() int {
