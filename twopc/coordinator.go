@@ -68,17 +68,17 @@ func (oh Coordinator[ID]) Execute(ctx context.Context, distributedTransaction Di
 	return oh.runTransactionLoop(ctx, distributedTransaction.TransactionID, initialState, initialOperations)
 }
 
-func clientIDs[ID comparable](transactions []Transaction[ID]) []ID {
-	ids := make([]ID, 0, len(transactions))
-	for _, tr := range transactions {
+func clientIDs[ID comparable](trs []Transaction[ID]) []ID {
+	ids := make([]ID, 0, len(trs))
+	for _, tr := range trs {
 		ids = append(ids, tr.ClientID)
 	}
 	return ids
 }
 
-func toInitialOperations[ID comparable](transactions []Transaction[ID]) []operation[ID] {
-	ops := make([]operation[ID], 0, len(transactions))
-	for _, tx := range transactions {
+func toInitialOperations[ID comparable](txs []Transaction[ID]) []operation[ID] {
+	ops := make([]operation[ID], 0, len(txs))
+	for _, tx := range txs {
 		ops = append(ops, newInitialOperation(tx.ClientID, tx.Payload))
 	}
 	return ops
@@ -86,27 +86,28 @@ func toInitialOperations[ID comparable](transactions []Transaction[ID]) []operat
 
 func (oh Coordinator[ID]) runTransactionLoop(
 	ctx context.Context,
-	transactionID string,
-	initialState state.State[ID],
-	initialOperations []operation[ID],
+	txID string,
+	initState state.State[ID],
+	initOps []operation[ID],
 ) Result {
-	ops := initialOperations
+	totalOpsAmount := len(initOps)
+	ops := initOps
 	var successful, failed []operation[ID]
 	var allErrs []error
 
-	currState := initialState
-	for !currState.IsTerminal(len(initialOperations)) {
+	currState := initState
+	for !currState.IsTerminal(totalOpsAmount) {
 		if err := ctx.Err(); err != nil {
 			return Result{
 				err:     errors.Join(append(allErrs, err)...),
-				outcome: outcome(currState, len(initialOperations)),
+				outcome: outcome(currState, totalOpsAmount),
 			}
 		}
 
 		ops = nextOperations(currState, ops)
 
 		var err error
-		successful, failed, err = oh.executeRound(ctx, transactionID, ops, successful[:0], failed[:0])
+		successful, failed, err = oh.executeRound(ctx, txID, ops, successful[:0], failed[:0])
 
 		if err != nil {
 			allErrs = append(allErrs, err)
@@ -117,22 +118,22 @@ func (oh Coordinator[ID]) runTransactionLoop(
 
 	return Result{
 		err:     errors.Join(allErrs...),
-		outcome: outcome(currState, len(initialOperations)),
+		outcome: outcome(currState, totalOpsAmount),
 	}
 }
 
-func nextOperations[ID comparable](currentState state.State[ID], ops []operation[ID]) []operation[ID] {
-	payloadByClientID, transitions := toTransitionsWithPayloads(ops)
-	nextTrs := currentState.NextTransitions(transitions)
+func nextOperations[ID comparable](s state.State[ID], ops []operation[ID]) []operation[ID] {
+	payloadByClientID, trs := toTransitionsWithPayloads(ops)
+	nextTrs := s.NextTransitions(trs)
 	return toOperations(nextTrs, payloadByClientID)
 }
 
 func toOperations[ID comparable](
-	nextTransitions []state.Transition[ID],
+	nextTrs []state.Transition[ID],
 	payloadByClientID map[ID]client.PreparePayload,
 ) []operation[ID] {
-	nextOps := make([]operation[ID], 0, len(nextTransitions))
-	for _, nextTr := range nextTransitions {
+	nextOps := make([]operation[ID], 0, len(nextTrs))
+	for _, nextTr := range nextTrs {
 		nextOp := operation[ID]{
 			clientID:    nextTr.ClientID(),
 			payload:     payloadByClientID[nextTr.ClientID()],
@@ -146,16 +147,16 @@ func toOperations[ID comparable](
 
 func toTransitionsWithPayloads[ID comparable](ops []operation[ID]) (map[ID]client.PreparePayload, []state.Transition[ID]) {
 	payloadByClientID := make(map[ID]client.PreparePayload)
-	transitions := make([]state.Transition[ID], 0, len(ops))
+	trs := make([]state.Transition[ID], 0, len(ops))
 	for _, op := range ops {
-		transitions = append(transitions, op.toTransition())
+		trs = append(trs, op.toTransition())
 		payloadByClientID[op.clientID] = op.payload
 	}
-	return payloadByClientID, transitions
+	return payloadByClientID, trs
 }
 
-func nextState[ID comparable](state state.State[ID], successful, failed []operation[ID]) state.State[ID] {
-	return state.NextState(toTransitions(successful), toTransitions(failed))
+func nextState[ID comparable](s state.State[ID], successful, failed []operation[ID]) state.State[ID] {
+	return s.NextState(toTransitions(successful), toTransitions(failed))
 }
 
 func toTransitions[ID comparable](ops []operation[ID]) []state.Transition[ID] {
@@ -166,11 +167,11 @@ func toTransitions[ID comparable](ops []operation[ID]) []state.Transition[ID] {
 	return trs
 }
 
-func outcome[ID comparable](s state.State[ID], operationAmount int) Outcome {
+func outcome[ID comparable](s state.State[ID], opsAmount int) Outcome {
 	switch {
-	case s.IsRolledBack(operationAmount):
+	case s.IsRolledBack(opsAmount):
 		return OutcomeRolledBack
-	case s.IsCommitted(operationAmount):
+	case s.IsCommitted(opsAmount):
 		return OutcomeCommitted
 	default:
 		return OutcomeInconsistent
@@ -227,11 +228,11 @@ const (
 
 func (oh Coordinator[ID]) executeRound(
 	ctx context.Context,
-	transactionID string,
+	txID string,
 	ops, successful, failed []operation[ID],
 ) ([]operation[ID], []operation[ID], error) {
 	resultCh := make(chan operationResult[ID], len(ops))
-	oh.runOperationsConcurrently(ctx, resultCh, transactionID, ops)
+	oh.runOperationsConcurrently(ctx, resultCh, txID, ops)
 
 	var errs []error
 	for result := range resultCh {
@@ -254,7 +255,7 @@ func (oh Coordinator[ID]) executeRound(
 func (oh Coordinator[ID]) runOperationsConcurrently(
 	ctx context.Context,
 	resultCh chan<- operationResult[ID],
-	transactionID string,
+	txID string,
 	ops []operation[ID],
 ) {
 	var wg sync.WaitGroup
@@ -263,7 +264,7 @@ func (oh Coordinator[ID]) runOperationsConcurrently(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := oh.runOperation(ctx, transactionID, op)
+			err := oh.runOperation(ctx, txID, op)
 			resultCh <- operationResult[ID]{operationErr: err, operation: op}
 		}()
 	}
@@ -279,17 +280,17 @@ type operationResult[ID comparable] struct {
 	operation    operation[ID]
 }
 
-func (oh Coordinator[ID]) runOperation(ctx context.Context, transactionID string, operation operation[ID]) error {
+func (oh Coordinator[ID]) runOperation(ctx context.Context, txID string, op operation[ID]) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	operationSentCh := oh.sendOperation(ctx, transactionID, operation)
+	operationDoneCh := oh.sendOperation(ctx, txID, op)
 
 	ctx, persistCancel := context.WithTimeout(ctx, persistStateTimeout)
 	defer persistCancel()
-	persistResultCh := oh.transactionStatePersister.PersistState(ctx, transactionID, operation.clientID, operation.targetState)
+	persistResultCh := oh.transactionStatePersister.PersistState(ctx, txID, op.clientID, op.targetState)
 
-	err := <-operationSentCh
+	err := <-operationDoneCh
 	if err != nil {
 		cancel()
 	}
@@ -312,31 +313,31 @@ func (oh Coordinator[ID]) runOperation(ctx context.Context, transactionID string
 
 const persistStateTimeout = 5 * time.Second
 
-func (oh Coordinator[ID]) sendOperation(ctx context.Context, transactionID string, operation operation[ID]) <-chan error {
+func (oh Coordinator[ID]) sendOperation(ctx context.Context, txID string, op operation[ID]) <-chan error {
 	operationDoneCh := make(chan error)
 
 	go func() {
-		operationDoneCh <- oh._sendOperation(ctx, transactionID, operation)
+		operationDoneCh <- oh._sendOperation(ctx, txID, op)
 	}()
 
 	return operationDoneCh
 }
 
-func (oh Coordinator[ID]) _sendOperation(ctx context.Context, transactionID string, operation operation[ID]) error {
+func (oh Coordinator[ID]) _sendOperation(ctx context.Context, txID string, op operation[ID]) error {
 	ctx, cancel := context.WithTimeout(ctx, sendOperationTimeout)
 	defer cancel()
 
-	c, err := oh.clientRegistrar.GetClient(operation.clientID)
+	c, err := oh.clientRegistrar.GetClient(op.clientID)
 	if err != nil {
 		return err
 	}
-	switch operation.targetState {
+	switch op.targetState {
 	case transaction.Prepared:
-		return c.PrepareTransaction(ctx, transactionID, operation.payload)
+		return c.PrepareTransaction(ctx, txID, op.payload)
 	case transaction.Committed:
-		return c.CommitTransaction(ctx, transactionID)
+		return c.CommitTransaction(ctx, txID)
 	case transaction.RolledBack:
-		return c.RollbackTransaction(ctx, transactionID)
+		return c.RollbackTransaction(ctx, txID)
 	default:
 		panic("unknown operation type")
 	}

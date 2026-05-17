@@ -54,8 +54,8 @@ type internalTransactionStateCheckerAdapter[ID comparable] struct {
 	transactionStateChecker TransactionStateChecker[ID]
 }
 
-func (sc internalTransactionStateCheckerAdapter[ID]) Check(transactionID string) (map[ID]transaction.State, error) {
-	transactionStates, err := sc.transactionStateChecker.Check(transactionID)
+func (sc internalTransactionStateCheckerAdapter[ID]) Check(txID string) (map[ID]transaction.State, error) {
+	transactionStates, err := sc.transactionStateChecker.Check(txID)
 	if err != nil {
 		return nil, err
 	}
@@ -91,12 +91,12 @@ type internalStatePersisterAdapter[ID comparable] struct {
 	transactionStatePersister TransactionStatePersister[ID]
 }
 
-func (i internalStatePersisterAdapter[ID]) PersistState(ctx context.Context, transactionID string, clientID ID, transactionState transaction.State) <-chan PersistResult {
-	return i.transactionStatePersister.PersistState(ctx, transactionID, clientID, toExposed(transactionState))
+func (i internalStatePersisterAdapter[ID]) PersistState(ctx context.Context, txID string, clientID ID, txState transaction.State) <-chan PersistResult {
+	return i.transactionStatePersister.PersistState(ctx, txID, clientID, toExposed(txState))
 }
 
-func toExposed(transactionState transaction.State) TransactionState {
-	switch transactionState {
+func toExposed(txState transaction.State) TransactionState {
+	switch txState {
 	case transaction.NotStarted:
 		return TransactionNotStarted
 	case transaction.Prepared:
@@ -155,16 +155,16 @@ type internalClientAdapter struct {
 	client Client
 }
 
-func (c internalClientAdapter) PrepareTransaction(ctx context.Context, transactionID string, payload client.PreparePayload) error {
-	return c.client.PrepareTransaction(ctx, transactionID, payload)
+func (c internalClientAdapter) PrepareTransaction(ctx context.Context, txID string, payload client.PreparePayload) error {
+	return c.client.PrepareTransaction(ctx, txID, payload)
 }
 
-func (c internalClientAdapter) CommitTransaction(ctx context.Context, transactionID string) error {
-	return c.client.CommitTransaction(ctx, transactionID)
+func (c internalClientAdapter) CommitTransaction(ctx context.Context, txID string) error {
+	return c.client.CommitTransaction(ctx, txID)
 }
 
-func (c internalClientAdapter) RollbackTransaction(ctx context.Context, transactionID string) error {
-	return c.client.RollbackTransaction(ctx, transactionID)
+func (c internalClientAdapter) RollbackTransaction(ctx context.Context, txID string) error {
+	return c.client.RollbackTransaction(ctx, txID)
 }
 
 func adaptForInternalNewClientFunc[ID comparable](newClientFunc func(clientID ID) (Client, error)) func(clientID ID) (client.Client, error) {
