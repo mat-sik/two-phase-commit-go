@@ -16,9 +16,9 @@ type DistributedTransaction[ID comparable] struct {
 // Transaction describes a single participant's involvement in a distributed
 // transaction.
 type Transaction[ID comparable] struct {
-	// ClientID identifies the participant. It must match a client registered
+	// ParticipantID identifies the participant. It must match a client registered
 	// via the newClientFunc passed to NewCoordinator.
-	ClientID ID
+	ParticipantID ID
 	// Payload is the opaque data forwarded to the participant during the
 	// Prepare phase. The coordinator does not interpret its contents.
 	Payload PreparePayload

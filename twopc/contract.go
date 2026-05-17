@@ -3,7 +3,7 @@ package twopc
 import (
 	"context"
 
-	"github.com/mat-sik/two-phase-commit-go/twopc/internal/client"
+	"github.com/mat-sik/two-phase-commit-go/twopc/internal/participant"
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
 )
 
@@ -80,19 +80,19 @@ func (sc internalTransactionStateCheckerAdapter[ID]) Check(txID string) (map[ID]
 // PersistState must not block; it should start the work asynchronously and
 // return the channel immediately.
 type TransactionStatePersister[ID comparable] interface {
-	PersistState(ctx context.Context, transactionID string, clientID ID, transactionState TransactionState) <-chan PersistResult
+	PersistState(ctx context.Context, transactionID string, participantID ID, transactionState TransactionState) <-chan PersistResult
 }
 
 type transactionStatePersister[ID comparable] interface {
-	PersistState(ctx context.Context, transactionID string, clientID ID, transactionState transaction.State) <-chan PersistResult
+	PersistState(ctx context.Context, transactionID string, participantID ID, transactionState transaction.State) <-chan PersistResult
 }
 
 type internalStatePersisterAdapter[ID comparable] struct {
 	transactionStatePersister TransactionStatePersister[ID]
 }
 
-func (i internalStatePersisterAdapter[ID]) PersistState(ctx context.Context, txID string, clientID ID, txState transaction.State) <-chan PersistResult {
-	return i.transactionStatePersister.PersistState(ctx, txID, clientID, toExposed(txState))
+func (i internalStatePersisterAdapter[ID]) PersistState(ctx context.Context, txID string, participantID ID, txState transaction.State) <-chan PersistResult {
+	return i.transactionStatePersister.PersistState(ctx, txID, participantID, toExposed(txState))
 }
 
 func toExposed(txState transaction.State) TransactionState {
@@ -155,7 +155,7 @@ type internalClientAdapter struct {
 	client Client
 }
 
-func (c internalClientAdapter) PrepareTransaction(ctx context.Context, txID string, payload client.PreparePayload) error {
+func (c internalClientAdapter) PrepareTransaction(ctx context.Context, txID string, payload participant.PreparePayload) error {
 	return c.client.PrepareTransaction(ctx, txID, payload)
 }
 
@@ -167,12 +167,12 @@ func (c internalClientAdapter) RollbackTransaction(ctx context.Context, txID str
 	return c.client.RollbackTransaction(ctx, txID)
 }
 
-func adaptForInternalNewClientFunc[ID comparable](newClientFunc func(clientID ID) (Client, error)) func(clientID ID) (client.Client, error) {
-	return func(clientID ID) (client.Client, error) {
-		externalClient, err := newClientFunc(clientID)
+func adaptForInternal[ID comparable](newClientFunc func(participantID ID) (Client, error)) func(participantID ID) (participant.Client, error) {
+	return func(participantID ID) (participant.Client, error) {
+		client, err := newClientFunc(participantID)
 		if err != nil {
 			return internalClientAdapter{}, err
 		}
-		return internalClientAdapter{client: externalClient}, nil
+		return internalClientAdapter{client: client}, nil
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mat-sik/two-phase-commit-go/twopc/internal/client"
+	"github.com/mat-sik/two-phase-commit-go/twopc/internal/participant"
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/state"
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
 )
@@ -19,7 +19,7 @@ import (
 type Coordinator[ID comparable] struct {
 	stateLoader               state.Loader[ID]
 	transactionStatePersister transactionStatePersister[ID]
-	clientRegistrar           client.Registrar[ID]
+	participantRegistrar      participant.Registrar[ID]
 }
 
 // NewCoordinator creates a new Coordinator with the provided dependencies.
@@ -37,12 +37,12 @@ type Coordinator[ID comparable] struct {
 func NewCoordinator[ID comparable](
 	transactionStateChecker TransactionStateChecker[ID],
 	transactionStatePersister TransactionStatePersister[ID],
-	newClientFunc func(clientID ID) (Client, error),
+	newClientFunc func(participantID ID) (Client, error),
 ) *Coordinator[ID] {
 	return &Coordinator[ID]{
 		stateLoader:               state.NewLoader(internalTransactionStateCheckerAdapter[ID]{transactionStateChecker: transactionStateChecker}),
 		transactionStatePersister: internalStatePersisterAdapter[ID]{transactionStatePersister: transactionStatePersister},
-		clientRegistrar:           client.NewRegistrar[ID](adaptForInternalNewClientFunc(newClientFunc)),
+		participantRegistrar:      participant.NewRegistrar[ID](adaptForInternal(newClientFunc)),
 	}
 }
 
@@ -55,7 +55,7 @@ func NewCoordinator[ID comparable](
 // Errors from individual participants are accumulated and returned as a single joined
 // error. A nil return means all participants reached a terminal committed state successfully.
 func (oh Coordinator[ID]) Execute(ctx context.Context, distributedTransaction DistributedTransaction[ID]) Result {
-	initialState, err := oh.stateLoader.LoadState(distributedTransaction.TransactionID, clientIDs(distributedTransaction.Transactions))
+	initialState, err := oh.stateLoader.LoadState(distributedTransaction.TransactionID, participantIDs(distributedTransaction.Transactions))
 	if err != nil {
 		return Result{
 			err:     err,
@@ -68,10 +68,10 @@ func (oh Coordinator[ID]) Execute(ctx context.Context, distributedTransaction Di
 	return oh.runTransactionLoop(ctx, distributedTransaction.TransactionID, initialState, initialOperations)
 }
 
-func clientIDs[ID comparable](trs []Transaction[ID]) []ID {
+func participantIDs[ID comparable](trs []Transaction[ID]) []ID {
 	ids := make([]ID, 0, len(trs))
 	for _, tr := range trs {
-		ids = append(ids, tr.ClientID)
+		ids = append(ids, tr.ParticipantID)
 	}
 	return ids
 }
@@ -79,7 +79,7 @@ func clientIDs[ID comparable](trs []Transaction[ID]) []ID {
 func toInitialOperations[ID comparable](txs []Transaction[ID]) []operation[ID] {
 	ops := make([]operation[ID], 0, len(txs))
 	for _, tx := range txs {
-		ops = append(ops, newInitialOperation(tx.ClientID, tx.Payload))
+		ops = append(ops, newInitialOperation(tx.ParticipantID, tx.Payload))
 	}
 	return ops
 }
@@ -123,32 +123,32 @@ func (oh Coordinator[ID]) runTransactionLoop(
 }
 
 func nextOperations[ID comparable](s state.State[ID], ops []operation[ID]) []operation[ID] {
-	payloadByClientID, trs := toTransitionsWithPayloads(ops)
+	payloadByparticipantID, trs := toTransitionsWithPayloads(ops)
 	nextTrs := s.NextTransitions(trs)
-	return toOperations(nextTrs, payloadByClientID)
+	return toOperations(nextTrs, payloadByparticipantID)
 }
 
-func toTransitionsWithPayloads[ID comparable](ops []operation[ID]) (map[ID]client.PreparePayload, []state.Transition[ID]) {
-	payloadByClientID := make(map[ID]client.PreparePayload)
+func toTransitionsWithPayloads[ID comparable](ops []operation[ID]) (map[ID]participant.PreparePayload, []state.Transition[ID]) {
+	payloadByparticipantID := make(map[ID]participant.PreparePayload)
 	trs := make([]state.Transition[ID], 0, len(ops))
 	for _, op := range ops {
 		trs = append(trs, op.toTransition())
-		payloadByClientID[op.clientID] = op.payload
+		payloadByparticipantID[op.participantID] = op.payload
 	}
-	return payloadByClientID, trs
+	return payloadByparticipantID, trs
 }
 
 func toOperations[ID comparable](
 	nextTrs []state.Transition[ID],
-	payloadByClientID map[ID]client.PreparePayload,
+	payloadByParticipantID map[ID]participant.PreparePayload,
 ) []operation[ID] {
 	nextOps := make([]operation[ID], 0, len(nextTrs))
 	for _, nextTr := range nextTrs {
 		nextOp := operation[ID]{
-			clientID:    nextTr.ClientID(),
-			payload:     payloadByClientID[nextTr.ClientID()],
-			sourceState: nextTr.SourceState(),
-			targetState: nextTr.TargetState(),
+			participantID: nextTr.ParticipantID(),
+			payload:       payloadByParticipantID[nextTr.ParticipantID()],
+			sourceState:   nextTr.SourceState(),
+			targetState:   nextTr.TargetState(),
 		}
 		nextOps = append(nextOps, nextOp)
 	}
@@ -288,7 +288,7 @@ func (oh Coordinator[ID]) runOperation(ctx context.Context, txID string, op oper
 
 	ctx, persistCancel := context.WithTimeout(ctx, persistStateTimeout)
 	defer persistCancel()
-	persistResultCh := oh.transactionStatePersister.PersistState(ctx, txID, op.clientID, op.targetState)
+	persistResultCh := oh.transactionStatePersister.PersistState(ctx, txID, op.participantID, op.targetState)
 
 	err := <-operationDoneCh
 	if err != nil {
@@ -327,7 +327,7 @@ func (oh Coordinator[ID]) _sendOperation(ctx context.Context, txID string, op op
 	ctx, cancel := context.WithTimeout(ctx, sendOperationTimeout)
 	defer cancel()
 
-	c, err := oh.clientRegistrar.GetClient(op.clientID)
+	c, err := oh.participantRegistrar.GetClient(op.participantID)
 	if err != nil {
 		return err
 	}
@@ -346,29 +346,29 @@ func (oh Coordinator[ID]) _sendOperation(ctx context.Context, txID string, op op
 const sendOperationTimeout = 5 * time.Second
 
 type operation[ID comparable] struct {
-	clientID    ID
-	payload     client.PreparePayload
-	sourceState transaction.State
-	targetState transaction.State
+	participantID ID
+	payload       participant.PreparePayload
+	sourceState   transaction.State
+	targetState   transaction.State
 }
 
-func newInitialOperation[ID comparable](clientID ID, payload client.PreparePayload) operation[ID] {
+func newInitialOperation[ID comparable](participantID ID, payload participant.PreparePayload) operation[ID] {
 	return operation[ID]{
-		clientID:    clientID,
-		payload:     payload,
-		sourceState: transaction.NotStarted,
-		targetState: transaction.Prepared,
+		participantID: participantID,
+		payload:       payload,
+		sourceState:   transaction.NotStarted,
+		targetState:   transaction.Prepared,
 	}
 }
 
 func (o operation[ID]) toTransition() state.Transition[ID] {
 	switch {
 	case o.sourceState == transaction.NotStarted && o.targetState == transaction.Prepared:
-		return state.PrepareTransition(o.clientID)
+		return state.PrepareTransition(o.participantID)
 	case o.sourceState == transaction.Prepared && o.targetState == transaction.Committed:
-		return state.CommitTransition(o.clientID)
+		return state.CommitTransition(o.participantID)
 	case o.targetState == transaction.RolledBack:
-		return state.RollbackTransition(o.clientID, o.sourceState)
+		return state.RollbackTransition(o.participantID, o.sourceState)
 	default:
 		panic("unreachable")
 	}

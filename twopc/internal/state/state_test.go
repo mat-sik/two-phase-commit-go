@@ -669,7 +669,7 @@ func Test_state_roundTrip(t *testing.T) {
 
 			var successful, failed []Transition[string]
 			for _, tr := range transitions {
-				if _, ok := successSet[tr.clientID]; ok {
+				if _, ok := successSet[tr.participantID]; ok {
 					successful = append(successful, tr)
 				} else {
 					failed = append(failed, tr)

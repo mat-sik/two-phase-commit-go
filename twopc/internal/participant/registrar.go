@@ -1,4 +1,4 @@
-package client
+package participant
 
 import (
 	"context"
@@ -15,27 +15,27 @@ type Client interface {
 
 type Registrar[ID comparable] struct {
 	store     *registrarStore[ID]
-	newClient func(clientID ID) (Client, error)
+	newClient func(participantID ID) (Client, error)
 }
 
-func NewRegistrar[ID comparable](newClientFunc func(clientID ID) (Client, error)) Registrar[ID] {
+func NewRegistrar[ID comparable](newClientFunc func(participantID ID) (Client, error)) Registrar[ID] {
 	return Registrar[ID]{
 		store:     &registrarStore[ID]{},
 		newClient: newClientFunc,
 	}
 }
 
-func (cr *Registrar[ID]) GetClient(clientID ID) (Client, error) {
-	reusableClient, ok := cr.store.load(clientID)
+func (cr *Registrar[ID]) GetClient(participantID ID) (Client, error) {
+	client, ok := cr.store.load(participantID)
 	if !ok {
-		newClient, err := cr.newClient(clientID)
+		var err error
+		client, err = cr.newClient(participantID)
 		if err != nil {
 			return nil, err
 		}
-		cr.store.add(clientID, newClient)
-		reusableClient = newClient
+		cr.store.add(participantID, client)
 	}
-	return reusableClient, nil
+	return client, nil
 }
 
 type registrarStore[ID comparable] struct {

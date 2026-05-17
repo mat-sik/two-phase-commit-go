@@ -18,7 +18,7 @@ func NewLoader[ID comparable](transactionStateChecker TransactionStateChecker[ID
 	}
 }
 
-func (sl Loader[ID]) LoadState(transactionID string, clientIDs []ID) (State[ID], error) {
+func (sl Loader[ID]) LoadState(transactionID string, participantIDs []ID) (State[ID], error) {
 	sets := stateSets[ID]{
 		prepared:      make(stateSet[ID]),
 		prepareFailed: make(stateSet[ID]),
@@ -26,13 +26,13 @@ func (sl Loader[ID]) LoadState(transactionID string, clientIDs []ID) (State[ID],
 		rolledBack:    make(stateSet[ID]),
 	}
 
-	stateByClientID, err := sl.transactionStateChecker.Check(transactionID)
+	stateByParticipantID, err := sl.transactionStateChecker.Check(transactionID)
 	if err != nil {
 		return State[ID]{}, err
 	}
 
-	for _, clientID := range clientIDs {
-		sets.addValueToSet(stateByClientID[clientID], clientID)
+	for _, participantID := range participantIDs {
+		sets.addValueToSet(stateByParticipantID[participantID], participantID)
 	}
 	return State[ID]{stateSets: sets}, nil
 }

@@ -11,7 +11,7 @@ func TestCoordinator_Execute(t *testing.T) {
 	type fields struct {
 		transactionStateChecker   TransactionStateChecker[string]
 		transactionStatePersister TransactionStatePersister[string]
-		newClientFunc             func(clientID string) (Client, error)
+		newClientFunc             func(participantID string) (Client, error)
 	}
 	type args struct {
 		ctxFunc                func() context.Context
@@ -45,7 +45,7 @@ func TestCoordinator_Execute(t *testing.T) {
 				distributedTransaction: DistributedTransaction[string]{
 					TransactionID: "tx-1",
 					Transactions: []Transaction[string]{
-						{ClientID: "host-a", Payload: "p1"},
+						{ParticipantID: "host-a", Payload: "p1"},
 					},
 				},
 			},
@@ -67,8 +67,8 @@ func TestCoordinator_Execute(t *testing.T) {
 				distributedTransaction: DistributedTransaction[string]{
 					TransactionID: "tx-2",
 					Transactions: []Transaction[string]{
-						{ClientID: "host-a", Payload: "p1"},
-						{ClientID: "host-b", Payload: "p2"},
+						{ParticipantID: "host-a", Payload: "p1"},
+						{ParticipantID: "host-b", Payload: "p2"},
 					},
 				},
 			},
@@ -89,8 +89,8 @@ func TestCoordinator_Execute(t *testing.T) {
 				distributedTransaction: DistributedTransaction[string]{
 					TransactionID: "tx-2",
 					Transactions: []Transaction[string]{
-						{ClientID: "host-a", Payload: "p1"},
-						{ClientID: "host-b", Payload: "p2"},
+						{ParticipantID: "host-a", Payload: "p1"},
+						{ParticipantID: "host-b", Payload: "p2"},
 					},
 				},
 			},
@@ -101,7 +101,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			name: "already fully committed initial state → no operations, no error",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[string]TransactionState{
+					stateByParticipantID: map[string]TransactionState{
 						"host-a": TransactionCommitted,
 					},
 				},
@@ -115,7 +115,7 @@ func TestCoordinator_Execute(t *testing.T) {
 				distributedTransaction: DistributedTransaction[string]{
 					TransactionID: "tx-3",
 					Transactions: []Transaction[string]{
-						{ClientID: "host-a", Payload: "p1"},
+						{ParticipantID: "host-a", Payload: "p1"},
 					},
 				},
 			},
@@ -126,7 +126,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			name: "already fully rolled back initial state → returns OutcomeRolledBack",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[string]TransactionState{
+					stateByParticipantID: map[string]TransactionState{
 						"host-a": TransactionRolledBack,
 					},
 				},
@@ -140,7 +140,7 @@ func TestCoordinator_Execute(t *testing.T) {
 				distributedTransaction: DistributedTransaction[string]{
 					TransactionID: "tx-4",
 					Transactions: []Transaction[string]{
-						{ClientID: "host-a", Payload: "p1"},
+						{ParticipantID: "host-a", Payload: "p1"},
 					},
 				},
 			},
@@ -151,7 +151,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			name: "resume from prepared: skips prepare, goes straight to commit → no error",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[string]TransactionState{
+					stateByParticipantID: map[string]TransactionState{
 						"host-a": TransactionPrepared,
 						"host-b": TransactionPrepared,
 					},
@@ -167,8 +167,8 @@ func TestCoordinator_Execute(t *testing.T) {
 				distributedTransaction: DistributedTransaction[string]{
 					TransactionID: "tx-5",
 					Transactions: []Transaction[string]{
-						{ClientID: "host-a", Payload: "p1"},
-						{ClientID: "host-b", Payload: "p2"},
+						{ParticipantID: "host-a", Payload: "p1"},
+						{ParticipantID: "host-b", Payload: "p2"},
 					},
 				},
 			},
@@ -192,8 +192,8 @@ func TestCoordinator_Execute(t *testing.T) {
 				distributedTransaction: DistributedTransaction[string]{
 					TransactionID: "tx-6",
 					Transactions: []Transaction[string]{
-						{ClientID: "host-a", Payload: "p1"},
-						{ClientID: "host-b", Payload: "p2"},
+						{ParticipantID: "host-a", Payload: "p1"},
+						{ParticipantID: "host-b", Payload: "p2"},
 					},
 				},
 			},
@@ -215,8 +215,8 @@ func TestCoordinator_Execute(t *testing.T) {
 				distributedTransaction: DistributedTransaction[string]{
 					TransactionID: "tx-7",
 					Transactions: []Transaction[string]{
-						{ClientID: "host-a", Payload: "p1"},
-						{ClientID: "host-b", Payload: "p2"},
+						{ParticipantID: "host-a", Payload: "p1"},
+						{ParticipantID: "host-b", Payload: "p2"},
 					},
 				},
 			},
@@ -237,7 +237,7 @@ func TestCoordinator_Execute(t *testing.T) {
 				distributedTransaction: DistributedTransaction[string]{
 					TransactionID: "tx-8",
 					Transactions: []Transaction[string]{
-						{ClientID: "host-a", Payload: "p1"},
+						{ParticipantID: "host-a", Payload: "p1"},
 					},
 				},
 			},
@@ -249,7 +249,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			fields: fields{
 				transactionStateChecker:   allNotStartedChecker(),
 				transactionStatePersister: mockStatePersister[string]{},
-				newClientFunc: func(clientID string) (Client, error) {
+				newClientFunc: func(participantID string) (Client, error) {
 					return nil, errNewClient
 				},
 			},
@@ -258,7 +258,7 @@ func TestCoordinator_Execute(t *testing.T) {
 				distributedTransaction: DistributedTransaction[string]{
 					TransactionID: "tx-9",
 					Transactions: []Transaction[string]{
-						{ClientID: "host-a", Payload: "p1"},
+						{ParticipantID: "host-a", Payload: "p1"},
 					},
 				},
 			},
@@ -279,7 +279,7 @@ func TestCoordinator_Execute(t *testing.T) {
 				distributedTransaction: DistributedTransaction[string]{
 					TransactionID: "tx-9",
 					Transactions: []Transaction[string]{
-						{ClientID: "host-a", Payload: "p1"},
+						{ParticipantID: "host-a", Payload: "p1"},
 					},
 				},
 			},
@@ -357,9 +357,9 @@ func (m *mockClient) RollbackTransaction(_ context.Context, _ string) error {
 	return m.rollbackErr
 }
 
-func newMockNewClientFunc(hostToClient map[string]Client) func(clientID string) (Client, error) {
-	return func(clientID string) (Client, error) {
-		if c, ok := hostToClient[clientID]; ok {
+func newMockNewClientFunc(hostToClient map[string]Client) func(participantID string) (Client, error) {
+	return func(participantID string) (Client, error) {
+		if c, ok := hostToClient[participantID]; ok {
 			return c, nil
 		}
 		return &mockClient{}, nil
@@ -367,16 +367,16 @@ func newMockNewClientFunc(hostToClient map[string]Client) func(clientID string) 
 }
 
 type mockTransactionStateChecker struct {
-	stateByClientID map[string]TransactionState
-	err             error
+	stateByParticipantID map[string]TransactionState
+	err                  error
 }
 
 func (m mockTransactionStateChecker) Check(_ string) (map[string]TransactionState, error) {
-	return m.stateByClientID, m.err
+	return m.stateByParticipantID, m.err
 }
 
 func allNotStartedChecker() mockTransactionStateChecker {
 	return mockTransactionStateChecker{
-		stateByClientID: map[string]TransactionState{},
+		stateByParticipantID: map[string]TransactionState{},
 	}
 }

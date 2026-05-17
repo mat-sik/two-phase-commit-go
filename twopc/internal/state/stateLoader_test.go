@@ -13,8 +13,8 @@ func Test_stateLoader_loadState(t *testing.T) {
 		transactionStateChecker TransactionStateChecker[string]
 	}
 	type args struct {
-		transactionID string
-		clientIDs     []string
+		transactionID  string
+		participantIDs []string
 	}
 	tests := []struct {
 		name    string
@@ -27,15 +27,15 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "all prepare failed",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[string]transaction.State{
+					stateByParticipantID: map[string]transaction.State{
 						"host-a": transaction.PrepareFailed,
 						"host-b": transaction.PrepareFailed,
 					},
 				},
 			},
 			args: args{
-				transactionID: "tx-1",
-				clientIDs:     []string{"host-a", "host-b"},
+				transactionID:  "tx-1",
+				participantIDs: []string{"host-a", "host-b"},
 			},
 			want: State[string]{
 				stateSets: stateSets[string]{
@@ -50,15 +50,15 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "all prepared",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[string]transaction.State{
+					stateByParticipantID: map[string]transaction.State{
 						"host-a": transaction.Prepared,
 						"host-b": transaction.Prepared,
 					},
 				},
 			},
 			args: args{
-				transactionID: "tx-2",
-				clientIDs:     []string{"host-a", "host-b"},
+				transactionID:  "tx-2",
+				participantIDs: []string{"host-a", "host-b"},
 			},
 			want: State[string]{
 				stateSets: stateSets[string]{
@@ -73,7 +73,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "mixed states across hosts",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[string]transaction.State{
+					stateByParticipantID: map[string]transaction.State{
 						"host-a": transaction.Prepared,
 						"host-b": transaction.Prepared,
 						"host-c": transaction.Committed,
@@ -81,8 +81,8 @@ func Test_stateLoader_loadState(t *testing.T) {
 				},
 			},
 			args: args{
-				transactionID: "tx-3",
-				clientIDs:     []string{"host-a", "host-b", "host-c"},
+				transactionID:  "tx-3",
+				participantIDs: []string{"host-a", "host-b", "host-c"},
 			},
 			want: State[string]{
 				stateSets: stateSets[string]{
@@ -97,15 +97,15 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "all rolled back",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[string]transaction.State{
+					stateByParticipantID: map[string]transaction.State{
 						"host-a": transaction.RolledBack,
 						"host-b": transaction.RolledBack,
 					},
 				},
 			},
 			args: args{
-				transactionID: "tx-4",
-				clientIDs:     []string{"host-a", "host-b"},
+				transactionID:  "tx-4",
+				participantIDs: []string{"host-a", "host-b"},
 			},
 			want: State[string]{
 				stateSets: stateSets[string]{
@@ -117,15 +117,15 @@ func Test_stateLoader_loadState(t *testing.T) {
 			},
 		},
 		{
-			name: "empty client ids",
+			name: "empty participant ids",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[string]transaction.State{},
+					stateByParticipantID: map[string]transaction.State{},
 				},
 			},
 			args: args{
-				transactionID: "tx-5",
-				clientIDs:     nil,
+				transactionID:  "tx-5",
+				participantIDs: nil,
 			},
 			want: State[string]{
 				stateSets: stateSets[string]{
@@ -137,18 +137,18 @@ func Test_stateLoader_loadState(t *testing.T) {
 			},
 		},
 		{
-			name: "checker returns state for extra hosts not in client ids — only wanted client ids are mapped",
+			name: "checker returns state for extra hosts not in participant ids — only wanted client ids are mapped",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[string]transaction.State{
+					stateByParticipantID: map[string]transaction.State{
 						"host-a": transaction.Prepared,
-						"host-z": transaction.Committed, // not in client ids
+						"host-z": transaction.Committed, // not in participant ids
 					},
 				},
 			},
 			args: args{
-				transactionID: "tx-6",
-				clientIDs:     []string{"host-a"},
+				transactionID:  "tx-6",
+				participantIDs: []string{"host-a"},
 			},
 			want: State[string]{
 				stateSets: stateSets[string]{
@@ -163,8 +163,8 @@ func Test_stateLoader_loadState(t *testing.T) {
 			name: "checker returns err on loading state",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
-					stateByClientID: map[string]transaction.State{},
-					err:             errAny,
+					stateByParticipantID: map[string]transaction.State{},
+					err:                  errAny,
 				},
 			},
 			args:    args{},
@@ -177,7 +177,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			sl := Loader[string]{
 				transactionStateChecker: tt.fields.transactionStateChecker,
 			}
-			got, err := sl.LoadState(tt.args.transactionID, tt.args.clientIDs)
+			got, err := sl.LoadState(tt.args.transactionID, tt.args.participantIDs)
 			if errors.Is(tt.wantErr, errAny) && err == nil {
 				t.Errorf("LoadState() expected err, but got no err")
 			}
@@ -191,10 +191,10 @@ func Test_stateLoader_loadState(t *testing.T) {
 var errAny = errors.New("any error")
 
 type mockTransactionStateChecker struct {
-	stateByClientID map[string]transaction.State
-	err             error
+	stateByParticipantID map[string]transaction.State
+	err                  error
 }
 
 func (m mockTransactionStateChecker) Check(_ string) (map[string]transaction.State, error) {
-	return m.stateByClientID, m.err
+	return m.stateByParticipantID, m.err
 }
