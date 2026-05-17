@@ -177,24 +177,51 @@ func outcome[ID comparable](s state.State[ID], operationAmount int) Outcome {
 	}
 }
 
+// Result holds the outcome of a two-phase commit execution.
+// Callers should inspect Outcome first to determine the final transaction state,
+// then check Err for any infrastructure or participant errors that occurred during execution.
+// A non-nil Err does not imply an inconsistent state — for example, a participant may have
+// returned a transient error while the transaction still reached a terminal state.
 type Result struct {
 	err     error
 	outcome Outcome
 }
 
+// Err returns any errors accumulated during execution.
+// These may originate from participant RPCs, state persistence, or context cancellation.
+// A nil error alongside OutcomeCommitted or OutcomeRolledBack means the transaction
+// completed cleanly. A non-nil error alongside a terminal outcome means the transaction
+// reached that outcome despite encountering errors along the way.
 func (r Result) Err() error {
 	return r.err
 }
 
+// Outcome returns the terminal state reached by the distributed transaction.
 func (r Result) Outcome() Outcome {
 	return r.outcome
 }
 
+// Outcome represents the terminal state reached by a distributed transaction
+// after Execute returns.
 type Outcome int
 
 const (
+	// OutcomeInconsistent means the transaction did not reach a clean terminal state.
+	// This occurs either when the persisted transaction state could not be read on startup,
+	// or when Execute encounters an unrecoverable infrastructure failure before all participants
+	// could reach the same terminal state — for example, some participants committed while
+	// others did not, or some rolled back while others did not.
+	// The caller must invoke Execute again with the same transaction ID to drive all
+	// participants to a terminal state.
 	OutcomeInconsistent = iota
+
+	// OutcomeCommitted means all participants successfully prepared and committed.
+	// The transaction is durably complete.
 	OutcomeCommitted
+
+	// OutcomeRolledBack means all participants have been rolled back.
+	// This occurs when at least one participant failed the prepare phase,
+	// causing the coordinator to roll back all participants before any commit was attempted.
 	OutcomeRolledBack
 )
 
