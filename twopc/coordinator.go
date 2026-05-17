@@ -128,6 +128,16 @@ func nextOperations[ID comparable](s state.State[ID], ops []operation[ID]) []ope
 	return toOperations(nextTrs, payloadByClientID)
 }
 
+func toTransitionsWithPayloads[ID comparable](ops []operation[ID]) (map[ID]client.PreparePayload, []state.Transition[ID]) {
+	payloadByClientID := make(map[ID]client.PreparePayload)
+	trs := make([]state.Transition[ID], 0, len(ops))
+	for _, op := range ops {
+		trs = append(trs, op.toTransition())
+		payloadByClientID[op.clientID] = op.payload
+	}
+	return payloadByClientID, trs
+}
+
 func toOperations[ID comparable](
 	nextTrs []state.Transition[ID],
 	payloadByClientID map[ID]client.PreparePayload,
@@ -143,16 +153,6 @@ func toOperations[ID comparable](
 		nextOps = append(nextOps, nextOp)
 	}
 	return nextOps
-}
-
-func toTransitionsWithPayloads[ID comparable](ops []operation[ID]) (map[ID]client.PreparePayload, []state.Transition[ID]) {
-	payloadByClientID := make(map[ID]client.PreparePayload)
-	trs := make([]state.Transition[ID], 0, len(ops))
-	for _, op := range ops {
-		trs = append(trs, op.toTransition())
-		payloadByClientID[op.clientID] = op.payload
-	}
-	return payloadByClientID, trs
 }
 
 func nextState[ID comparable](s state.State[ID], successful, failed []operation[ID]) state.State[ID] {
@@ -362,5 +362,14 @@ func newInitialOperation[ID comparable](clientID ID, payload client.PreparePaylo
 }
 
 func (o operation[ID]) toTransition() state.Transition[ID] {
-	return state.NewTransition(o.clientID, o.sourceState, o.targetState)
+	switch {
+	case o.sourceState == transaction.NotStarted && o.targetState == transaction.Prepared:
+		return state.PrepareTransition(o.clientID)
+	case o.sourceState == transaction.Prepared && o.targetState == transaction.Committed:
+		return state.CommitTransition(o.clientID)
+	case o.targetState == transaction.RolledBack:
+		return state.RollbackTransition(o.clientID, o.sourceState)
+	default:
+		panic("unreachable")
+	}
 }

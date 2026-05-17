@@ -53,8 +53,8 @@ func Test_state_nextState(t *testing.T) {
 			fields: baseState(),
 			args: args{
 				successfulTransitions: []Transition[string]{
-					prepareTransition("host-a"),
-					prepareTransition("host-b"),
+					PrepareTransition("host-a"),
+					PrepareTransition("host-b"),
 				},
 				failedTransitions: nil,
 			},
@@ -73,7 +73,7 @@ func Test_state_nextState(t *testing.T) {
 			args: args{
 				successfulTransitions: nil,
 				failedTransitions: []Transition[string]{
-					prepareTransition("host-a"),
+					PrepareTransition("host-a"),
 				},
 			},
 			want: State[string]{
@@ -95,8 +95,8 @@ func Test_state_nextState(t *testing.T) {
 			},
 			args: args{
 				successfulTransitions: []Transition[string]{
-					commitTransition("host-a"),
-					commitTransition("host-b"),
+					CommitTransition("host-a"),
+					CommitTransition("host-b"),
 				},
 				failedTransitions: nil,
 			},
@@ -119,10 +119,10 @@ func Test_state_nextState(t *testing.T) {
 			},
 			args: args{
 				successfulTransitions: []Transition[string]{
-					commitTransition("host-a"),
+					CommitTransition("host-a"),
 				},
 				failedTransitions: []Transition[string]{
-					commitTransition("host-b"),
+					CommitTransition("host-b"),
 				},
 			},
 			want: State[string]{
@@ -144,7 +144,7 @@ func Test_state_nextState(t *testing.T) {
 			},
 			args: args{
 				successfulTransitions: []Transition[string]{
-					rollbackTransition("host-a", transaction.PrepareFailed),
+					RollbackTransition("host-a", transaction.PrepareFailed),
 				},
 				failedTransitions: nil,
 			},
@@ -168,7 +168,7 @@ func Test_state_nextState(t *testing.T) {
 			args: args{
 				successfulTransitions: nil,
 				failedTransitions: []Transition[string]{
-					rollbackTransition("host-a", transaction.PrepareFailed),
+					RollbackTransition("host-a", transaction.PrepareFailed),
 				},
 			},
 			want: State[string]{
@@ -185,10 +185,10 @@ func Test_state_nextState(t *testing.T) {
 			fields: baseState(),
 			args: args{
 				successfulTransitions: []Transition[string]{
-					prepareTransition("host-a"),
+					PrepareTransition("host-a"),
 				},
 				failedTransitions: []Transition[string]{
-					prepareTransition("host-b"),
+					PrepareTransition("host-b"),
 				},
 			},
 			want: State[string]{
@@ -245,8 +245,8 @@ func Test_state_nextStateTransitions(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			args: args{transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			}},
 			want:    nil,
 			wantErr: false,
@@ -260,8 +260,8 @@ func Test_state_nextStateTransitions(t *testing.T) {
 				rolledBack:    hosts("host-a", "host-b"),
 			},
 			args: args{transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			}},
 			want:    nil,
 			wantErr: false,
@@ -277,12 +277,12 @@ func Test_state_nextStateTransitions(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			args: args{transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			}},
 			want: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			},
 			wantErr: false,
 		},
@@ -295,11 +295,11 @@ func Test_state_nextStateTransitions(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			args: args{transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			}},
 			want: []Transition[string]{
-				prepareTransition("host-b"),
+				PrepareTransition("host-b"),
 			},
 			wantErr: false,
 		},
@@ -314,12 +314,12 @@ func Test_state_nextStateTransitions(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			args: args{transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			}},
 			want: []Transition[string]{
-				commitTransition("host-a"),
-				commitTransition("host-b"),
+				CommitTransition("host-a"),
+				CommitTransition("host-b"),
 			},
 			wantErr: false,
 		},
@@ -332,11 +332,11 @@ func Test_state_nextStateTransitions(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			args: args{transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			}},
 			want: []Transition[string]{
-				commitTransition("host-b"),
+				CommitTransition("host-b"),
 			},
 			wantErr: false,
 		},
@@ -351,12 +351,12 @@ func Test_state_nextStateTransitions(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			args: args{transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			}},
 			want: []Transition[string]{
-				rollbackTransition("host-a", transaction.Prepared),
-				rollbackTransition("host-b", transaction.PrepareFailed),
+				RollbackTransition("host-a", transaction.Prepared),
+				RollbackTransition("host-b", transaction.PrepareFailed),
 			},
 			wantErr: false,
 		},
@@ -369,11 +369,11 @@ func Test_state_nextStateTransitions(t *testing.T) {
 				rolledBack:    hosts("host-a"),
 			},
 			args: args{transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			}},
 			want: []Transition[string]{
-				rollbackTransition("host-b", transaction.PrepareFailed),
+				RollbackTransition("host-b", transaction.PrepareFailed),
 			},
 			wantErr: false,
 		},
@@ -388,8 +388,8 @@ func Test_state_nextStateTransitions(t *testing.T) {
 				rolledBack:    hosts("host-b"),
 			},
 			args: args{transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			}},
 			want:    nil,
 			wantErr: true,
@@ -403,8 +403,8 @@ func Test_state_nextStateTransitions(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			args: args{transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			}},
 			want:    nil,
 			wantErr: true,
@@ -455,8 +455,8 @@ func Test_state_roundTrip(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			},
 			successfulHosts: []string{"host-a", "host-b"},
 			wantFinalState: State[string]{
@@ -477,8 +477,8 @@ func Test_state_roundTrip(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			},
 			successfulHosts: nil,
 			wantFinalState: State[string]{
@@ -499,8 +499,8 @@ func Test_state_roundTrip(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			},
 			successfulHosts: []string{"host-a"},
 			wantFinalState: State[string]{
@@ -521,8 +521,8 @@ func Test_state_roundTrip(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			},
 			successfulHosts: []string{"host-a", "host-b"},
 			wantFinalState: State[string]{
@@ -543,8 +543,8 @@ func Test_state_roundTrip(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			},
 			successfulHosts: nil,
 			wantFinalState: State[string]{
@@ -565,8 +565,8 @@ func Test_state_roundTrip(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			},
 			successfulHosts: []string{"host-a", "host-b"},
 			wantFinalState: State[string]{
@@ -587,8 +587,8 @@ func Test_state_roundTrip(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			},
 			successfulHosts: nil,
 			wantFinalState: State[string]{
@@ -609,8 +609,8 @@ func Test_state_roundTrip(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			},
 			transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			},
 			successfulHosts: []string{"host-b"},
 			wantFinalState: State[string]{
@@ -631,8 +631,8 @@ func Test_state_roundTrip(t *testing.T) {
 				rolledBack:    hosts("host-a"),
 			},
 			transitions: []Transition[string]{
-				prepareTransition("host-a"),
-				prepareTransition("host-b"),
+				PrepareTransition("host-a"),
+				PrepareTransition("host-b"),
 			},
 			successfulHosts: []string{"host-b"},
 			wantFinalState: State[string]{

@@ -108,11 +108,11 @@ func invalidStateErr[ID comparable](sets stateSets[ID]) error {
 }
 
 func (s State[ID]) nextPrepareTransitions(trs []Transition[ID]) []Transition[ID] {
-	return s.nextTransitions(trs, s.stateSets.prepared, prepareTransition)
+	return s.nextTransitions(trs, s.stateSets.prepared, PrepareTransition)
 }
 
 func (s State[ID]) nextCommitTransitions(trs []Transition[ID]) []Transition[ID] {
-	return s.nextTransitions(trs, s.stateSets.committed, commitTransition)
+	return s.nextTransitions(trs, s.stateSets.committed, CommitTransition)
 }
 
 func (s State[ID]) nextTransitions(
@@ -134,7 +134,7 @@ func (s State[ID]) nextRollbackTransitions(trs []Transition[ID]) []Transition[ID
 	for _, tr := range trs {
 		if !s.stateSets.rolledBack.has(tr.clientID) {
 			sourceState := s.stateSets.transactionState(tr.clientID)
-			newTransitions = append(newTransitions, rollbackTransition(tr.clientID, sourceState))
+			newTransitions = append(newTransitions, RollbackTransition(tr.clientID, sourceState))
 		}
 	}
 	return newTransitions
@@ -287,19 +287,22 @@ func (t Transition[ID]) TargetState() transaction.State {
 	return t.targetState
 }
 
-func prepareTransition[ID comparable](clientID ID) Transition[ID] {
-	return NewTransition(clientID, transaction.NotStarted, transaction.Prepared)
+func PrepareTransition[ID comparable](clientID ID) Transition[ID] {
+	return newTransition(clientID, transaction.NotStarted, transaction.Prepared)
 }
 
-func commitTransition[ID comparable](clientID ID) Transition[ID] {
-	return NewTransition(clientID, transaction.Prepared, transaction.Committed)
+func CommitTransition[ID comparable](clientID ID) Transition[ID] {
+	return newTransition(clientID, transaction.Prepared, transaction.Committed)
 }
 
-func rollbackTransition[ID comparable](clientID ID, sourceState transaction.State) Transition[ID] {
-	return NewTransition(clientID, sourceState, transaction.RolledBack)
+func RollbackTransition[ID comparable](clientID ID, sourceState transaction.State) Transition[ID] {
+	if sourceState != transaction.Prepared && sourceState != transaction.PrepareFailed {
+		panic("unreachable")
+	}
+	return newTransition(clientID, sourceState, transaction.RolledBack)
 }
 
-func NewTransition[ID comparable](clientID ID, sourceState transaction.State, targetState transaction.State) Transition[ID] {
+func newTransition[ID comparable](clientID ID, sourceState transaction.State, targetState transaction.State) Transition[ID] {
 	return Transition[ID]{
 		clientID:    clientID,
 		sourceState: sourceState,
