@@ -1,6 +1,7 @@
 package state
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 
@@ -60,33 +61,36 @@ func stateAfterFailure(targetState transaction.State) transaction.State {
 	}
 }
 
-func (s State[ID]) NextTransitions(transitions []Transition[ID]) []Transition[ID] {
-	transitions, err := s.tryNextTransitions(transitions)
+func (s State[ID]) NextTransitions(previousTransitions []Transition[ID]) []Transition[ID] {
+	nextTransitions, err := s.tryNextTransitions(previousTransitions)
 	if err != nil {
 		panic(err)
 	}
-	return transitions
+	return nextTransitions
 }
 
-func (s State[ID]) tryNextTransitions(trs []Transition[ID]) ([]Transition[ID], error) {
+func (s State[ID]) tryNextTransitions(prevTrs []Transition[ID]) ([]Transition[ID], error) {
 	if err := s.isInInvalidState(); err != nil {
 		return nil, err
 	}
+	if len(prevTrs) == 0 {
+		return nil, errors.New("previous transitions cannot be empty")
+	}
 
-	if s.stateSets.allFinished(len(trs)) {
+	if s.stateSets.allFinished(len(prevTrs)) {
 		return nil, nil
 	}
 
 	if s.stateSets.anyPreparedFailed() {
-		return s.nextRollbackTransitions(trs), nil
+		return s.nextRollbackTransitions(prevTrs), nil
 	}
 
-	if !s.stateSets.allPrepared(len(trs)) && !s.stateSets.anyCommitted() {
-		return s.nextPrepareTransitions(trs), nil
+	if !s.stateSets.allPrepared(len(prevTrs)) && !s.stateSets.anyCommitted() {
+		return s.nextPrepareTransitions(prevTrs), nil
 	}
 
-	if !s.stateSets.allCommitted(len(trs)) {
-		return s.nextCommitTransitions(trs), nil
+	if !s.stateSets.allCommitted(len(prevTrs)) {
+		return s.nextCommitTransitions(prevTrs), nil
 	}
 
 	panic("unreachable")
