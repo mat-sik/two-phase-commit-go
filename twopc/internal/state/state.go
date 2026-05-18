@@ -101,7 +101,7 @@ func (s State[ID]) nextCommitTransitions() []Transition[ID] {
 func (s State[ID]) nextTransitions(skipSet stateSet[ID],
 	newTransitionFunc func(participantID ID) Transition[ID],
 ) []Transition[ID] {
-	newTransitions := make([]Transition[ID], 0, len(skipSet))
+	newTransitions := make([]Transition[ID], 0, len(s.participantIDs)-len(skipSet))
 	for participantID := range s.participantIDs {
 		if !skipSet.has(participantID) {
 			newTransitions = append(newTransitions, newTransitionFunc(participantID))
@@ -111,7 +111,7 @@ func (s State[ID]) nextTransitions(skipSet stateSet[ID],
 }
 
 func (s State[ID]) nextRollbackTransitions() []Transition[ID] {
-	newTransitions := make([]Transition[ID], 0, s.stateSets.rolledBackCount())
+	newTransitions := make([]Transition[ID], 0, len(s.participantIDs)-s.stateSets.rolledBackCount())
 	for participantID := range s.participantIDs {
 		if !s.stateSets.rolledBack.has(participantID) {
 			sourceState := s.stateSets.transactionState(participantID)
