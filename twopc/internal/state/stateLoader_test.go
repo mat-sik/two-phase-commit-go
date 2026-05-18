@@ -38,6 +38,10 @@ func Test_stateLoader_loadState(t *testing.T) {
 				participantIDs: []string{"host-a", "host-b"},
 			},
 			want: State[string]{
+				participantIDs: map[string]struct{}{
+					"host-a": {},
+					"host-b": {},
+				},
 				stateSets: stateSets[string]{
 					prepared:      emptyHosts(),
 					prepareFailed: hosts("host-a", "host-b"),
@@ -61,6 +65,10 @@ func Test_stateLoader_loadState(t *testing.T) {
 				participantIDs: []string{"host-a", "host-b"},
 			},
 			want: State[string]{
+				participantIDs: map[string]struct{}{
+					"host-a": {},
+					"host-b": {},
+				},
 				stateSets: stateSets[string]{
 					prepared:      hosts("host-a", "host-b"),
 					prepareFailed: emptyHosts(),
@@ -85,6 +93,11 @@ func Test_stateLoader_loadState(t *testing.T) {
 				participantIDs: []string{"host-a", "host-b", "host-c"},
 			},
 			want: State[string]{
+				participantIDs: map[string]struct{}{
+					"host-a": {},
+					"host-b": {},
+					"host-c": {},
+				},
 				stateSets: stateSets[string]{
 					prepared:      hosts("host-a", "host-b"),
 					prepareFailed: emptyHosts(),
@@ -108,12 +121,35 @@ func Test_stateLoader_loadState(t *testing.T) {
 				participantIDs: []string{"host-a", "host-b"},
 			},
 			want: State[string]{
+				participantIDs: map[string]struct{}{
+					"host-a": {},
+					"host-b": {},
+				},
 				stateSets: stateSets[string]{
 					prepared:      emptyHosts(),
 					prepareFailed: emptyHosts(),
 					committed:     emptyHosts(),
 					rolledBack:    hosts("host-a", "host-b"),
 				},
+			},
+		},
+		{
+			name: "empty persisted participant ids",
+			fields: fields{
+				transactionStateChecker: mockTransactionStateChecker{
+					stateByParticipantID: map[string]transaction.State{},
+				},
+			},
+			args: args{
+				transactionID:  "tx-5",
+				participantIDs: []string{"host-a", "host-b"},
+			},
+			want: State[string]{
+				participantIDs: map[string]struct{}{
+					"host-a": {},
+					"host-b": {},
+				},
+				stateSets: baseStateSets(),
 			},
 		},
 		{
@@ -127,22 +163,16 @@ func Test_stateLoader_loadState(t *testing.T) {
 				transactionID:  "tx-5",
 				participantIDs: nil,
 			},
-			want: State[string]{
-				stateSets: stateSets[string]{
-					prepared:      emptyHosts(),
-					prepareFailed: emptyHosts(),
-					committed:     emptyHosts(),
-					rolledBack:    emptyHosts(),
-				},
-			},
+			want:    State[string]{},
+			wantErr: errAny,
 		},
 		{
-			name: "checker returns state for extra hosts not in participant ids — only wanted client ids are mapped",
+			name: "persisted state has more participant than input",
 			fields: fields{
 				transactionStateChecker: mockTransactionStateChecker{
 					stateByParticipantID: map[string]transaction.State{
 						"host-a": transaction.Prepared,
-						"host-z": transaction.Committed, // not in participant ids
+						"host-z": transaction.Committed,
 					},
 				},
 			},
@@ -150,14 +180,25 @@ func Test_stateLoader_loadState(t *testing.T) {
 				transactionID:  "tx-6",
 				participantIDs: []string{"host-a"},
 			},
-			want: State[string]{
-				stateSets: stateSets[string]{
-					prepared:      hosts("host-a"),
-					prepareFailed: emptyHosts(),
-					committed:     emptyHosts(),
-					rolledBack:    emptyHosts(),
+			want:    State[string]{},
+			wantErr: errAny,
+		},
+		{
+			name: "persisted state has different participant than input",
+			fields: fields{
+				transactionStateChecker: mockTransactionStateChecker{
+					stateByParticipantID: map[string]transaction.State{
+						"host-a": transaction.Prepared,
+						"host-b": transaction.Committed,
+					},
 				},
 			},
+			args: args{
+				transactionID:  "tx-6",
+				participantIDs: []string{"host-a", "host-z"},
+			},
+			want:    State[string]{},
+			wantErr: errAny,
 		},
 		{
 			name: "checker returns err on loading state",
@@ -167,7 +208,10 @@ func Test_stateLoader_loadState(t *testing.T) {
 					err:                  errAny,
 				},
 			},
-			args:    args{},
+			args: args{
+				transactionID:  "tx-7",
+				participantIDs: []string{"host-a"},
+			},
 			want:    State[string]{},
 			wantErr: errAny,
 		},

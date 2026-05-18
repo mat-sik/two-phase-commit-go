@@ -87,24 +87,21 @@ func toInitialOperations[ID comparable](txs []Transaction[ID]) []operation[ID] {
 func (oh Coordinator[ID]) runTransactionLoop(
 	ctx context.Context,
 	txID string,
-	initState state.State[ID],
-	initOps []operation[ID],
+	state state.State[ID],
+	ops []operation[ID],
 ) Result {
-	totalOpsAmount := len(initOps)
-	ops := initOps
 	var successful, failed []operation[ID]
 	var allErrs []error
 
-	currState := initState
-	for !currState.IsTerminal(totalOpsAmount) {
+	for !state.IsTerminal() {
 		if err := ctx.Err(); err != nil {
 			return Result{
 				err:     errors.Join(append(allErrs, err)...),
-				outcome: outcome(currState, totalOpsAmount),
+				outcome: outcome(state),
 			}
 		}
 
-		ops = nextOperations(currState, ops)
+		ops = nextOperations(state, ops)
 
 		var err error
 		successful, failed, err = oh.executeRound(ctx, txID, ops, successful[:0], failed[:0])
@@ -113,29 +110,27 @@ func (oh Coordinator[ID]) runTransactionLoop(
 			allErrs = append(allErrs, err)
 		}
 
-		currState = nextState(currState, successful, failed)
+		nextState(state, successful, failed)
 	}
 
 	return Result{
 		err:     errors.Join(allErrs...),
-		outcome: outcome(currState, totalOpsAmount),
+		outcome: outcome(state),
 	}
 }
 
 func nextOperations[ID comparable](s state.State[ID], ops []operation[ID]) []operation[ID] {
-	payloadByparticipantID, trs := toTransitionsWithPayloads(ops)
-	nextTrs := s.NextTransitions(trs)
-	return toOperations(nextTrs, payloadByparticipantID)
+	payloadByParticipantID := toPayloadByParticipantID(ops)
+	nextTrs := s.NextTransitions()
+	return toOperations(nextTrs, payloadByParticipantID)
 }
 
-func toTransitionsWithPayloads[ID comparable](ops []operation[ID]) (map[ID]participant.PreparePayload, []state.Transition[ID]) {
-	payloadByparticipantID := make(map[ID]participant.PreparePayload)
-	trs := make([]state.Transition[ID], 0, len(ops))
+func toPayloadByParticipantID[ID comparable](ops []operation[ID]) map[ID]participant.PreparePayload {
+	payloadByParticipantID := make(map[ID]participant.PreparePayload)
 	for _, op := range ops {
-		trs = append(trs, op.toTransition())
-		payloadByparticipantID[op.participantID] = op.payload
+		payloadByParticipantID[op.participantID] = op.payload
 	}
-	return payloadByparticipantID, trs
+	return payloadByParticipantID
 }
 
 func toOperations[ID comparable](
@@ -155,8 +150,8 @@ func toOperations[ID comparable](
 	return nextOps
 }
 
-func nextState[ID comparable](s state.State[ID], successful, failed []operation[ID]) state.State[ID] {
-	return s.NextState(toTransitions(successful), toTransitions(failed))
+func nextState[ID comparable](s state.State[ID], successful, failed []operation[ID]) {
+	s.NextState(toTransitions(successful), toTransitions(failed))
 }
 
 func toTransitions[ID comparable](ops []operation[ID]) []state.Transition[ID] {
@@ -167,11 +162,11 @@ func toTransitions[ID comparable](ops []operation[ID]) []state.Transition[ID] {
 	return trs
 }
 
-func outcome[ID comparable](s state.State[ID], opsAmount int) Outcome {
+func outcome[ID comparable](s state.State[ID]) Outcome {
 	switch {
-	case s.IsRolledBack(opsAmount):
+	case s.IsRolledBack():
 		return OutcomeRolledBack
-	case s.IsCommitted(opsAmount):
+	case s.IsCommitted():
 		return OutcomeCommitted
 	default:
 		return OutcomeInconsistent
