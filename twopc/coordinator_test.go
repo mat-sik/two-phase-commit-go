@@ -19,7 +19,11 @@ func TestCoordinator_Execute(t *testing.T) {
 	}
 
 	errPrepare := errors.New("prepare failed")
+	errCommit := errors.New("commit failed")
+	errRollback := errors.New("rollback failed")
 	errPersist := errors.New("persist failed")
+	errPersistCommit := errors.New("persist commit failed")
+	errPersistRollback := errors.New("persist rollback failed")
 	errNewClient := errors.New("create new client failed")
 	errStateLoad := errors.New("state load failed")
 
@@ -27,7 +31,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		name        string
 		fields      fields
 		args        args
-		wantErr     error
+		wantErrs    []error
 		wantOutcome Outcome
 	}{
 		// ── happy path ────────────────────────────────────────────────────────
@@ -49,7 +53,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr:     nil,
+			wantErrs:    nil,
 			wantOutcome: OutcomeCommitted,
 		},
 		{
@@ -72,7 +76,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr:     nil,
+			wantErrs:    nil,
 			wantOutcome: OutcomeCommitted,
 		},
 		{
@@ -94,8 +98,30 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr:     nil,
+			wantErrs:    nil,
 			wantOutcome: OutcomeCommitted,
+		},
+		{
+			name: "two hosts, host-a needs to be initialized: one prepare fails → prepare err",
+			fields: fields{
+				transactionStateChecker:   allNotStartedChecker(),
+				transactionStatePersister: mockStatePersister[string]{},
+				newClientFunc: newMockNewClientFunc(map[string]Client{
+					"host-b": &mockClient{prepareErr: errPrepare},
+				}),
+			},
+			args: args{
+				ctxFunc: ctxBackground(),
+				distributedTransaction: DistributedTransaction[string]{
+					TransactionID: "tx-2",
+					Transactions: []Transaction[string]{
+						{ParticipantID: "host-a", Payload: "p1"},
+						{ParticipantID: "host-b", Payload: "p2"},
+					},
+				},
+			},
+			wantErrs:    []error{errPrepare},
+			wantOutcome: OutcomeRolledBack,
 		},
 		{
 			name: "already fully committed initial state → no operations, no error",
@@ -119,7 +145,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr:     nil,
+			wantErrs:    nil,
 			wantOutcome: OutcomeCommitted,
 		},
 		{
@@ -144,7 +170,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr:     nil,
+			wantErrs:    nil,
 			wantOutcome: OutcomeRolledBack,
 		},
 		{
@@ -172,7 +198,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr:     nil,
+			wantErrs:    nil,
 			wantOutcome: OutcomeCommitted,
 		},
 
@@ -197,7 +223,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr:     errPrepare,
+			wantErrs:    []error{errPrepare},
 			wantOutcome: OutcomeRolledBack,
 		},
 		{
@@ -220,7 +246,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr:     errPrepare,
+			wantErrs:    []error{errPrepare},
 			wantOutcome: OutcomeRolledBack,
 		},
 		{
@@ -241,7 +267,82 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr:     errPersist,
+			wantErrs:    []error{errPersist},
+			wantOutcome: OutcomeInconsistent,
+		},
+		{
+			name: "persist rollback fails after client rollback call fails → returns joined errors",
+			fields: fields{
+				transactionStateChecker: mockTransactionStateChecker{
+					stateByParticipantID: map[string]TransactionState{
+						"host-a": TransactionPrepareFailed,
+					},
+				},
+				transactionStatePersister: mockStatePersister[string]{rollbackErr: errPersistRollback},
+				newClientFunc: newMockNewClientFunc(map[string]Client{
+					"host-a": &mockClient{rollbackErr: errRollback},
+				}),
+			},
+			args: args{
+				ctxFunc: ctxWithTimeout(context.Background(), 1*time.Second),
+				distributedTransaction: DistributedTransaction[string]{
+					TransactionID: "tx-8",
+					Transactions: []Transaction[string]{
+						{ParticipantID: "host-a", Payload: "p1"},
+					},
+				},
+			},
+			wantErrs:    []error{errRollback, errPersistRollback},
+			wantOutcome: OutcomeInconsistent,
+		},
+		{
+			name: "persist fails after client commit call fails → returns joined errors",
+			fields: fields{
+				transactionStateChecker: mockTransactionStateChecker{
+					stateByParticipantID: map[string]TransactionState{
+						"host-a": TransactionPrepared,
+					},
+				},
+				transactionStatePersister: mockStatePersister[string]{err: errPersist},
+				newClientFunc: newMockNewClientFunc(map[string]Client{
+					"host-a": &mockClient{commitErr: errCommit},
+				}),
+			},
+			args: args{
+				ctxFunc: ctxWithTimeout(context.Background(), 1*time.Second),
+				distributedTransaction: DistributedTransaction[string]{
+					TransactionID: "tx-8",
+					Transactions: []Transaction[string]{
+						{ParticipantID: "host-a", Payload: "p1"},
+					},
+				},
+			},
+			wantErrs:    []error{errCommit, errPersist},
+			wantOutcome: OutcomeInconsistent,
+		},
+		{
+			name: "persist commit fails after client commit call → returns ",
+			fields: fields{
+				transactionStateChecker: mockTransactionStateChecker{
+					stateByParticipantID: map[string]TransactionState{
+						"host-a": TransactionPrepared,
+					},
+				},
+				transactionStatePersister: mockStatePersister[string]{commitErr: errPersistCommit},
+				newClientFunc: newMockNewClientFunc(map[string]Client{
+					"host-a": &mockClient{},
+				}),
+			},
+			args: args{
+				ctxFunc: ctxWithTimeout(context.Background(), 1*time.Second),
+				distributedTransaction: DistributedTransaction[string]{
+					TransactionID: "tx-8",
+					Transactions: []Transaction[string]{
+						{ParticipantID: "host-a", Payload: "p1"},
+					},
+				},
+			},
+			wantErrs:    []error{errPersistCommit},
 			wantOutcome: OutcomeInconsistent,
 		},
 		{
@@ -262,7 +363,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr:     errNewClient,
+			wantErrs:    []error{errNewClient},
 			wantOutcome: OutcomeInconsistent,
 		},
 		{
@@ -283,7 +384,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErr:     errStateLoad,
+			wantErrs:    []error{errStateLoad},
 			wantOutcome: OutcomeInconsistent,
 		},
 	}
@@ -297,8 +398,10 @@ func TestCoordinator_Execute(t *testing.T) {
 			)
 			result := coordinator.Execute(tt.args.ctxFunc(), tt.args.distributedTransaction)
 
-			if !errors.Is(result.Err(), tt.wantErr) {
-				t.Errorf("Execute() error = %v, wantErr %v", result.Err(), tt.wantErr)
+			for _, err := range tt.wantErrs {
+				if !errors.Is(result.Err(), err) {
+					t.Errorf("Execute() error = %v, wantErr %v", result.Err(), tt.wantErrs)
+				}
 			}
 
 			if result.Outcome() != tt.wantOutcome {
@@ -323,7 +426,9 @@ func ctxWithTimeout(ctx context.Context, timeout time.Duration) func() context.C
 }
 
 type mockStatePersister[ID comparable] struct {
-	err error
+	err         error
+	commitErr   error
+	rollbackErr error
 }
 
 func (m mockStatePersister[ID]) PersistState(_ context.Context, _ string, _ ID, _ TransactionState) <-chan PersistResult {
@@ -332,8 +437,8 @@ func (m mockStatePersister[ID]) PersistState(_ context.Context, _ string, _ ID, 
 		ch <- PersistResult{Err: m.err}
 	} else {
 		ch <- PersistResult{
-			Commit:   func() error { return nil },
-			Rollback: func() error { return nil },
+			Commit:   func() error { return m.commitErr },
+			Rollback: func() error { return m.rollbackErr },
 		}
 	}
 	return ch
