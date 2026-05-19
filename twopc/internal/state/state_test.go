@@ -21,26 +21,25 @@ func Test_state_nextState(t *testing.T) {
 	}{
 		{
 			name: "no transitions returns same state",
-			state: State[string]{
-				participantIDs: emptyHosts(),
-				stateSets:      baseStateSets(),
-			},
+			state: newState(stateSets[string]{
+				prepared:      hosts("host-b"),
+				prepareFailed: emptyHosts(),
+				committed:     hosts("host-a"),
+				rolledBack:    emptyHosts(),
+			}),
 			args: args{
 				successfulTransitions: nil,
 				failedTransitions:     nil,
 			},
-			want: State[string]{
-				participantIDs: emptyHosts(),
-				stateSets: stateSets[string]{
-					prepared:      emptyHosts(),
-					prepareFailed: emptyHosts(),
-					committed:     emptyHosts(),
-					rolledBack:    emptyHosts(),
-				},
-			},
+			want: newState(stateSets[string]{
+				prepared:      hosts("host-b"),
+				prepareFailed: emptyHosts(),
+				committed:     hosts("host-a"),
+				rolledBack:    emptyHosts(),
+			}),
 		},
 		{
-			name: "successful prepare transitions notStarted→prepared",
+			name: "successful prepare 2x notStarted→prepared",
 			state: State[string]{
 				participantIDs: map[string]struct{}{
 					"host-a": {},
@@ -69,33 +68,61 @@ func Test_state_nextState(t *testing.T) {
 			},
 		},
 		{
-			name: "failed prepare transitions notStarted→prepareFailed",
+			name: "failed prepare notStarted→prepared,notStarted→prepareFailed",
 			state: State[string]{
 				participantIDs: map[string]struct{}{
 					"host-a": {},
+					"host-b": {},
 				},
 				stateSets: baseStateSets(),
 			},
 			args: args{
-				successfulTransitions: nil,
-				failedTransitions: []Transition[string]{
+				successfulTransitions: []Transition[string]{
 					PrepareTransition("host-a"),
+				},
+				failedTransitions: []Transition[string]{
+					PrepareTransition("host-b"),
 				},
 			},
 			want: State[string]{
 				participantIDs: map[string]struct{}{
 					"host-a": {},
+					"host-b": {},
 				},
 				stateSets: stateSets[string]{
-					prepared:      emptyHosts(),
-					prepareFailed: hosts("host-a"),
+					prepared:      hosts("host-a"),
+					prepareFailed: hosts("host-b"),
 					committed:     emptyHosts(),
 					rolledBack:    emptyHosts(),
 				},
 			},
 		},
 		{
-			name: "successful commit transitions prepared→committed",
+			name: "failed prepare notStarted->prepared,notStarted->prepareFailed",
+			state: State[string]{
+				participantIDs: map[string]struct{}{
+					"host-a": {},
+					"host-b": {},
+				},
+				stateSets: baseStateSets(),
+			},
+			args: args{
+				successfulTransitions: []Transition[string]{
+					PrepareTransition("host-a"),
+				},
+				failedTransitions: []Transition[string]{
+					PrepareTransition("host-b"),
+				},
+			},
+			want: newState(stateSets[string]{
+				prepared:      hosts("host-a"),
+				prepareFailed: hosts("host-b"),
+				committed:     emptyHosts(),
+				rolledBack:    emptyHosts(),
+			}),
+		},
+		{
+			name: "successful commit 2x prepared→committed",
 			state: newState(stateSets[string]{
 				prepared:      hosts("host-a", "host-b"),
 				prepareFailed: emptyHosts(),
@@ -117,11 +144,11 @@ func Test_state_nextState(t *testing.T) {
 			}),
 		},
 		{
-			name: "failed commit keeps host in prepared state",
+			name: "failed commit prepared->committed,prepared-prepared,commited->commited",
 			state: newState(stateSets[string]{
 				prepared:      hosts("host-a", "host-b"),
 				prepareFailed: emptyHosts(),
-				committed:     emptyHosts(),
+				committed:     hosts("host-c"),
 				rolledBack:    emptyHosts(),
 			}),
 			args: args{
@@ -135,21 +162,22 @@ func Test_state_nextState(t *testing.T) {
 			want: newState(stateSets[string]{
 				prepared:      hosts("host-b"),
 				prepareFailed: emptyHosts(),
-				committed:     hosts("host-a"),
+				committed:     hosts("host-a", "host-c"),
 				rolledBack:    emptyHosts(),
 			}),
 		},
 		{
-			name: "successful rollback transitions prepareFailed→rolledBack",
+			name: "successful rollback prepared->rolledBack,prepareFailed→rolledBack",
 			state: newState(stateSets[string]{
-				prepared:      emptyHosts(),
-				prepareFailed: hosts("host-a"),
+				prepared:      hosts("host-a"),
+				prepareFailed: hosts("host-b"),
 				committed:     emptyHosts(),
 				rolledBack:    emptyHosts(),
 			}),
 			args: args{
 				successfulTransitions: []Transition[string]{
-					RollbackTransition("host-a", transaction.PrepareFailed),
+					RollbackTransition("host-a", transaction.Prepared),
+					RollbackTransition("host-b", transaction.PrepareFailed),
 				},
 				failedTransitions: nil,
 			},
@@ -157,52 +185,29 @@ func Test_state_nextState(t *testing.T) {
 				prepared:      emptyHosts(),
 				prepareFailed: emptyHosts(),
 				committed:     emptyHosts(),
-				rolledBack:    hosts("host-a"),
+				rolledBack:    hosts("host-a", "host-b"),
 			}),
 		},
 		{
-			name: "failed rollback keeps host in prepareFailed state",
+			name: "failed rollback prepared->prepareFailed,prepareFailed->prepareFailed,rolledBack->rolledBack",
 			state: newState(stateSets[string]{
-				prepared:      emptyHosts(),
-				prepareFailed: hosts("host-a"),
+				prepared:      hosts("host-a"),
+				prepareFailed: hosts("host-b"),
 				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
+				rolledBack:    hosts("host-c"),
 			}),
 			args: args{
 				successfulTransitions: nil,
 				failedTransitions: []Transition[string]{
-					RollbackTransition("host-a", transaction.PrepareFailed),
+					RollbackTransition("host-a", transaction.Prepared),
+					RollbackTransition("host-b", transaction.PrepareFailed),
 				},
 			},
 			want: newState(stateSets[string]{
 				prepared:      emptyHosts(),
-				prepareFailed: hosts("host-a"),
+				prepareFailed: hosts("host-a", "host-b"),
 				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
-			}),
-		},
-		{
-			name: "partial prepare — one succeeds one fails",
-			state: State[string]{
-				participantIDs: map[string]struct{}{
-					"host-a": {},
-					"host-b": {},
-				},
-				stateSets: baseStateSets(),
-			},
-			args: args{
-				successfulTransitions: []Transition[string]{
-					PrepareTransition("host-a"),
-				},
-				failedTransitions: []Transition[string]{
-					PrepareTransition("host-b"),
-				},
-			},
-			want: newState(stateSets[string]{
-				prepared:      hosts("host-a"),
-				prepareFailed: hosts("host-b"),
-				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
+				rolledBack:    hosts("host-c"),
 			}),
 		},
 	}
@@ -401,10 +406,10 @@ func Test_state_roundTrip(t *testing.T) {
 	tests := []struct {
 		name            string
 		state           State[string]
-		transitions     []string
 		successfulHosts []string
 		wantFinalState  State[string]
 	}{
+		// ── prepare phase ─────────────────────────────────────────────────────
 		{
 			name: "all not started: prepare succeeds for all → all prepared",
 			state: State[string]{
@@ -413,10 +418,6 @@ func Test_state_roundTrip(t *testing.T) {
 					"host-b": {},
 				},
 				stateSets: baseStateSets(),
-			},
-			transitions: []string{
-				"host-a",
-				"host-b",
 			},
 			successfulHosts: []string{"host-a", "host-b"},
 			wantFinalState: newState(stateSets[string]{
@@ -435,10 +436,6 @@ func Test_state_roundTrip(t *testing.T) {
 				},
 				stateSets: baseStateSets(),
 			},
-			transitions: []string{
-				"host-a",
-				"host-b",
-			},
 			successfulHosts: nil,
 			wantFinalState: newState(stateSets[string]{
 				prepared:      emptyHosts(),
@@ -448,17 +445,13 @@ func Test_state_roundTrip(t *testing.T) {
 			}),
 		},
 		{
-			name: "all not started: prepare succeeds for one fails for other → one prepared one prepareFailed",
+			name: "all not started: prepare succeeds for one fails for the other → one prepared one prepareFailed",
 			state: State[string]{
 				participantIDs: map[string]struct{}{
 					"host-a": {},
 					"host-b": {},
 				},
 				stateSets: baseStateSets(),
-			},
-			transitions: []string{
-				"host-a",
-				"host-b",
 			},
 			successfulHosts: []string{"host-a"},
 			wantFinalState: newState(stateSets[string]{
@@ -468,6 +461,7 @@ func Test_state_roundTrip(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			}),
 		},
+		// ── commit phase ──────────────────────────────────────────────────────
 		{
 			name: "all prepared: commit succeeds for all → all committed",
 			state: newState(stateSets[string]{
@@ -476,10 +470,6 @@ func Test_state_roundTrip(t *testing.T) {
 				committed:     emptyHosts(),
 				rolledBack:    emptyHosts(),
 			}),
-			transitions: []string{
-				"host-a",
-				"host-b",
-			},
 			successfulHosts: []string{"host-a", "host-b"},
 			wantFinalState: newState(stateSets[string]{
 				prepared:      emptyHosts(),
@@ -496,10 +486,6 @@ func Test_state_roundTrip(t *testing.T) {
 				committed:     emptyHosts(),
 				rolledBack:    emptyHosts(),
 			}),
-			transitions: []string{
-				"host-a",
-				"host-b",
-			},
 			successfulHosts: nil,
 			wantFinalState: newState(stateSets[string]{
 				prepared:      hosts("host-a", "host-b"),
@@ -509,42 +495,18 @@ func Test_state_roundTrip(t *testing.T) {
 			}),
 		},
 		{
-			name: "prepareFailed present: rollback succeeds for all → all rolledBack",
+			name: "all prepared: commit fails for one → one remains prepared",
 			state: newState(stateSets[string]{
-				prepared:      hosts("host-a"),
-				prepareFailed: hosts("host-b"),
-				committed:     emptyHosts(),
-				rolledBack:    emptyHosts(),
-			}),
-			transitions: []string{
-				"host-a",
-				"host-b",
-			},
-			successfulHosts: []string{"host-a", "host-b"},
-			wantFinalState: newState(stateSets[string]{
-				prepared:      emptyHosts(),
+				prepared:      hosts("host-a", "host-b"),
 				prepareFailed: emptyHosts(),
 				committed:     emptyHosts(),
-				rolledBack:    hosts("host-a", "host-b"),
-			}),
-		},
-		{
-			name: "prepareFailed present: rollback fails for all → prepared becomes prepareFailed, prepareFailed stays",
-			state: newState(stateSets[string]{
-				prepared:      hosts("host-a"),
-				prepareFailed: hosts("host-b"),
-				committed:     emptyHosts(),
 				rolledBack:    emptyHosts(),
 			}),
-			transitions: []string{
-				"host-a",
-				"host-b",
-			},
-			successfulHosts: nil,
+			successfulHosts: []string{"host-a"},
 			wantFinalState: newState(stateSets[string]{
-				prepared:      emptyHosts(),
-				prepareFailed: hosts("host-a", "host-b"),
-				committed:     emptyHosts(),
+				prepared:      hosts("host-b"),
+				prepareFailed: emptyHosts(),
+				committed:     hosts("host-a"),
 				rolledBack:    emptyHosts(),
 			}),
 		},
@@ -556,16 +518,77 @@ func Test_state_roundTrip(t *testing.T) {
 				committed:     hosts("host-a"),
 				rolledBack:    emptyHosts(),
 			}),
-			transitions: []string{
-				"host-a",
-				"host-b",
-			},
 			successfulHosts: []string{"host-b"},
 			wantFinalState: newState(stateSets[string]{
 				prepared:      emptyHosts(),
 				prepareFailed: emptyHosts(),
 				committed:     hosts("host-a", "host-b"),
 				rolledBack:    emptyHosts(),
+			}),
+		},
+		{
+			name: "partial commit already done: commit remaining host fails → remains prepared",
+			state: newState(stateSets[string]{
+				prepared:      hosts("host-b"),
+				prepareFailed: emptyHosts(),
+				committed:     hosts("host-a"),
+				rolledBack:    emptyHosts(),
+			}),
+			successfulHosts: nil,
+			wantFinalState: newState(stateSets[string]{
+				prepared:      hosts("host-b"),
+				prepareFailed: emptyHosts(),
+				committed:     hosts("host-a"),
+				rolledBack:    emptyHosts(),
+			}),
+		},
+		// ── rollback phase ────────────────────────────────────────────────────
+		{
+			name: "prepareFailed present: rollback succeeds for all → all rolledBack",
+			state: newState(stateSets[string]{
+				prepared:      hosts("host-a"),
+				prepareFailed: hosts("host-b"),
+				committed:     emptyHosts(),
+				rolledBack:    emptyHosts(),
+			}),
+			successfulHosts: []string{"host-a", "host-b"},
+			wantFinalState: newState(stateSets[string]{
+				prepared:      emptyHosts(),
+				prepareFailed: emptyHosts(),
+				committed:     emptyHosts(),
+				rolledBack:    hosts("host-a", "host-b"),
+			}),
+		},
+		{
+			name: "prepareFailed present: rollback fails for all → prepared->prepareFailed, prepareFailed->prepareFailed",
+			state: newState(stateSets[string]{
+				prepared:      hosts("host-a"),
+				prepareFailed: hosts("host-b"),
+				committed:     emptyHosts(),
+				rolledBack:    emptyHosts(),
+			}),
+			successfulHosts: nil,
+			wantFinalState: newState(stateSets[string]{
+				prepared:      emptyHosts(),
+				prepareFailed: hosts("host-a", "host-b"),
+				committed:     emptyHosts(),
+				rolledBack:    emptyHosts(),
+			}),
+		},
+		{
+			name: "prepareFailed present: rollback fails for one → prepared->prepareFailed, prepareFailed->rolledBack",
+			state: newState(stateSets[string]{
+				prepared:      hosts("host-a"),
+				prepareFailed: hosts("host-b"),
+				committed:     emptyHosts(),
+				rolledBack:    emptyHosts(),
+			}),
+			successfulHosts: []string{"host-b"},
+			wantFinalState: newState(stateSets[string]{
+				prepared:      emptyHosts(),
+				prepareFailed: hosts("host-a"),
+				committed:     emptyHosts(),
+				rolledBack:    hosts("host-b"),
 			}),
 		},
 		{
@@ -576,16 +599,28 @@ func Test_state_roundTrip(t *testing.T) {
 				committed:     emptyHosts(),
 				rolledBack:    hosts("host-a"),
 			}),
-			transitions: []string{
-				"host-a",
-				"host-b",
-			},
 			successfulHosts: []string{"host-b"},
 			wantFinalState: newState(stateSets[string]{
 				prepared:      emptyHosts(),
 				prepareFailed: emptyHosts(),
 				committed:     emptyHosts(),
 				rolledBack:    hosts("host-a", "host-b"),
+			}),
+		},
+		{
+			name: "partial rollback already done: rollback remaining host fails → stays prepareFailed",
+			state: newState(stateSets[string]{
+				prepared:      emptyHosts(),
+				prepareFailed: hosts("host-b"),
+				committed:     emptyHosts(),
+				rolledBack:    hosts("host-a"),
+			}),
+			successfulHosts: nil,
+			wantFinalState: newState(stateSets[string]{
+				prepared:      emptyHosts(),
+				prepareFailed: hosts("host-b"),
+				committed:     emptyHosts(),
+				rolledBack:    hosts("host-a"),
 			}),
 		},
 	}
