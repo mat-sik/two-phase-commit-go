@@ -2,7 +2,6 @@ package test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -20,9 +19,10 @@ func Test_integration(t *testing.T) {
 	tests := []struct {
 		name          string
 		serverConfigs []serverConfig
-		coord         *twopc.Coordinator[string]
+		txCoordinator *twopc.Coordinator[string]
 		request       twopc.DistributedTransaction[string]
-		wantedErr     error
+		wantErr       bool
+		wantedOutcome twopc.Outcome
 	}{
 		{
 			name: "Simple happy path",
@@ -40,7 +40,7 @@ func Test_integration(t *testing.T) {
 					handler: client.NewNoopHandler(),
 				},
 			},
-			coord: twopc.NewCoordinator(
+			txCoordinator: twopc.NewCoordinator(
 				coordinator.MockTransactionStateChecker{},
 				coordinator.MockStatePersister{},
 				coordinator.NewGRPCClient,
@@ -49,38 +49,39 @@ func Test_integration(t *testing.T) {
 				TransactionID: "tx-1",
 				Transactions: []twopc.Transaction[string]{
 					{
-						ClientID: fmt.Sprintf("localhost:%d", 30050),
-						Payload:  "one",
+						ParticipantID: fmt.Sprintf("localhost:%d", 30050),
+						Payload:       "one",
 					},
 					{
-						ClientID: fmt.Sprintf("localhost:%d", 30051),
-						Payload:  "two",
+						ParticipantID: fmt.Sprintf("localhost:%d", 30051),
+						Payload:       "two",
 					},
 					{
-						ClientID: fmt.Sprintf("localhost:%d", 30052),
-						Payload:  "three",
+						ParticipantID: fmt.Sprintf("localhost:%d", 30052),
+						Payload:       "three",
 					},
 				},
 			},
-			wantedErr: nil,
+			wantErr:       false,
+			wantedOutcome: twopc.OutcomeCommitted,
 		},
 		{
-			name: "One Failing client on prepare, but eventually goes through",
+			name: "Some failing on prepare some other on rollback, but eventually all rollbacks go through",
 			serverConfigs: []serverConfig{
 				{
 					port:    30050,
-					handler: client.NewFailingNoopHandler(3, 0, 0),
+					handler: client.NewFailingNoopHandler(1, 0, 1),
 				},
 				{
 					port:    30051,
-					handler: client.NewNoopHandler(),
+					handler: client.NewFailingNoopHandler(0, 0, 1),
 				},
 				{
 					port:    30052,
-					handler: client.NewNoopHandler(),
+					handler: client.NewFailingNoopHandler(1, 0, 0),
 				},
 			},
-			coord: twopc.NewCoordinator(
+			txCoordinator: twopc.NewCoordinator(
 				coordinator.MockTransactionStateChecker{},
 				coordinator.MockStatePersister{},
 				coordinator.NewGRPCClient,
@@ -89,20 +90,62 @@ func Test_integration(t *testing.T) {
 				TransactionID: "tx-1",
 				Transactions: []twopc.Transaction[string]{
 					{
-						ClientID: fmt.Sprintf("localhost:%d", 30050),
-						Payload:  "one",
+						ParticipantID: fmt.Sprintf("localhost:%d", 30050),
+						Payload:       "one",
 					},
 					{
-						ClientID: fmt.Sprintf("localhost:%d", 30051),
-						Payload:  "two",
+						ParticipantID: fmt.Sprintf("localhost:%d", 30051),
+						Payload:       "two",
 					},
 					{
-						ClientID: fmt.Sprintf("localhost:%d", 30052),
-						Payload:  "three",
+						ParticipantID: fmt.Sprintf("localhost:%d", 30052),
+						Payload:       "three",
 					},
 				},
 			},
-			wantedErr: twopc.ErrRollback,
+			wantErr:       true,
+			wantedOutcome: twopc.OutcomeRolledBack,
+		},
+		{
+			name: "some commits fail, but eventually all commits go through",
+			serverConfigs: []serverConfig{
+				{
+					port:    30050,
+					handler: client.NewFailingNoopHandler(0, 1, 0),
+				},
+				{
+					port:    30051,
+					handler: client.NewFailingNoopHandler(0, 1, 0),
+				},
+				{
+					port:    30052,
+					handler: client.NewFailingNoopHandler(0, 1, 0),
+				},
+			},
+			txCoordinator: twopc.NewCoordinator(
+				coordinator.MockTransactionStateChecker{},
+				coordinator.MockStatePersister{},
+				coordinator.NewGRPCClient,
+			),
+			request: twopc.DistributedTransaction[string]{
+				TransactionID: "tx-1",
+				Transactions: []twopc.Transaction[string]{
+					{
+						ParticipantID: fmt.Sprintf("localhost:%d", 30050),
+						Payload:       "one",
+					},
+					{
+						ParticipantID: fmt.Sprintf("localhost:%d", 30051),
+						Payload:       "two",
+					},
+					{
+						ParticipantID: fmt.Sprintf("localhost:%d", 30052),
+						Payload:       "three",
+					},
+				},
+			},
+			wantErr:       true,
+			wantedOutcome: twopc.OutcomeCommitted,
 		},
 	}
 	for _, tt := range tests {
@@ -112,20 +155,18 @@ func Test_integration(t *testing.T) {
 				t.Fatalf("failed to listen: %v", err)
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			err = tt.coord.Execute(ctx, tt.request)
-
-			if err != nil {
-				if tt.wantedErr == nil {
-					t.Fatal(err)
-				}
-				if !errors.Is(err, tt.wantedErr) {
-					t.Fatalf("expected error %v, got %v", tt.wantedErr, err)
-				}
-			} else if tt.wantedErr != nil {
-				t.Fatalf("expected error %v, but got no err", tt.wantedErr)
+			outcome := tt.txCoordinator.Execute(ctx, tt.request)
+			if tt.wantedOutcome != outcome.Outcome() {
+				t.Fatalf("expected outcome %v, got %v", tt.wantedOutcome, outcome.Outcome())
+			}
+			if tt.wantErr && outcome.Err() == nil {
+				t.Fatalf("expected error")
+			}
+			if !tt.wantErr && outcome.Err() != nil {
+				t.Fatalf("didn't expect error, got %v", outcome.Err())
 			}
 
 			for _, server := range srvBundle.servers {

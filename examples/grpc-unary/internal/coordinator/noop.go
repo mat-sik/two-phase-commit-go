@@ -25,8 +25,9 @@ func (m MockStatePersister) PersistState(_ context.Context, _ string, _ string, 
 
 type MockTransactionStateChecker struct {
 	stateByClientID map[string]twopc.TransactionState
+	err             error
 }
 
-func (m MockTransactionStateChecker) Check(_ string) map[string]twopc.TransactionState {
-	return m.stateByClientID
+func (m MockTransactionStateChecker) Check(_ string) (map[string]twopc.TransactionState, error) {
+	return m.stateByClientID, m.err
 }
