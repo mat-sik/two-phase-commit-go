@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-func Test_integration(t *testing.T) {
+func Test_mock_integration(t *testing.T) {
 	tests := []struct {
 		name          string
 		serverConfigs []serverConfig
