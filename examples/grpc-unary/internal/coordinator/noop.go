@@ -7,17 +7,19 @@ import (
 )
 
 type MockStatePersister struct {
-	err error
+	Err         error
+	ErrCommit   error
+	ErrRollback error
 }
 
 func (m MockStatePersister) PersistState(_ context.Context, _ string, _ string, _ twopc.TransactionState) <-chan twopc.PersistResult {
 	ch := make(chan twopc.PersistResult, 1)
-	if m.err != nil {
-		ch <- twopc.PersistResult{Err: m.err}
+	if m.Err != nil {
+		ch <- twopc.PersistResult{Err: m.Err}
 	} else {
 		ch <- twopc.PersistResult{
-			Commit:   func() error { return nil },
-			Rollback: func() error { return nil },
+			Commit:   func() error { return m.ErrCommit },
+			Rollback: func() error { return m.ErrRollback },
 		}
 	}
 	return ch
