@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/client"
@@ -53,14 +52,7 @@ func TestMain(m *testing.M) {
 }
 
 func Test_sql_integration(t *testing.T) {
-	tests := []struct {
-		name          string
-		serverConfigs []serverConfig
-		txCoordinator *twopc.Coordinator[string]
-		request       twopc.DistributedTransaction[string]
-		wantErr       bool
-		wantedOutcome twopc.Outcome
-	}{
+	tests := []testCase{
 		{
 			name: "simple happy path",
 			serverConfigs: []serverConfig{
@@ -105,39 +97,7 @@ func Test_sql_integration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Cleanup(cleanup)
-
-			srvBundle, err := runServers(tt.serverConfigs)
-			if err != nil {
-				t.Fatalf("failed to start servers: %v", err)
-			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-
-			outcome := tt.txCoordinator.Execute(ctx, tt.request)
-			if tt.wantedOutcome != outcome.Outcome() {
-				t.Fatalf("expected outcome %v, got %v", tt.wantedOutcome, outcome.Outcome())
-			}
-			if tt.wantErr && outcome.Err() == nil {
-				t.Fatalf("expected error")
-			}
-			if !tt.wantErr && outcome.Err() != nil {
-				t.Fatalf("didn't expect error, got %v", outcome.Err())
-			}
-
-			for _, server := range srvBundle.servers {
-				go server.GracefulStop()
-			}
-
-			var errs []error
-			for err = range srvBundle.serverErrsChan {
-				if err != nil {
-					errs = append(errs, err)
-				}
-			}
-			if len(errs) != 0 {
-				t.Errorf("got %d server errors: %v", len(errs), errs)
-			}
+			runTest(t, tt)
 		})
 	}
 }
