@@ -25,7 +25,7 @@ func Test_mock_integration(t *testing.T) {
 		wantedOutcome twopc.Outcome
 	}{
 		{
-			name: "Simple happy path",
+			name: "simple happy path",
 			serverConfigs: []serverConfig{
 				{
 					port:    30050,
