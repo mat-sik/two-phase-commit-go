@@ -29,7 +29,7 @@ func Test_mock_integration(t *testing.T) {
 				coordinator.NewGRPCClient,
 			),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-1",
+				transactionID: "tx-mock-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -67,7 +67,7 @@ func Test_mock_integration(t *testing.T) {
 				coordinator.NewGRPCClient,
 			),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-1",
+				transactionID: "tx-mock-2",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -105,7 +105,7 @@ func Test_mock_integration(t *testing.T) {
 				coordinator.NewGRPCClient,
 			),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-1",
+				transactionID: "tx-mock-3",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -127,6 +127,7 @@ func Test_mock_integration(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			runTest(t, tt)
 		})
 	}

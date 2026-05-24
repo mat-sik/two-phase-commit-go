@@ -71,7 +71,7 @@ func Test_sql_integration(t *testing.T) {
 				coordinator.NewGRPCClient,
 			),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-1",
+				transactionID: "tx-psql-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -93,6 +93,7 @@ func Test_sql_integration(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			t.Cleanup(cleanup)
 			runTest(t, tt)
 		})
