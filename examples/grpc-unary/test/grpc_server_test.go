@@ -1,7 +1,6 @@
 package test
 
 import (
-	"fmt"
 	"net"
 	"sync"
 
@@ -12,8 +11,8 @@ import (
 
 func runServers(requests []serverConfig) (serverBundle, error) {
 	listeners := make([]net.Listener, 0, len(requests))
-	for _, req := range requests {
-		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", req.port))
+	for range requests {
+		lis, err := net.Listen("tcp", ":0")
 		if err != nil {
 			return serverBundle{}, err
 		}
@@ -25,11 +24,17 @@ func runServers(requests []serverConfig) (serverBundle, error) {
 
 	serverErrsChan := make(chan error, len(requests))
 
-	servers := make([]*grpc.Server, 0, len(requests))
+	servers := make([]testServer, 0, len(requests))
 	for i, lis := range listeners {
 		server := newServer(requests[i].handler)
 		go runServer(&wg, serverErrsChan, lis, server)
-		servers = append(servers, server)
+
+		randomAddress := lis.Addr().String()
+
+		servers = append(servers, testServer{
+			grpcServer: server,
+			address:    randomAddress,
+		})
 	}
 
 	go func() {
@@ -41,13 +46,25 @@ func runServers(requests []serverConfig) (serverBundle, error) {
 }
 
 type serverConfig struct {
-	port    int
 	handler *client.Handler
 }
 
 type serverBundle struct {
-	servers        []*grpc.Server
+	servers        []testServer
 	serverErrsChan <-chan error
+}
+
+func (sb serverBundle) addresses() []string {
+	addresses := make([]string, 0, len(sb.servers))
+	for _, srv := range sb.servers {
+		addresses = append(addresses, srv.address)
+	}
+	return addresses
+}
+
+type testServer struct {
+	grpcServer *grpc.Server
+	address    string
 }
 
 func newServer(handler *client.Handler) *grpc.Server {

@@ -2,7 +2,6 @@ package test
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"testing"
 
@@ -57,14 +56,12 @@ func Test_sql_integration(t *testing.T) {
 			name: "simple happy path",
 			serverConfigs: []serverConfig{
 				{
-					port:    30050,
 					handler: client.NewNoopHandler(),
 				},
 				{
-					port: 30051, handler: client.NewNoopHandler(),
+					handler: client.NewNoopHandler(),
 				},
 				{
-					port:    30052,
 					handler: client.NewNoopHandler(),
 				},
 			},
@@ -73,20 +70,20 @@ func Test_sql_integration(t *testing.T) {
 				coordinator.SqlStatePersister{Pool: pool},
 				coordinator.NewGRPCClient,
 			),
-			request: twopc.DistributedTransaction[string]{
-				TransactionID: "tx-1",
-				Transactions: []twopc.Transaction[string]{
+			distributedTransaction: distributedTransaction{
+				transactionID: "tx-1",
+				transactions: []transaction{
 					{
-						ParticipantID: fmt.Sprintf("localhost:%d", 30050),
-						Payload:       "one",
+						participantNumber: 0,
+						payload:           "one",
 					},
 					{
-						ParticipantID: fmt.Sprintf("localhost:%d", 30051),
-						Payload:       "two",
+						participantNumber: 1,
+						payload:           "two",
 					},
 					{
-						ParticipantID: fmt.Sprintf("localhost:%d", 30052),
-						Payload:       "three",
+						participantNumber: 2,
+						payload:           "three",
 					},
 				},
 			},

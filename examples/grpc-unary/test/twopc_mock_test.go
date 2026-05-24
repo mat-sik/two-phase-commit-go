@@ -1,7 +1,6 @@
 package test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/client"
@@ -15,15 +14,12 @@ func Test_mock_integration(t *testing.T) {
 			name: "simple happy path",
 			serverConfigs: []serverConfig{
 				{
-					port:    30050,
 					handler: client.NewNoopHandler(),
 				},
 				{
-					port:    30051,
 					handler: client.NewNoopHandler(),
 				},
 				{
-					port:    30052,
 					handler: client.NewNoopHandler(),
 				},
 			},
@@ -32,20 +28,20 @@ func Test_mock_integration(t *testing.T) {
 				coordinator.MockStatePersister{},
 				coordinator.NewGRPCClient,
 			),
-			request: twopc.DistributedTransaction[string]{
-				TransactionID: "tx-1",
-				Transactions: []twopc.Transaction[string]{
+			distributedTransaction: distributedTransaction{
+				transactionID: "tx-1",
+				transactions: []transaction{
 					{
-						ParticipantID: fmt.Sprintf("localhost:%d", 30050),
-						Payload:       "one",
+						participantNumber: 0,
+						payload:           "one",
 					},
 					{
-						ParticipantID: fmt.Sprintf("localhost:%d", 30051),
-						Payload:       "two",
+						participantNumber: 1,
+						payload:           "two",
 					},
 					{
-						ParticipantID: fmt.Sprintf("localhost:%d", 30052),
-						Payload:       "three",
+						participantNumber: 2,
+						payload:           "three",
 					},
 				},
 			},
@@ -56,15 +52,12 @@ func Test_mock_integration(t *testing.T) {
 			name: "Some failing on prepare some other on rollback, but eventually all rollbacks go through",
 			serverConfigs: []serverConfig{
 				{
-					port:    30050,
 					handler: client.NewFailingNoopHandler(1, 0, 1),
 				},
 				{
-					port:    30051,
 					handler: client.NewFailingNoopHandler(0, 0, 1),
 				},
 				{
-					port:    30052,
 					handler: client.NewFailingNoopHandler(1, 0, 0),
 				},
 			},
@@ -73,20 +66,20 @@ func Test_mock_integration(t *testing.T) {
 				coordinator.MockStatePersister{},
 				coordinator.NewGRPCClient,
 			),
-			request: twopc.DistributedTransaction[string]{
-				TransactionID: "tx-1",
-				Transactions: []twopc.Transaction[string]{
+			distributedTransaction: distributedTransaction{
+				transactionID: "tx-1",
+				transactions: []transaction{
 					{
-						ParticipantID: fmt.Sprintf("localhost:%d", 30050),
-						Payload:       "one",
+						participantNumber: 0,
+						payload:           "one",
 					},
 					{
-						ParticipantID: fmt.Sprintf("localhost:%d", 30051),
-						Payload:       "two",
+						participantNumber: 1,
+						payload:           "two",
 					},
 					{
-						ParticipantID: fmt.Sprintf("localhost:%d", 30052),
-						Payload:       "three",
+						participantNumber: 2,
+						payload:           "three",
 					},
 				},
 			},
@@ -97,15 +90,12 @@ func Test_mock_integration(t *testing.T) {
 			name: "some commits fail, but eventually all commits go through",
 			serverConfigs: []serverConfig{
 				{
-					port:    30050,
 					handler: client.NewFailingNoopHandler(0, 1, 0),
 				},
 				{
-					port:    30051,
 					handler: client.NewFailingNoopHandler(0, 1, 0),
 				},
 				{
-					port:    30052,
 					handler: client.NewFailingNoopHandler(0, 1, 0),
 				},
 			},
@@ -114,20 +104,20 @@ func Test_mock_integration(t *testing.T) {
 				coordinator.MockStatePersister{},
 				coordinator.NewGRPCClient,
 			),
-			request: twopc.DistributedTransaction[string]{
-				TransactionID: "tx-1",
-				Transactions: []twopc.Transaction[string]{
+			distributedTransaction: distributedTransaction{
+				transactionID: "tx-1",
+				transactions: []transaction{
 					{
-						ParticipantID: fmt.Sprintf("localhost:%d", 30050),
-						Payload:       "one",
+						participantNumber: 0,
+						payload:           "one",
 					},
 					{
-						ParticipantID: fmt.Sprintf("localhost:%d", 30051),
-						Payload:       "two",
+						participantNumber: 1,
+						payload:           "two",
 					},
 					{
-						ParticipantID: fmt.Sprintf("localhost:%d", 30052),
-						Payload:       "three",
+						participantNumber: 2,
+						payload:           "three",
 					},
 				},
 			},
