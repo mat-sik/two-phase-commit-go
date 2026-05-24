@@ -9,8 +9,42 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
+type SqlTransactionStateChecker struct {
+	Pool *pgxpool.Pool
+}
+
+const fetchTransactionStatesQuery = `
+	SELECT participant_id, state
+	FROM transaction_states
+	WHERE transaction_id = $1
+`
+
+func (s SqlTransactionStateChecker) Check(transactionID string) (map[string]twopc.TransactionState, error) {
+	ctx := context.TODO()
+
+	rows, err := s.Pool.Query(ctx, fetchTransactionStatesQuery, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	states := make(map[string]twopc.TransactionState)
+	for rows.Next() {
+		var participantID string
+		var txState twopc.TransactionState
+		if err = rows.Scan(&participantID, &txState); err != nil {
+			return nil, err
+		}
+		states[participantID] = txState
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return states, nil
+}
+
 type SqlStatePersister struct {
-	pool *pgxpool.Pool
+	Pool *pgxpool.Pool
 }
 
 const persistStateQuery = `
@@ -29,7 +63,7 @@ func (s SqlStatePersister) PersistState(
 	resultCh := make(chan twopc.PersistResult, 1)
 
 	go func() {
-		tx, err := s.pool.Begin(ctx)
+		tx, err := s.Pool.Begin(ctx)
 		if err != nil {
 			resultCh <- twopc.PersistResult{
 				Err: err,
