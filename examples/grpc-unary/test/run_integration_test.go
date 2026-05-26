@@ -74,17 +74,21 @@ func runTest(t *testing.T, tt testCase) {
 		t.Fatalf("didn't expect error, got %v", outcome.Err())
 	}
 
+	errs := shutdownServerBundle(srvBundle)
+	if len(errs) != 0 {
+		t.Errorf("got %d server errors: %v", len(errs), errs)
+	}
+}
+
+func shutdownServerBundle(srvBundle serverBundle) []error {
 	for _, server := range srvBundle.servers {
 		go server.grpcServer.GracefulStop()
 	}
-
 	var errs []error
-	for err = range srvBundle.serverErrsChan {
+	for err := range srvBundle.serverErrsChan {
 		if err != nil {
 			errs = append(errs, err)
 		}
 	}
-	if len(errs) != 0 {
-		t.Errorf("got %d server errors: %v", len(errs), errs)
-	}
+	return errs
 }
