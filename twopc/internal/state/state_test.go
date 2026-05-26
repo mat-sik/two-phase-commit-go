@@ -213,6 +213,7 @@ func Test_state_nextState(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			s := tt.state
 
 			s.NextState(tt.args.successfulTransitions, tt.args.failedTransitions)
