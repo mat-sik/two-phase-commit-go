@@ -11,7 +11,7 @@ import (
 // state of a distributed transaction, typically on startup after a crash.
 // The returned map associates each participant ID with its last known state.
 type TransactionStateChecker[ID comparable] interface {
-	Check(transactionID string) (map[ID]TransactionState, error)
+	Check(ctx context.Context, transactionID string) (map[ID]TransactionState, error)
 }
 
 // TransactionState represents the lifecycle state of a single participant's
@@ -54,8 +54,8 @@ type internalTransactionStateCheckerAdapter[ID comparable] struct {
 	transactionStateChecker TransactionStateChecker[ID]
 }
 
-func (sc internalTransactionStateCheckerAdapter[ID]) Check(txID string) (map[ID]transaction.State, error) {
-	transactionStates, err := sc.transactionStateChecker.Check(txID)
+func (sc internalTransactionStateCheckerAdapter[ID]) Check(ctx context.Context, txID string) (map[ID]transaction.State, error) {
+	transactionStates, err := sc.transactionStateChecker.Check(ctx, txID)
 	if err != nil {
 		return nil, err
 	}

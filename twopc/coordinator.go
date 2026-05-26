@@ -55,7 +55,7 @@ func NewCoordinator[ID comparable](
 // Errors from individual participants are accumulated and returned as a single joined
 // error. A nil return means all participants reached a terminal committed state successfully.
 func (oh Coordinator[ID]) Execute(ctx context.Context, distributedTransaction DistributedTransaction[ID]) Result {
-	initialState, err := oh.stateLoader.LoadState(distributedTransaction.TransactionID, participantIDs(distributedTransaction.Transactions))
+	initialState, err := oh.stateLoader.LoadState(ctx, distributedTransaction.TransactionID, participantIDs(distributedTransaction.Transactions))
 	if err != nil {
 		return Result{
 			err:     err,

@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -8,7 +9,7 @@ import (
 )
 
 type TransactionStateChecker[ID comparable] interface {
-	Check(transactionID string) (map[ID]transaction.State, error)
+	Check(ctx context.Context, transactionID string) (map[ID]transaction.State, error)
 }
 
 type Loader[ID comparable] struct {
@@ -21,7 +22,7 @@ func NewLoader[ID comparable](transactionStateChecker TransactionStateChecker[ID
 	}
 }
 
-func (sl Loader[ID]) LoadState(transactionID string, participantIDs []ID) (State[ID], error) {
+func (sl Loader[ID]) LoadState(ctx context.Context, transactionID string, participantIDs []ID) (State[ID], error) {
 	if len(participantIDs) == 0 {
 		return State[ID]{}, errors.New("participantIDs cannot be empty")
 	}
@@ -33,7 +34,7 @@ func (sl Loader[ID]) LoadState(transactionID string, participantIDs []ID) (State
 		rolledBack:    make(stateSet[ID]),
 	}
 
-	stateByParticipantID, err := sl.transactionStateChecker.Check(transactionID)
+	stateByParticipantID, err := sl.transactionStateChecker.Check(ctx, transactionID)
 	if err != nil {
 		return State[ID]{}, err
 	}

@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -222,7 +223,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 			sl := Loader[string]{
 				transactionStateChecker: tt.fields.transactionStateChecker,
 			}
-			got, err := sl.LoadState(tt.args.transactionID, tt.args.participantIDs)
+			got, err := sl.LoadState(context.Background(), tt.args.transactionID, tt.args.participantIDs)
 			if errors.Is(tt.wantErr, errAny) && err == nil {
 				t.Errorf("LoadState() expected err, but got no err")
 			}
@@ -240,6 +241,6 @@ type mockTransactionStateChecker struct {
 	err                  error
 }
 
-func (m mockTransactionStateChecker) Check(_ string) (map[string]transaction.State, error) {
+func (m mockTransactionStateChecker) Check(_ context.Context, _ string) (map[string]transaction.State, error) {
 	return m.stateByParticipantID, m.err
 }

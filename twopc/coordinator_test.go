@@ -477,7 +477,7 @@ type mockTransactionStateChecker struct {
 	err                  error
 }
 
-func (m mockTransactionStateChecker) Check(_ string) (map[string]TransactionState, error) {
+func (m mockTransactionStateChecker) Check(_ context.Context, _ string) (map[string]TransactionState, error) {
 	return m.stateByParticipantID, m.err
 }
 
