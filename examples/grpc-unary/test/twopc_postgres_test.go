@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/client"
@@ -98,6 +99,75 @@ func Test_sql_integration(t *testing.T) {
 			runTest(t, tt)
 		})
 	}
+}
+
+func Test_eventual_consistency(t *testing.T) {
+	t.Run("first coordinator doesn't finish, second does", func(t *testing.T) {
+		t.Parallel()
+
+		txCoordinator := twopc.NewCoordinator(
+			coordinator.SqlTransactionStateChecker{Pool: pool},
+			coordinator.SqlStatePersister{Pool: pool},
+			coordinator.NewGRPCClient,
+		)
+
+		tx := distributedTransaction{
+			transactionID: "tx-psql-1",
+			transactions: []transaction{
+				{
+					participantNumber: 0,
+					payload:           "one",
+				},
+				{
+					participantNumber: 1,
+					payload:           "two",
+				},
+				{
+					participantNumber: 2,
+					payload:           "three",
+				},
+			},
+		}
+
+		srvConfig := []serverConfig{
+			{
+				handler: client.NewNoopHandler(),
+			},
+			{
+				handler: client.NewNoopHandler(),
+			},
+			{
+				handler: client.NewFailingNoopHandler(0, 30, 0),
+			},
+		}
+
+		srvBundle, err := runServers(srvConfig)
+		if err != nil {
+			t.Fatalf("failed to start servers: %v", err)
+		}
+
+		testCtx, testCancel := context.WithTimeout(context.Background(), 1*time.Minute)
+		defer testCancel()
+		for {
+			if err = testCtx.Err(); err != nil {
+				t.Fatalf("failed to eventually finish in committed state, err: %v", err)
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+			addresses := srvBundle.addresses()
+			outcome := txCoordinator.Execute(ctx, tx.toTwopc(addresses))
+			cancel()
+			if outcome.Outcome() == twopc.OutcomeCommitted {
+				break
+			}
+		}
+
+		errs := shutdownServerBundle(srvBundle)
+		if len(errs) != 0 {
+			t.Errorf("got %d server errors: %v", len(errs), errs)
+		}
+	})
 }
 
 func cleanup() {
