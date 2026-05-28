@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"time"
 
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/participant"
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/retry"
@@ -18,6 +17,7 @@ import (
 //
 // ID is the type used to uniquely identify each participant client.
 type Coordinator[ID comparable] struct {
+	config                    config
 	stateLoader               state.Loader[ID]
 	transactionStatePersister transactionStatePersister[ID]
 	participantRegistrar      participant.Registrar[ID]
@@ -40,8 +40,10 @@ func NewCoordinator[ID comparable](
 	transactionStateChecker TransactionStateChecker[ID],
 	transactionStatePersister TransactionStatePersister[ID],
 	newClientFunc func(participantID ID) (Client, error),
+	opts ...Option,
 ) *Coordinator[ID] {
 	return &Coordinator[ID]{
+		config:                    newConfig(opts...),
 		stateLoader:               state.NewLoader(internalTransactionStateCheckerAdapter[ID]{transactionStateChecker: transactionStateChecker}),
 		transactionStatePersister: internalStatePersisterAdapter[ID]{transactionStatePersister: transactionStatePersister},
 		participantRegistrar:      participant.NewRegistrar[ID](adaptForInternal(newClientFunc)),
@@ -284,7 +286,7 @@ func (oh Coordinator[ID]) runOperation(ctx context.Context, txID string, op oper
 
 	operationDoneCh := oh.sendOperation(ctx, txID, op)
 
-	ctx, persistCancel := context.WithTimeout(ctx, persistStateTimeout)
+	ctx, persistCancel := context.WithTimeout(ctx, oh.config.persistStateTimeout)
 	defer persistCancel()
 	persistResultCh := oh.transactionStatePersister.PersistState(ctx, txID, op.participantID, op.targetState)
 
@@ -309,8 +311,6 @@ func (oh Coordinator[ID]) runOperation(ctx context.Context, txID string, op oper
 	return result.Commit()
 }
 
-const persistStateTimeout = 5 * time.Second
-
 func (oh Coordinator[ID]) sendOperation(ctx context.Context, txID string, op operation[ID]) <-chan error {
 	operationDoneCh := make(chan error)
 
@@ -325,7 +325,7 @@ func (oh Coordinator[ID]) sendOperation(ctx context.Context, txID string, op ope
 
 func (oh Coordinator[ID]) withBackoff(ctx context.Context, participantID ID, workFunc func() error) error {
 	if attempt := oh.participantFailureCounter.Attempt(participantID); attempt > 0 {
-		backoffWait(ctx, attempt)
+		backoffWait(ctx, oh.config, attempt)
 	}
 	err := workFunc()
 	if err != nil {
@@ -336,13 +336,13 @@ func (oh Coordinator[ID]) withBackoff(ctx context.Context, participantID ID, wor
 	return err
 }
 
-func backoffWait(ctx context.Context, attempt int) {
-	backoff := retry.NewBackoff(time.Second, time.Second, 2)
+func backoffWait(ctx context.Context, cfg config, attempt int) {
+	backoff := retry.NewBackoff(cfg.backoffBase, cfg.backoffMax, cfg.backoffFactor)
 	backoff.Wait(ctx, attempt)
 }
 
 func (oh Coordinator[ID]) _sendOperation(ctx context.Context, txID string, op operation[ID]) error {
-	ctx, cancel := context.WithTimeout(ctx, sendOperationTimeout)
+	ctx, cancel := context.WithTimeout(ctx, oh.config.sendOperationTimeout)
 	defer cancel()
 
 	c, err := oh.participantRegistrar.GetClient(op.participantID)
@@ -360,8 +360,6 @@ func (oh Coordinator[ID]) _sendOperation(ctx context.Context, txID string, op op
 		panic("unknown operation type")
 	}
 }
-
-const sendOperationTimeout = 5 * time.Second
 
 type operation[ID comparable] struct {
 	participantID ID
