@@ -155,16 +155,16 @@ type internalClientAdapter struct {
 	client Client
 }
 
-func (c internalClientAdapter) PrepareTransaction(ctx context.Context, txID string, payload participant.PreparePayload) error {
-	return c.client.PrepareTransaction(ctx, txID, payload)
+func (a internalClientAdapter) PrepareTransaction(ctx context.Context, txID string, payload participant.PreparePayload) error {
+	return a.client.PrepareTransaction(ctx, txID, payload)
 }
 
-func (c internalClientAdapter) CommitTransaction(ctx context.Context, txID string) error {
-	return c.client.CommitTransaction(ctx, txID)
+func (a internalClientAdapter) CommitTransaction(ctx context.Context, txID string) error {
+	return a.client.CommitTransaction(ctx, txID)
 }
 
-func (c internalClientAdapter) RollbackTransaction(ctx context.Context, txID string) error {
-	return c.client.RollbackTransaction(ctx, txID)
+func (a internalClientAdapter) RollbackTransaction(ctx context.Context, txID string) error {
+	return a.client.RollbackTransaction(ctx, txID)
 }
 
 func adaptForInternal[ID comparable](newClientFunc func(participantID ID) (Client, error)) func(participantID ID) (participant.Client, error) {
