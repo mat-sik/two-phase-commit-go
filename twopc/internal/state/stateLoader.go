@@ -22,7 +22,7 @@ func NewLoader[ID comparable](transactionStateChecker TransactionStateChecker[ID
 	}
 }
 
-func (sl Loader[ID]) LoadState(ctx context.Context, transactionID string, participantIDs []ID) (State[ID], error) {
+func (l Loader[ID]) LoadState(ctx context.Context, transactionID string, participantIDs []ID) (State[ID], error) {
 	if len(participantIDs) == 0 {
 		return State[ID]{}, errors.New("participantIDs cannot be empty")
 	}
@@ -34,7 +34,7 @@ func (sl Loader[ID]) LoadState(ctx context.Context, transactionID string, partic
 		rolledBack:    make(stateSet[ID]),
 	}
 
-	stateByParticipantID, err := sl.transactionStateChecker.Check(ctx, transactionID)
+	stateByParticipantID, err := l.transactionStateChecker.Check(ctx, transactionID)
 	if err != nil {
 		return State[ID]{}, err
 	}
