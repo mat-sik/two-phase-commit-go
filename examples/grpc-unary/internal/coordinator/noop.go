@@ -30,6 +30,6 @@ type MockTransactionStateChecker struct {
 	err             error
 }
 
-func (m MockTransactionStateChecker) Check(_ string) (map[string]twopc.TransactionState, error) {
+func (m MockTransactionStateChecker) Check(_ context.Context, _ string) (map[string]twopc.TransactionState, error) {
 	return m.stateByClientID, m.err
 }
