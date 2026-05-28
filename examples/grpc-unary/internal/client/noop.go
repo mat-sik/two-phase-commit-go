@@ -72,11 +72,11 @@ func (n *noopTransactionHandler) prepareTransaction(_ context.Context, transacti
 	if ok {
 		return false, fmt.Errorf("can't prepare transaction, because its status is already %s", status)
 	}
-	n._prepareTransaction(transactionID, body)
+	n.storePrepared(transactionID, body)
 	return true, nil
 }
 
-func (n *noopTransactionHandler) _prepareTransaction(transactionID string, body string) {
+func (n *noopTransactionHandler) storePrepared(transactionID string, body string) {
 	slog.Info("preparing transaction", slog.String("transactionID", transactionID), slog.String("body", body))
 	n.transactionStatusMap.add(transactionID, transactionStatusPrepared)
 	slog.Info("prepared transaction")
@@ -90,19 +90,19 @@ func (n *noopTransactionHandler) commitTransaction(_ context.Context, transactio
 	if !ok {
 		return false, fmt.Errorf("transaction for '%s' not found, can't commit unprepared transaction", transactionID)
 	}
-	if status == transactionStatusCommited {
+	if status == transactionStatusCommitted {
 		return true, nil
 	}
 	if status != transactionStatusPrepared {
 		return false, fmt.Errorf("can't commit %s transaction for '%s'", status, transactionID)
 	}
-	n._commitTransaction(transactionID)
+	n.storeCommitted(transactionID)
 	return true, nil
 }
 
-func (n *noopTransactionHandler) _commitTransaction(transactionID string) {
+func (n *noopTransactionHandler) storeCommitted(transactionID string) {
 	slog.Info("committing transaction", slog.String("transactionID", transactionID))
-	n.transactionStatusMap.add(transactionID, transactionStatusCommited)
+	n.transactionStatusMap.add(transactionID, transactionStatusCommitted)
 	slog.Info("committed transaction")
 }
 
@@ -117,11 +117,11 @@ func (n *noopTransactionHandler) rollbackTransaction(_ context.Context, transact
 	if status != transactionStatusPrepared {
 		return false, fmt.Errorf("can't rollback %s transaction for '%s'", status, transactionID)
 	}
-	n._rollbackTransaction(transactionID)
+	n.storeRolledBack(transactionID)
 	return true, nil
 }
 
-func (n *noopTransactionHandler) _rollbackTransaction(transactionID string) {
+func (n *noopTransactionHandler) storeRolledBack(transactionID string) {
 	slog.Info("rolling back transaction", slog.String("transactionID", transactionID))
 	n.transactionStatusMap.add(transactionID, transactionStatusRolledBacked)
 	slog.Info("rollback transaction")
@@ -149,7 +149,7 @@ type transactionStatus int
 
 const (
 	transactionStatusPrepared transactionStatus = iota
-	transactionStatusCommited
+	transactionStatusCommitted
 	transactionStatusRolledBacked
 )
 
@@ -157,7 +157,7 @@ func (s transactionStatus) String() string {
 	switch s {
 	case transactionStatusPrepared:
 		return "prepared"
-	case transactionStatusCommited:
+	case transactionStatusCommitted:
 		return "committed"
 	case transactionStatusRolledBacked:
 		return "rolled_back"
