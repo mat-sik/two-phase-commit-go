@@ -25,15 +25,15 @@ func NewRegistrar[ID comparable](newClientFunc func(participantID ID) (Client, e
 	}
 }
 
-func (cr *Registrar[ID]) GetClient(participantID ID) (Client, error) {
-	client, ok := cr.store.load(participantID)
+func (r *Registrar[ID]) GetClient(participantID ID) (Client, error) {
+	client, ok := r.store.load(participantID)
 	if !ok {
 		var err error
-		client, err = cr.newClient(participantID)
+		client, err = r.newClient(participantID)
 		if err != nil {
 			return nil, err
 		}
-		cr.store.add(participantID, client)
+		r.store.add(participantID, client)
 	}
 	return client, nil
 }
@@ -42,12 +42,12 @@ type registrarStore[ID comparable] struct {
 	store sync.Map
 }
 
-func (s *registrarStore[ID]) add(id ID, client Client) {
-	s.store.Store(id, client)
+func (rs *registrarStore[ID]) add(id ID, client Client) {
+	rs.store.Store(id, client)
 }
 
-func (s *registrarStore[ID]) load(id ID) (Client, bool) {
-	value, ok := s.store.Load(id)
+func (rs *registrarStore[ID]) load(id ID) (Client, bool) {
+	value, ok := rs.store.Load(id)
 	if !ok {
 		return nil, false
 	}
