@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/participant"
+	"github.com/mat-sik/two-phase-commit-go/twopc/internal/retry"
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/state"
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
 )
@@ -20,6 +21,7 @@ type Coordinator[ID comparable] struct {
 	stateLoader               state.Loader[ID]
 	transactionStatePersister transactionStatePersister[ID]
 	participantRegistrar      participant.Registrar[ID]
+	participantFailureCounter *participant.AttemptCounter[ID]
 }
 
 // NewCoordinator creates a new Coordinator with the provided dependencies.
@@ -43,6 +45,7 @@ func NewCoordinator[ID comparable](
 		stateLoader:               state.NewLoader(internalTransactionStateCheckerAdapter[ID]{transactionStateChecker: transactionStateChecker}),
 		transactionStatePersister: internalStatePersisterAdapter[ID]{transactionStatePersister: transactionStatePersister},
 		participantRegistrar:      participant.NewRegistrar[ID](adaptForInternal(newClientFunc)),
+		participantFailureCounter: participant.NewFailureCounter[ID](),
 	}
 }
 
@@ -312,10 +315,30 @@ func (oh Coordinator[ID]) sendOperation(ctx context.Context, txID string, op ope
 	operationDoneCh := make(chan error)
 
 	go func() {
-		operationDoneCh <- oh._sendOperation(ctx, txID, op)
+		operationDoneCh <- oh.withBackoff(ctx, op.participantID, func() error {
+			return oh._sendOperation(ctx, txID, op)
+		})
 	}()
 
 	return operationDoneCh
+}
+
+func (oh Coordinator[ID]) withBackoff(ctx context.Context, participantID ID, workFunc func() error) error {
+	if attempt := oh.participantFailureCounter.Attempt(participantID); attempt > 0 {
+		backoffWait(ctx, attempt)
+	}
+	err := workFunc()
+	if err != nil {
+		oh.participantFailureCounter.Fail(participantID)
+	} else {
+		oh.participantFailureCounter.Success(participantID)
+	}
+	return err
+}
+
+func backoffWait(ctx context.Context, attempt int) {
+	backoff := retry.NewBackoff(time.Second, time.Second, 2)
+	backoff.Wait(ctx, attempt)
 }
 
 func (oh Coordinator[ID]) _sendOperation(ctx context.Context, txID string, op operation[ID]) error {
