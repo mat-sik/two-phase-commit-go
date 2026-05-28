@@ -91,8 +91,8 @@ type internalStatePersisterAdapter[ID comparable] struct {
 	transactionStatePersister TransactionStatePersister[ID]
 }
 
-func (i internalStatePersisterAdapter[ID]) PersistState(ctx context.Context, txID string, participantID ID, txState transaction.State) <-chan PersistResult {
-	return i.transactionStatePersister.PersistState(ctx, txID, participantID, toExposed(txState))
+func (a internalStatePersisterAdapter[ID]) PersistState(ctx context.Context, txID string, participantID ID, txState transaction.State) <-chan PersistResult {
+	return a.transactionStatePersister.PersistState(ctx, txID, participantID, toExposed(txState))
 }
 
 func toExposed(txState transaction.State) TransactionState {
