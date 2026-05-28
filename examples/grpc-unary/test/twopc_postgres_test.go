@@ -109,6 +109,7 @@ func Test_eventual_consistency(t *testing.T) {
 			coordinator.SqlTransactionStateChecker{Pool: pool},
 			coordinator.SqlStatePersister{Pool: pool},
 			coordinator.NewGRPCClient,
+			twopc.WithBackoffMax(200*time.Millisecond),
 		)
 
 		tx := distributedTransaction{
@@ -131,10 +132,10 @@ func Test_eventual_consistency(t *testing.T) {
 
 		srvConfig := []serverConfig{
 			{
-				handler: client.NewNoopHandler(),
+				handler: client.NewFailingNoopHandler(0, 15, 0),
 			},
 			{
-				handler: client.NewNoopHandler(),
+				handler: client.NewFailingNoopHandler(0, 20, 0),
 			},
 			{
 				handler: client.NewFailingNoopHandler(0, 30, 0),
@@ -146,14 +147,14 @@ func Test_eventual_consistency(t *testing.T) {
 			t.Fatalf("failed to start servers: %v", err)
 		}
 
-		testCtx, testCancel := context.WithTimeout(context.Background(), 1*time.Minute)
+		testCtx, testCancel := context.WithTimeout(t.Context(), 5*time.Second)
 		defer testCancel()
 		for {
 			if err = testCtx.Err(); err != nil {
 				t.Fatalf("failed to eventually finish in committed state, err: %v", err)
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(testCtx, 1*time.Second)
 
 			addresses := srvBundle.addresses()
 			outcome := txCoordinator.Execute(ctx, tx.toTwopc(addresses))
