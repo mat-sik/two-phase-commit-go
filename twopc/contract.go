@@ -54,8 +54,8 @@ type internalTransactionStateCheckerAdapter[ID comparable] struct {
 	transactionStateChecker TransactionStateChecker[ID]
 }
 
-func (sc internalTransactionStateCheckerAdapter[ID]) Check(ctx context.Context, txID string) (map[ID]transaction.State, error) {
-	transactionStates, err := sc.transactionStateChecker.Check(ctx, txID)
+func (a internalTransactionStateCheckerAdapter[ID]) Check(ctx context.Context, txID string) (map[ID]transaction.State, error) {
+	transactionStates, err := a.transactionStateChecker.Check(ctx, txID)
 	if err != nil {
 		return nil, err
 	}
