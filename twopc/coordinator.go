@@ -284,7 +284,7 @@ func (oh Coordinator[ID]) runOperation(ctx context.Context, txID string, op oper
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	operationDoneCh := oh.sendOperation(ctx, txID, op)
+	operationDoneCh := oh.sendOperationConcurrently(ctx, txID, op)
 
 	ctx, persistCancel := context.WithTimeout(ctx, oh.config.persistStateTimeout)
 	defer persistCancel()
@@ -311,12 +311,12 @@ func (oh Coordinator[ID]) runOperation(ctx context.Context, txID string, op oper
 	return result.Commit()
 }
 
-func (oh Coordinator[ID]) sendOperation(ctx context.Context, txID string, op operation[ID]) <-chan error {
+func (oh Coordinator[ID]) sendOperationConcurrently(ctx context.Context, txID string, op operation[ID]) <-chan error {
 	operationDoneCh := make(chan error)
 
 	go func() {
 		operationDoneCh <- oh.withBackoff(ctx, op.participantID, func() error {
-			return oh._sendOperation(ctx, txID, op)
+			return oh.sendOperation(ctx, txID, op)
 		})
 	}()
 
@@ -341,7 +341,7 @@ func backoffWait(ctx context.Context, cfg config, attempt int) {
 	backoff.Wait(ctx, attempt)
 }
 
-func (oh Coordinator[ID]) _sendOperation(ctx context.Context, txID string, op operation[ID]) error {
+func (oh Coordinator[ID]) sendOperation(ctx context.Context, txID string, op operation[ID]) error {
 	ctx, cancel := context.WithTimeout(ctx, oh.config.sendOperationTimeout)
 	defer cancel()
 
