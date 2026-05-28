@@ -59,8 +59,8 @@ func NewCoordinator[ID comparable](
 //
 // Errors from individual participants are accumulated and returned as a single joined
 // error. A nil return means all participants reached a terminal committed state successfully.
-func (oh Coordinator[ID]) Execute(ctx context.Context, distributedTransaction DistributedTransaction[ID]) Result {
-	initialState, err := oh.stateLoader.LoadState(ctx, distributedTransaction.TransactionID, participantIDs(distributedTransaction.Transactions))
+func (c Coordinator[ID]) Execute(ctx context.Context, distributedTransaction DistributedTransaction[ID]) Result {
+	initialState, err := c.stateLoader.LoadState(ctx, distributedTransaction.TransactionID, participantIDs(distributedTransaction.Transactions))
 	if err != nil {
 		return Result{
 			err:     err,
@@ -70,7 +70,7 @@ func (oh Coordinator[ID]) Execute(ctx context.Context, distributedTransaction Di
 
 	initialOperations := toInitialOperations(distributedTransaction.Transactions)
 
-	return oh.runTransactionLoop(ctx, distributedTransaction.TransactionID, initialState, initialOperations)
+	return c.runTransactionLoop(ctx, distributedTransaction.TransactionID, initialState, initialOperations)
 }
 
 func participantIDs[ID comparable](trs []Transaction[ID]) []ID {
@@ -89,7 +89,7 @@ func toInitialOperations[ID comparable](txs []Transaction[ID]) []operation[ID] {
 	return ops
 }
 
-func (oh Coordinator[ID]) runTransactionLoop(
+func (c Coordinator[ID]) runTransactionLoop(
 	ctx context.Context,
 	txID string,
 	state state.State[ID],
@@ -109,7 +109,7 @@ func (oh Coordinator[ID]) runTransactionLoop(
 		ops = nextOperations(state, ops)
 
 		var err error
-		successful, failed, err = oh.executeRound(ctx, txID, ops, successful[:0], failed[:0])
+		successful, failed, err = c.executeRound(ctx, txID, ops, successful[:0], failed[:0])
 
 		if err != nil {
 			allErrs = append(allErrs, err)
@@ -226,13 +226,13 @@ const (
 	OutcomeRolledBack
 )
 
-func (oh Coordinator[ID]) executeRound(
+func (c Coordinator[ID]) executeRound(
 	ctx context.Context,
 	txID string,
 	ops, successful, failed []operation[ID],
 ) ([]operation[ID], []operation[ID], error) {
 	resultCh := make(chan operationResult[ID], len(ops))
-	oh.runOperationsConcurrently(ctx, resultCh, txID, ops)
+	c.runOperationsConcurrently(ctx, resultCh, txID, ops)
 
 	var errs []error
 	for result := range resultCh {
@@ -252,7 +252,7 @@ func (oh Coordinator[ID]) executeRound(
 	return successful, failed, err
 }
 
-func (oh Coordinator[ID]) runOperationsConcurrently(
+func (c Coordinator[ID]) runOperationsConcurrently(
 	ctx context.Context,
 	resultCh chan<- operationResult[ID],
 	txID string,
@@ -264,7 +264,7 @@ func (oh Coordinator[ID]) runOperationsConcurrently(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := oh.runOperation(ctx, txID, op)
+			err := c.runOperation(ctx, txID, op)
 			resultCh <- operationResult[ID]{operationErr: err, operation: op}
 		}()
 	}
@@ -280,15 +280,15 @@ type operationResult[ID comparable] struct {
 	operation    operation[ID]
 }
 
-func (oh Coordinator[ID]) runOperation(ctx context.Context, txID string, op operation[ID]) error {
+func (c Coordinator[ID]) runOperation(ctx context.Context, txID string, op operation[ID]) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	operationDoneCh := oh.sendOperation(ctx, txID, op)
+	operationDoneCh := c.sendOperationConcurrently(ctx, txID, op)
 
-	ctx, persistCancel := context.WithTimeout(ctx, oh.config.persistStateTimeout)
+	ctx, persistCancel := context.WithTimeout(ctx, c.config.persistStateTimeout)
 	defer persistCancel()
-	persistResultCh := oh.transactionStatePersister.PersistState(ctx, txID, op.participantID, op.targetState)
+	persistResultCh := c.transactionStatePersister.PersistState(ctx, txID, op.participantID, op.targetState)
 
 	err := <-operationDoneCh
 	if err != nil {
@@ -311,27 +311,27 @@ func (oh Coordinator[ID]) runOperation(ctx context.Context, txID string, op oper
 	return result.Commit()
 }
 
-func (oh Coordinator[ID]) sendOperation(ctx context.Context, txID string, op operation[ID]) <-chan error {
+func (c Coordinator[ID]) sendOperationConcurrently(ctx context.Context, txID string, op operation[ID]) <-chan error {
 	operationDoneCh := make(chan error)
 
 	go func() {
-		operationDoneCh <- oh.withBackoff(ctx, op.participantID, func() error {
-			return oh._sendOperation(ctx, txID, op)
+		operationDoneCh <- c.withBackoff(ctx, op.participantID, func() error {
+			return c.sendOperation(ctx, txID, op)
 		})
 	}()
 
 	return operationDoneCh
 }
 
-func (oh Coordinator[ID]) withBackoff(ctx context.Context, participantID ID, workFunc func() error) error {
-	if attempt := oh.participantFailureCounter.Attempt(participantID); attempt > 0 {
-		backoffWait(ctx, oh.config, attempt)
+func (c Coordinator[ID]) withBackoff(ctx context.Context, participantID ID, workFunc func() error) error {
+	if attempt := c.participantFailureCounter.Attempt(participantID); attempt > 0 {
+		backoffWait(ctx, c.config, attempt)
 	}
 	err := workFunc()
 	if err != nil {
-		oh.participantFailureCounter.Fail(participantID)
+		c.participantFailureCounter.Fail(participantID)
 	} else {
-		oh.participantFailureCounter.Success(participantID)
+		c.participantFailureCounter.Success(participantID)
 	}
 	return err
 }
@@ -341,21 +341,21 @@ func backoffWait(ctx context.Context, cfg config, attempt int) {
 	backoff.Wait(ctx, attempt)
 }
 
-func (oh Coordinator[ID]) _sendOperation(ctx context.Context, txID string, op operation[ID]) error {
-	ctx, cancel := context.WithTimeout(ctx, oh.config.sendOperationTimeout)
+func (c Coordinator[ID]) sendOperation(ctx context.Context, txID string, op operation[ID]) error {
+	ctx, cancel := context.WithTimeout(ctx, c.config.sendOperationTimeout)
 	defer cancel()
 
-	c, err := oh.participantRegistrar.GetClient(op.participantID)
+	client, err := c.participantRegistrar.GetClient(op.participantID)
 	if err != nil {
 		return err
 	}
 	switch op.targetState {
 	case transaction.Prepared:
-		return c.PrepareTransaction(ctx, txID, op.payload)
+		return client.PrepareTransaction(ctx, txID, op.payload)
 	case transaction.Committed:
-		return c.CommitTransaction(ctx, txID)
+		return client.CommitTransaction(ctx, txID)
 	case transaction.RolledBack:
-		return c.RollbackTransaction(ctx, txID)
+		return client.RollbackTransaction(ctx, txID)
 	default:
 		panic("unknown operation type")
 	}

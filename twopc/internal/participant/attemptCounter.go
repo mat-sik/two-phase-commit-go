@@ -15,19 +15,19 @@ func NewFailureCounter[ID comparable]() *AttemptCounter[ID] {
 	}
 }
 
-func (fc *AttemptCounter[ID]) Fail(participantID ID) {
-	v, _ := fc.store.LoadOrStore(participantID, &atomic.Int64{})
+func (ac *AttemptCounter[ID]) Fail(participantID ID) {
+	v, _ := ac.store.LoadOrStore(participantID, &atomic.Int64{})
 	v.(*atomic.Int64).Add(1)
 }
 
-func (fc *AttemptCounter[ID]) Success(participantID ID) {
-	if v, ok := fc.store.Load(participantID); ok {
+func (ac *AttemptCounter[ID]) Success(participantID ID) {
+	if v, ok := ac.store.Load(participantID); ok {
 		v.(*atomic.Int64).Store(0)
 	}
 }
 
-func (fc *AttemptCounter[ID]) Attempt(participantID ID) int {
-	if v, ok := fc.store.Load(participantID); ok {
+func (ac *AttemptCounter[ID]) Attempt(participantID ID) int {
+	if v, ok := ac.store.Load(participantID); ok {
 		return int(v.(*atomic.Int64).Load())
 	}
 	return 0
