@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type grpcClient struct {
+type gRPCClient struct {
 	client pb.ClientServiceClient
 }
 
@@ -20,22 +20,22 @@ func NewGRPCClient(clientID string) (twopc.Client, error) {
 		return nil, fmt.Errorf("failed to create client for %s: %w", clientID, err)
 	}
 	client := pb.NewClientServiceClient(conn)
-	return grpcClient{client: client}, nil
+	return gRPCClient{client: client}, nil
 }
 
-func (c grpcClient) PrepareTransaction(ctx context.Context, transactionID string, payload twopc.PreparePayload) error {
+func (c gRPCClient) PrepareTransaction(ctx context.Context, transactionID string, payload twopc.PreparePayload) error {
 	req := pb.PrepareTransactionRequest{TransactionId: transactionID, Payload: payload.(string)}
 	_, err := c.client.PrepareTransaction(ctx, &req, grpc.WaitForReady(true))
 	return err
 }
 
-func (c grpcClient) CommitTransaction(ctx context.Context, transactionID string) error {
+func (c gRPCClient) CommitTransaction(ctx context.Context, transactionID string) error {
 	req := pb.CommitTransactionRequest{TransactionId: transactionID}
 	_, err := c.client.CommitTransaction(ctx, &req, grpc.WaitForReady(true))
 	return err
 }
 
-func (c grpcClient) RollbackTransaction(ctx context.Context, transactionID string) error {
+func (c gRPCClient) RollbackTransaction(ctx context.Context, transactionID string) error {
 	req := pb.RollbackTransactionRequest{TransactionId: transactionID}
 	_, err := c.client.RollbackTransaction(ctx, &req, grpc.WaitForReady(true))
 	return err

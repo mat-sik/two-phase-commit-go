@@ -46,7 +46,7 @@ func runServers(requests []serverConfig) (serverBundle, error) {
 }
 
 type serverConfig struct {
-	handler *client.Handler
+	handler *client.GRPCHandler
 }
 
 type serverBundle struct {
@@ -67,7 +67,7 @@ type testServer struct {
 	address    string
 }
 
-func newServer(handler *client.Handler) *grpc.Server {
+func newServer(handler *client.GRPCHandler) *grpc.Server {
 	server := grpc.NewServer()
 	pb.RegisterClientServiceServer(server, handler)
 	return server

@@ -57,13 +57,13 @@ func Test_sql_integration(t *testing.T) {
 			name: "simple happy path",
 			serverConfigs: []serverConfig{
 				{
-					handler: client.NewNoopHandler(),
+					handler: client.NewNoopGRPCHandler(),
 				},
 				{
-					handler: client.NewNoopHandler(),
+					handler: client.NewNoopGRPCHandler(),
 				},
 				{
-					handler: client.NewNoopHandler(),
+					handler: client.NewNoopGRPCHandler(),
 				},
 			},
 			txCoordinator: twopc.NewCoordinator(
@@ -132,13 +132,13 @@ func Test_eventual_consistency(t *testing.T) {
 
 		srvConfig := []serverConfig{
 			{
-				handler: client.NewFailingNoopHandler(0, 15, 0),
+				handler: client.NewFailingNoopGRPCHandler(0, 15, 0),
 			},
 			{
-				handler: client.NewFailingNoopHandler(0, 20, 0),
+				handler: client.NewFailingNoopGRPCHandler(0, 20, 0),
 			},
 			{
-				handler: client.NewFailingNoopHandler(0, 30, 0),
+				handler: client.NewFailingNoopGRPCHandler(0, 30, 0),
 			},
 		}
 

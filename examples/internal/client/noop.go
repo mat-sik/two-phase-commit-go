@@ -8,40 +8,6 @@ import (
 	"sync/atomic"
 )
 
-func NewNoopHandler() *Handler {
-	handler := &noopTransactionHandler{
-		transactionStatusMap:     &transactionStatusMap{},
-		prepareFailUntilAttempt:  atomic.Int64{},
-		commitFailUntilAttempt:   atomic.Int64{},
-		rollbackFailUntilAttempt: atomic.Int64{},
-	}
-	handler.prepareFailUntilAttempt.Store(0)
-	handler.commitFailUntilAttempt.Store(0)
-	handler.rollbackFailUntilAttempt.Store(0)
-	return &Handler{
-		transactionPreparer:   handler,
-		transactionCommiter:   handler,
-		transactionRollbacker: handler,
-	}
-}
-
-func NewFailingNoopHandler(prepareFailUntilAttempt, commitFailUntilAttempt, rollbackFailUntilAttempt int) *Handler {
-	handler := &noopTransactionHandler{
-		transactionStatusMap:     &transactionStatusMap{},
-		prepareFailUntilAttempt:  atomic.Int64{},
-		commitFailUntilAttempt:   atomic.Int64{},
-		rollbackFailUntilAttempt: atomic.Int64{},
-	}
-	handler.prepareFailUntilAttempt.Store(int64(prepareFailUntilAttempt))
-	handler.commitFailUntilAttempt.Store(int64(commitFailUntilAttempt))
-	handler.rollbackFailUntilAttempt.Store(int64(rollbackFailUntilAttempt))
-	return &Handler{
-		transactionPreparer:   handler,
-		transactionCommiter:   handler,
-		transactionRollbacker: handler,
-	}
-}
-
 type noopTransactionHandler struct {
 	transactionStatusMap     *transactionStatusMap
 	prepareFailUntilAttempt  atomic.Int64

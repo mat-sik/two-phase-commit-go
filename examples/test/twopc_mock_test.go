@@ -14,13 +14,13 @@ func Test_mock_integration(t *testing.T) {
 			name: "simple happy path",
 			serverConfigs: []serverConfig{
 				{
-					handler: client.NewNoopHandler(),
+					handler: client.NewNoopGRPCHandler(),
 				},
 				{
-					handler: client.NewNoopHandler(),
+					handler: client.NewNoopGRPCHandler(),
 				},
 				{
-					handler: client.NewNoopHandler(),
+					handler: client.NewNoopGRPCHandler(),
 				},
 			},
 			txCoordinator: twopc.NewCoordinator(
@@ -52,13 +52,13 @@ func Test_mock_integration(t *testing.T) {
 			name: "Some failing on prepare some other on rollback, but eventually all rollbacks go through",
 			serverConfigs: []serverConfig{
 				{
-					handler: client.NewFailingNoopHandler(1, 0, 1),
+					handler: client.NewFailingNoopGRPCHandler(1, 0, 1),
 				},
 				{
-					handler: client.NewFailingNoopHandler(0, 0, 1),
+					handler: client.NewFailingNoopGRPCHandler(0, 0, 1),
 				},
 				{
-					handler: client.NewFailingNoopHandler(1, 0, 0),
+					handler: client.NewFailingNoopGRPCHandler(1, 0, 0),
 				},
 			},
 			txCoordinator: twopc.NewCoordinator(
@@ -90,13 +90,13 @@ func Test_mock_integration(t *testing.T) {
 			name: "some commits fail, but eventually all commits go through",
 			serverConfigs: []serverConfig{
 				{
-					handler: client.NewFailingNoopHandler(0, 1, 0),
+					handler: client.NewFailingNoopGRPCHandler(0, 1, 0),
 				},
 				{
-					handler: client.NewFailingNoopHandler(0, 1, 0),
+					handler: client.NewFailingNoopGRPCHandler(0, 1, 0),
 				},
 				{
-					handler: client.NewFailingNoopHandler(0, 1, 0),
+					handler: client.NewFailingNoopGRPCHandler(0, 1, 0),
 				},
 			},
 			txCoordinator: twopc.NewCoordinator(
