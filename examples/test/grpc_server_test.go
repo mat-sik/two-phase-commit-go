@@ -4,8 +4,8 @@ import (
 	"net"
 	"sync"
 
-	"github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/client"
-	pb "github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/generated/client/v1"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
+	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/client/v1"
 	"google.golang.org/grpc"
 )
 

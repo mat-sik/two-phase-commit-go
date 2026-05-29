@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	pb "github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/generated/client/v1"
+	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/client/v1"
 	"google.golang.org/grpc"
 )
 

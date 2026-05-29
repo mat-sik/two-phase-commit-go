@@ -3,8 +3,8 @@ package test
 import (
 	"testing"
 
-	"github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/client"
-	"github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/coordinator"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 

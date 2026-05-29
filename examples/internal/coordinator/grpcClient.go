@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	pb "github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/generated/client/v1"
+	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/client/v1"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
