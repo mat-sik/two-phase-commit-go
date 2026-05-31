@@ -55,17 +55,11 @@ func Test_sql_integration(t *testing.T) {
 	tests := []testCase{
 		{
 			name: "simple happy path",
-			serverConfigs: []serverConfig{
-				{
-					handler: client.NewNoopGRPCHandler(),
-				},
-				{
-					handler: client.NewNoopGRPCHandler(),
-				},
-				{
-					handler: client.NewNoopGRPCHandler(),
-				},
-			},
+			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
+				client.NewNoopGRPCHandler(),
+				client.NewNoopGRPCHandler(),
+				client.NewNoopGRPCHandler(),
+			}),
 			txCoordinator: twopc.NewCoordinator(
 				coordinator.SqlTransactionStateChecker{Pool: pool},
 				coordinator.SqlStatePersister{Pool: pool},
@@ -130,19 +124,13 @@ func Test_eventual_consistency(t *testing.T) {
 			},
 		}
 
-		srvConfig := []serverConfig{
-			{
-				handler: client.NewFailingNoopGRPCHandler(0, 15, 0),
-			},
-			{
-				handler: client.NewFailingNoopGRPCHandler(0, 20, 0),
-			},
-			{
-				handler: client.NewFailingNoopGRPCHandler(0, 30, 0),
-			},
-		}
+		srvConfig := client.GRPCServerRequests([]*client.GRPCHandler{
+			client.NewFailingNoopGRPCHandler(0, 15, 0),
+			client.NewFailingNoopGRPCHandler(0, 20, 0),
+			client.NewFailingNoopGRPCHandler(0, 30, 0),
+		})
 
-		srvBundle, err := runServers(srvConfig)
+		srvBundle, err := client.RunServers(srvConfig)
 		if err != nil {
 			t.Fatalf("failed to start servers: %v", err)
 		}
@@ -156,7 +144,7 @@ func Test_eventual_consistency(t *testing.T) {
 
 			ctx, cancel := context.WithTimeout(testCtx, 1*time.Second)
 
-			addresses := srvBundle.addresses()
+			addresses := srvBundle.Addresses()
 			outcome := txCoordinator.Execute(ctx, tx.toTwopc(addresses))
 			cancel()
 			if outcome.Outcome() == twopc.OutcomeCommitted {
@@ -164,7 +152,7 @@ func Test_eventual_consistency(t *testing.T) {
 			}
 		}
 
-		errs := shutdownServerBundle(srvBundle)
+		errs := srvBundle.Shutdown()
 		if len(errs) != 0 {
 			t.Errorf("got %d server errors: %v", len(errs), errs)
 		}
