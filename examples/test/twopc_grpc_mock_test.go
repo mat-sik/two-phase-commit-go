@@ -1,19 +1,17 @@
 package test
 
 import (
-	"net/http"
 	"testing"
-	"time"
 
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-func Test_mock_integration(t *testing.T) {
+func Test__grpc_mock_integration(t *testing.T) {
 	tests := []testCase{
 		{
-			name: "simple happy path gRPC",
+			name: "simple happy path",
 			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
 				client.NewNoopGRPCHandler(),
 				client.NewNoopGRPCHandler(),
@@ -38,47 +36,6 @@ func Test_mock_integration(t *testing.T) {
 					{
 						participantNumber: 2,
 						payload:           "three",
-					},
-				},
-			},
-			wantErr:       false,
-			wantedOutcome: twopc.OutcomeCommitted,
-		},
-		{
-			name: "simple happy path REST",
-			runServerRequests: client.RESTServerRequests([]*http.ServeMux{
-				client.NewNoopMux(),
-				client.NewNoopMux(),
-				client.NewNoopMux(),
-			}),
-			txCoordinator: twopc.NewCoordinator(
-				coordinator.MockTransactionStateChecker{},
-				coordinator.MockStatePersister{},
-				coordinator.NewRESTClient,
-			),
-			distributedTransaction: distributedTransaction{
-				transactionID: "tx-rest-mock-1",
-				transactions: []transaction{
-					{
-						participantNumber: 0,
-						payload: coordinator.RESTPreparePayload{
-							Payload:   "one",
-							CreatedAt: time.Now(),
-						},
-					},
-					{
-						participantNumber: 1,
-						payload: coordinator.RESTPreparePayload{
-							Payload:   "two",
-							CreatedAt: time.Now(),
-						},
-					},
-					{
-						participantNumber: 2,
-						payload: coordinator.RESTPreparePayload{
-							Payload:   "three",
-							CreatedAt: time.Now(),
-						},
 					},
 				},
 			},
