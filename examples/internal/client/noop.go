@@ -22,17 +22,20 @@ func (n *noopTransactionHandler) shouldFail(counter *atomic.Int64) bool {
 			return false
 		}
 		if counter.CompareAndSwap(current, current-1) {
+			slog.Info("synthetic fail", "remaining fails", current-1)
 			return true
 		}
 	}
 }
 
 func (n *noopTransactionHandler) prepareTransaction(_ context.Context, transactionID string, body string) (bool, error) {
+	slog.Info("prepareTransaction called", "transactionID", transactionID, "body", body)
 	if n.shouldFail(&n.prepareFailUntilAttempt) {
 		return false, errSimulatedFailure
 	}
 	status, ok := n.transactionStatusMap.load(transactionID)
 	if ok && status == transactionStatusPrepared {
+		slog.Info("transaction already prepared")
 		return true, nil
 	}
 	if ok {
@@ -49,6 +52,7 @@ func (n *noopTransactionHandler) storePrepared(transactionID string, body string
 }
 
 func (n *noopTransactionHandler) commitTransaction(_ context.Context, transactionID string) (bool, error) {
+	slog.Info("commitTransaction called", "transactionID", transactionID)
 	if n.shouldFail(&n.commitFailUntilAttempt) {
 		return false, errSimulatedFailure
 	}
@@ -73,6 +77,7 @@ func (n *noopTransactionHandler) storeCommitted(transactionID string) {
 }
 
 func (n *noopTransactionHandler) rollbackTransaction(_ context.Context, transactionID string) (bool, error) {
+	slog.Info("rollbackTransaction called", "transactionID", transactionID)
 	if n.shouldFail(&n.rollbackFailUntilAttempt) {
 		return false, errSimulatedFailure
 	}

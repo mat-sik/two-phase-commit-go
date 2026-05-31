@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"log/slog"
 	"sync/atomic"
 
 	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/client/v1"
@@ -53,7 +52,6 @@ type GRPCHandler struct {
 }
 
 func (h *GRPCHandler) PrepareTransaction(ctx context.Context, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
-	slog.Info("PrepareTransaction called", "request", req)
 	ok, err := h.transactionPreparer.prepareTransaction(ctx, req.GetTransactionId(), req.GetPayload())
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -65,7 +63,6 @@ func (h *GRPCHandler) PrepareTransaction(ctx context.Context, req *pb.PrepareTra
 }
 
 func (h *GRPCHandler) CommitTransaction(ctx context.Context, req *pb.CommitTransactionRequest) (*pb.CommitTransactionResponse, error) {
-	slog.Info("CommitTransaction called", "request", req)
 	ok, err := h.transactionCommiter.commitTransaction(ctx, req.GetTransactionId())
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -77,7 +74,6 @@ func (h *GRPCHandler) CommitTransaction(ctx context.Context, req *pb.CommitTrans
 }
 
 func (h *GRPCHandler) RollbackTransaction(ctx context.Context, req *pb.RollbackTransactionRequest) (*pb.RollbackTransactionResponse, error) {
-	slog.Info("RollbackTransaction called", "request", req)
 	ok, err := h.transactionRollbacker.rollbackTransaction(ctx, req.GetTransactionId())
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
