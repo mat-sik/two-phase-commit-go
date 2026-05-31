@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"testing"
 	"time"
 
@@ -54,7 +55,7 @@ func TestMain(m *testing.M) {
 func Test_sql_integration(t *testing.T) {
 	tests := []testCase{
 		{
-			name: "simple happy path",
+			name: "simple gRPC happy path",
 			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
 				client.NewNoopGRPCHandler(),
 				client.NewNoopGRPCHandler(),
@@ -66,7 +67,7 @@ func Test_sql_integration(t *testing.T) {
 				coordinator.NewGRPCClient,
 			),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-psql-1",
+				transactionID: "tx-grpc-psql-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -79,6 +80,47 @@ func Test_sql_integration(t *testing.T) {
 					{
 						participantNumber: 2,
 						payload:           "three",
+					},
+				},
+			},
+			wantErr:       false,
+			wantedOutcome: twopc.OutcomeCommitted,
+		},
+		{
+			name: "simple REST happy path",
+			runServerRequests: client.RESTServerRequests([]*http.ServeMux{
+				client.NewNoopMux(),
+				client.NewNoopMux(),
+				client.NewNoopMux(),
+			}),
+			txCoordinator: twopc.NewCoordinator(
+				coordinator.SqlTransactionStateChecker{Pool: pool},
+				coordinator.SqlStatePersister{Pool: pool},
+				coordinator.NewRESTClient,
+			),
+			distributedTransaction: distributedTransaction{
+				transactionID: "tx-rest-psql-1",
+				transactions: []transaction{
+					{
+						participantNumber: 0,
+						payload: coordinator.RESTPreparePayload{
+							Payload:   "one",
+							CreatedAt: time.Now(),
+						},
+					},
+					{
+						participantNumber: 1,
+						payload: coordinator.RESTPreparePayload{
+							Payload:   "two",
+							CreatedAt: time.Now(),
+						},
+					},
+					{
+						participantNumber: 2,
+						payload: coordinator.RESTPreparePayload{
+							Payload:   "three",
+							CreatedAt: time.Now(),
+						},
 					},
 				},
 			},
@@ -107,7 +149,7 @@ func Test_eventual_consistency(t *testing.T) {
 		)
 
 		tx := distributedTransaction{
-			transactionID: "tx-psql-1",
+			transactionID: "tx-eventual-consitency-psql-1",
 			transactions: []transaction{
 				{
 					participantNumber: 0,
