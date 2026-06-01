@@ -24,6 +24,20 @@ type Coordinator[ID comparable] struct {
 	participantFailureCounter *participant.AttemptCounter[ID]
 }
 
+// PersistenceConfig aggregates required interfaces for transaction state persistence.
+type PersistenceConfig[ID comparable] struct {
+	TransactionStateChecker   TransactionStateChecker[ID]
+	TransactionStatePersister TransactionStatePersister[ID]
+}
+
+// ClientConfig holds the client construction strategy for participant registration.
+type ClientConfig[ID comparable] struct {
+	// NewClientFunc is called to construct a client for an unknown participant ID.
+	// It may be nil if all participant IDs are covered by Clients map.
+	NewClientFunc func(participantID ID) (Client, error)
+	Clients       map[ID]Client
+}
+
 // NewCoordinator creates a new Coordinator with the provided dependencies.
 //
 // transactionStateChecker is used on startup to recover the current state of
@@ -37,18 +51,28 @@ type Coordinator[ID comparable] struct {
 // newClientFunc is called once per participant ID to construct the gRPC (or
 // other transport) client used to send Prepare, Commit, and Rollback calls.
 func NewCoordinator[ID comparable](
-	transactionStateChecker TransactionStateChecker[ID],
-	transactionStatePersister TransactionStatePersister[ID],
-	newClientFunc func(participantID ID) (Client, error),
+	persistenceConfig PersistenceConfig[ID],
+	clientConfig ClientConfig[ID],
 	opts ...Option,
 ) *Coordinator[ID] {
+	stateChecker := internalTransactionStateCheckerAdapter[ID]{transactionStateChecker: persistenceConfig.TransactionStateChecker}
+	statePersister := internalStatePersisterAdapter[ID]{transactionStatePersister: persistenceConfig.TransactionStatePersister}
 	return &Coordinator[ID]{
 		config:                    newConfig(opts...),
-		stateLoader:               state.NewLoader(internalTransactionStateCheckerAdapter[ID]{transactionStateChecker: transactionStateChecker}),
-		transactionStatePersister: internalStatePersisterAdapter[ID]{transactionStatePersister: transactionStatePersister},
-		participantRegistrar:      participant.NewRegistrar[ID](adaptForInternal(newClientFunc)),
+		stateLoader:               state.NewLoader(stateChecker),
+		transactionStatePersister: statePersister,
+		participantRegistrar:      newParticipantRegistrar(clientConfig),
 		participantFailureCounter: participant.NewFailureCounter[ID](),
 	}
+}
+
+func newParticipantRegistrar[ID comparable](clientConfig ClientConfig[ID]) participant.Registrar[ID] {
+	newClientFunc := adaptForInternal(clientConfig.NewClientFunc)
+	clients := make(map[ID]participant.Client, len(clientConfig.Clients))
+	for participantID, client := range clientConfig.Clients {
+		clients[participantID] = internalClientAdapter{client: client}
+	}
+	return participant.NewRegistrar(newClientFunc, clients)
 }
 
 // Execute runs the two-phase commit protocol for the given distributed transaction.
@@ -60,6 +84,8 @@ func NewCoordinator[ID comparable](
 // Errors from individual participants are accumulated and returned as a single joined
 // error. A nil return means all participants reached a terminal committed state successfully.
 func (c Coordinator[ID]) Execute(ctx context.Context, distributedTransaction DistributedTransaction[ID]) Result {
+	c.assertCorrectConfiguration(participantIDs(distributedTransaction.Transactions))
+
 	initialState, err := c.stateLoader.LoadState(ctx, distributedTransaction.TransactionID, participantIDs(distributedTransaction.Transactions))
 	if err != nil {
 		return Result{
@@ -71,6 +97,15 @@ func (c Coordinator[ID]) Execute(ctx context.Context, distributedTransaction Dis
 	initialOperations := toInitialOperations(distributedTransaction.Transactions)
 
 	return c.runTransactionLoop(ctx, distributedTransaction.TransactionID, initialState, initialOperations)
+}
+
+func (c Coordinator[ID]) assertCorrectConfiguration(participantIDs []ID) {
+	for _, participantID := range participantIDs {
+		_, err := c.participantRegistrar.GetClient(participantID)
+		if errors.Is(err, participant.ErrInvalidClientConfig) {
+			panic(err)
+		}
+	}
 }
 
 func participantIDs[ID comparable](trs []Transaction[ID]) []ID {

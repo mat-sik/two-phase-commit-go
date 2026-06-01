@@ -2,6 +2,7 @@ package participant
 
 import (
 	"context"
+	"fmt"
 	"sync"
 )
 
@@ -18,15 +19,28 @@ type Registrar[ID comparable] struct {
 	newClient func(participantID ID) (Client, error)
 }
 
-func NewRegistrar[ID comparable](newClientFunc func(participantID ID) (Client, error)) Registrar[ID] {
+func NewRegistrar[ID comparable](
+	newClientFunc func(participantID ID) (Client, error),
+	clients map[ID]Client,
+) Registrar[ID] {
 	return Registrar[ID]{
-		store:     &registrarStore[ID]{},
+		store:     newRegistrarStore(clients),
 		newClient: newClientFunc,
 	}
 }
 
+var ErrInvalidClientConfig = fmt.Errorf("invalid coordinator client configuration")
+
 func (r *Registrar[ID]) GetClient(participantID ID) (Client, error) {
 	client, ok := r.store.load(participantID)
+	if !ok && r.newClient == nil {
+		return nil, fmt.Errorf(
+			"%w: newClientFunc is not provided and clients map doesn't contain participantID: %v",
+			ErrInvalidClientConfig,
+			participantID,
+		)
+	}
+
 	if !ok {
 		var err error
 		client, err = r.newClient(participantID)
@@ -40,6 +54,14 @@ func (r *Registrar[ID]) GetClient(participantID ID) (Client, error) {
 
 type registrarStore[ID comparable] struct {
 	store sync.Map
+}
+
+func newRegistrarStore[ID comparable](clients map[ID]Client) *registrarStore[ID] {
+	store := registrarStore[ID]{}
+	for id, client := range clients {
+		store.add(id, client)
+	}
+	return &store
 }
 
 func (rs *registrarStore[ID]) add(id ID, client Client) {
