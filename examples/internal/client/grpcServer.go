@@ -1,8 +1,10 @@
 package client
 
 import (
+	"context"
 	"net"
 	"sync"
+	"sync/atomic"
 
 	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/client/v1"
 	"google.golang.org/grpc"
@@ -13,29 +15,43 @@ func GRPCServerRequests(handlers []*GRPCHandler) []RunServerRequest {
 }
 
 func mapToGRPCServerRequest(handler *GRPCHandler) RunServerRequest {
-	srv := newGRPCServer(handler)
+	var serverPtr atomic.Pointer[grpc.Server]
 	return RunServerRequest{
-		serverRunner:  newGRPCServerRunner(srv),
-		serverStopper: newGRPCServerStopper(srv),
+		serverRunner:  newGRPCServerRunner(handler, &serverPtr),
+		serverStopper: newGRPCServerStopper(&serverPtr),
 	}
 }
 
-func newGRPCServer(handler *GRPCHandler) *grpc.Server {
-	server := grpc.NewServer()
-	pb.RegisterClientServiceServer(server, handler)
-	return server
-}
-
-func newGRPCServerRunner(srv *grpc.Server) ServerRunner {
+func newGRPCServerRunner(handler *GRPCHandler, ref *atomic.Pointer[grpc.Server]) ServerRunner {
 	return func(wg *sync.WaitGroup, errCh chan<- error, lis net.Listener) {
+		srv := newGRPCServer(handler, lis.Addr())
+		ref.Store(srv)
 		runServer(wg, errCh, func() error {
 			return srv.Serve(lis)
 		})
 	}
 }
 
-func newGRPCServerStopper(srv *grpc.Server) ServerStopper {
+func newGRPCServer(handler *GRPCHandler, addr net.Addr) *grpc.Server {
+	server := grpc.NewServer(
+		grpc.UnaryInterceptor(serverAddrInterceptor(addr)),
+	)
+	pb.RegisterClientServiceServer(server, handler)
+	return server
+}
+
+func serverAddrInterceptor(addr net.Addr) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		return handler(contextWithAddress(ctx, addr), req)
+	}
+}
+
+func newGRPCServerStopper(ref *atomic.Pointer[grpc.Server]) ServerStopper {
 	return func() error {
+		srv := ref.Load()
+		if srv == nil {
+			panic("server runner need to run before calling associated server stopper")
+		}
 		srv.GracefulStop()
 		return nil
 	}

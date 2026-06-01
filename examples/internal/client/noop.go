@@ -15,45 +15,32 @@ type noopTransactionHandler struct {
 	rollbackFailUntilAttempt atomic.Int64
 }
 
-func (n *noopTransactionHandler) shouldFail(counter *atomic.Int64) bool {
-	for {
-		current := counter.Load()
-		if current <= 0 {
-			return false
-		}
-		if counter.CompareAndSwap(current, current-1) {
-			slog.Info("synthetic fail", "remaining fails", current-1)
-			return true
-		}
-	}
-}
-
-func (n *noopTransactionHandler) prepareTransaction(_ context.Context, transactionID string, body string) (bool, error) {
-	slog.Info("prepareTransaction called", "transactionID", transactionID, "body", body)
-	if n.shouldFail(&n.prepareFailUntilAttempt) {
+func (n *noopTransactionHandler) prepareTransaction(ctx context.Context, transactionID string, body string) (bool, error) {
+	slog.DebugContext(ctx, "prepareTransaction called", "transactionID", transactionID, "body", body)
+	if n.shouldFail(ctx, &n.prepareFailUntilAttempt) {
 		return false, errSimulatedFailure
 	}
 	status, ok := n.transactionStatusMap.load(transactionID)
 	if ok && status == transactionStatusPrepared {
-		slog.Info("transaction already prepared")
+		slog.DebugContext(ctx, "transaction already prepared")
 		return true, nil
 	}
 	if ok {
 		return false, fmt.Errorf("can't prepare transaction, because its status is already %s", status)
 	}
-	n.storePrepared(transactionID, body)
+	n.storePrepared(ctx, transactionID, body)
 	return true, nil
 }
 
-func (n *noopTransactionHandler) storePrepared(transactionID string, body string) {
-	slog.Info("preparing transaction", slog.String("transactionID", transactionID), slog.String("body", body))
+func (n *noopTransactionHandler) storePrepared(ctx context.Context, transactionID string, body string) {
+	slog.DebugContext(ctx, "preparing transaction", slog.String("transactionID", transactionID), slog.String("body", body))
 	n.transactionStatusMap.add(transactionID, transactionStatusPrepared)
-	slog.Info("prepared transaction")
+	slog.DebugContext(ctx, "prepared transaction")
 }
 
-func (n *noopTransactionHandler) commitTransaction(_ context.Context, transactionID string) (bool, error) {
-	slog.Info("commitTransaction called", "transactionID", transactionID)
-	if n.shouldFail(&n.commitFailUntilAttempt) {
+func (n *noopTransactionHandler) commitTransaction(ctx context.Context, transactionID string) (bool, error) {
+	slog.DebugContext(ctx, "commitTransaction called", "transactionID", transactionID)
+	if n.shouldFail(ctx, &n.commitFailUntilAttempt) {
 		return false, errSimulatedFailure
 	}
 	status, ok := n.transactionStatusMap.load(transactionID)
@@ -66,19 +53,19 @@ func (n *noopTransactionHandler) commitTransaction(_ context.Context, transactio
 	if status != transactionStatusPrepared {
 		return false, fmt.Errorf("can't commit %s transaction for '%s'", status, transactionID)
 	}
-	n.storeCommitted(transactionID)
+	n.storeCommitted(ctx, transactionID)
 	return true, nil
 }
 
-func (n *noopTransactionHandler) storeCommitted(transactionID string) {
-	slog.Info("committing transaction", slog.String("transactionID", transactionID))
+func (n *noopTransactionHandler) storeCommitted(ctx context.Context, transactionID string) {
+	slog.DebugContext(ctx, "committing transaction", slog.String("transactionID", transactionID))
 	n.transactionStatusMap.add(transactionID, transactionStatusCommitted)
-	slog.Info("committed transaction")
+	slog.DebugContext(ctx, "committed transaction")
 }
 
-func (n *noopTransactionHandler) rollbackTransaction(_ context.Context, transactionID string) (bool, error) {
-	slog.Info("rollbackTransaction called", "transactionID", transactionID)
-	if n.shouldFail(&n.rollbackFailUntilAttempt) {
+func (n *noopTransactionHandler) rollbackTransaction(ctx context.Context, transactionID string) (bool, error) {
+	slog.DebugContext(ctx, "rollbackTransaction called", "transactionID", transactionID)
+	if n.shouldFail(ctx, &n.rollbackFailUntilAttempt) {
 		return false, errSimulatedFailure
 	}
 	status, ok := n.transactionStatusMap.load(transactionID)
@@ -88,17 +75,30 @@ func (n *noopTransactionHandler) rollbackTransaction(_ context.Context, transact
 	if status != transactionStatusPrepared {
 		return false, fmt.Errorf("can't rollback %s transaction for '%s'", status, transactionID)
 	}
-	n.storeRolledBack(transactionID)
+	n.storeRolledBack(ctx, transactionID)
 	return true, nil
 }
 
-func (n *noopTransactionHandler) storeRolledBack(transactionID string) {
-	slog.Info("rolling back transaction", slog.String("transactionID", transactionID))
-	n.transactionStatusMap.add(transactionID, transactionStatusRolledBacked)
-	slog.Info("rollback transaction")
+func (n *noopTransactionHandler) shouldFail(ctx context.Context, counter *atomic.Int64) bool {
+	for {
+		current := counter.Load()
+		if current <= 0 {
+			return false
+		}
+		if counter.CompareAndSwap(current, current-1) {
+			slog.DebugContext(ctx, "synthetic fail", "remaining fails", current-1)
+			return true
+		}
+	}
 }
 
 var errSimulatedFailure = fmt.Errorf("simulated failure")
+
+func (n *noopTransactionHandler) storeRolledBack(ctx context.Context, transactionID string) {
+	slog.DebugContext(ctx, "rolling back transaction", slog.String("transactionID", transactionID))
+	n.transactionStatusMap.add(transactionID, transactionStatusRolledBacked)
+	slog.DebugContext(ctx, "rollback transaction")
+}
 
 type transactionStatusMap struct {
 	m sync.Map

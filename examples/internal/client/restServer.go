@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"net"
 	"net/http"
@@ -22,6 +23,9 @@ func RunRESTServerRequest(mux *http.ServeMux) RunServerRequest {
 func newRESTServer(mux *http.ServeMux) *http.Server {
 	return &http.Server{
 		Handler: mux,
+		BaseContext: func(l net.Listener) context.Context {
+			return contextWithAddress(context.Background(), l.Addr())
+		},
 	}
 }
 

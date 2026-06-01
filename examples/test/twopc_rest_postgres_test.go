@@ -21,6 +21,8 @@ var pool *pgxpool.Pool
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 
+	client.InitLogger()
+
 	container, err := postgres.Run(ctx,
 		"postgres:17",
 		postgres.WithInitScripts("testdata/schema.sql"),
