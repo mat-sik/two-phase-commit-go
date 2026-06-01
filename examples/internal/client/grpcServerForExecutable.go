@@ -9,11 +9,11 @@ import (
 	"syscall"
 	"time"
 
-	pb "github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/generated/client/v1"
+	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/client/v1"
 	"google.golang.org/grpc"
 )
 
-func RunServer(listener net.Listener, handler *Handler) error {
+func RunServer(listener net.Listener, handler *GRPCHandler) error {
 	s := grpc.NewServer()
 	pb.RegisterClientServiceServer(s, handler)
 

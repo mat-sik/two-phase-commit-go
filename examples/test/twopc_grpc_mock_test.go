@@ -3,33 +3,27 @@ package test
 import (
 	"testing"
 
-	"github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/client"
-	"github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/coordinator"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-func Test_mock_integration(t *testing.T) {
+func Test__grpc_mock_integration(t *testing.T) {
 	tests := []testCase{
 		{
 			name: "simple happy path",
-			serverConfigs: []serverConfig{
-				{
-					handler: client.NewNoopHandler(),
-				},
-				{
-					handler: client.NewNoopHandler(),
-				},
-				{
-					handler: client.NewNoopHandler(),
-				},
-			},
+			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
+				client.NewNoopGRPCHandler(),
+				client.NewNoopGRPCHandler(),
+				client.NewNoopGRPCHandler(),
+			}),
 			txCoordinator: twopc.NewCoordinator(
 				coordinator.MockTransactionStateChecker{},
 				coordinator.MockStatePersister{},
 				coordinator.NewGRPCClient,
 			),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-mock-1",
+				transactionID: "tx-grpc-mock-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -50,24 +44,18 @@ func Test_mock_integration(t *testing.T) {
 		},
 		{
 			name: "Some failing on prepare some other on rollback, but eventually all rollbacks go through",
-			serverConfigs: []serverConfig{
-				{
-					handler: client.NewFailingNoopHandler(1, 0, 1),
-				},
-				{
-					handler: client.NewFailingNoopHandler(0, 0, 1),
-				},
-				{
-					handler: client.NewFailingNoopHandler(1, 0, 0),
-				},
-			},
+			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
+				client.NewFailingNoopGRPCHandler(1, 0, 1),
+				client.NewFailingNoopGRPCHandler(0, 0, 1),
+				client.NewFailingNoopGRPCHandler(1, 0, 0),
+			}),
 			txCoordinator: twopc.NewCoordinator(
 				coordinator.MockTransactionStateChecker{},
 				coordinator.MockStatePersister{},
 				coordinator.NewGRPCClient,
 			),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-mock-2",
+				transactionID: "tx-grpc-mock-2",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -88,24 +76,18 @@ func Test_mock_integration(t *testing.T) {
 		},
 		{
 			name: "some commits fail, but eventually all commits go through",
-			serverConfigs: []serverConfig{
-				{
-					handler: client.NewFailingNoopHandler(0, 1, 0),
-				},
-				{
-					handler: client.NewFailingNoopHandler(0, 1, 0),
-				},
-				{
-					handler: client.NewFailingNoopHandler(0, 1, 0),
-				},
-			},
+			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
+				client.NewFailingNoopGRPCHandler(0, 1, 0),
+				client.NewFailingNoopGRPCHandler(0, 1, 0),
+				client.NewFailingNoopGRPCHandler(0, 1, 0),
+			}),
 			txCoordinator: twopc.NewCoordinator(
 				coordinator.MockTransactionStateChecker{},
 				coordinator.MockStatePersister{},
 				coordinator.NewGRPCClient,
 			),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-mock-3",
+				transactionID: "tx-grpc-mock-3",
 				transactions: []transaction{
 					{
 						participantNumber: 0,

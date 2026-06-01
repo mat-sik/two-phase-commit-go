@@ -3,12 +3,13 @@ package test
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/client"
-	"github.com/mat-sik/two-phase-commit-go/examples/grpc-unary/internal/coordinator"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -19,6 +20,8 @@ var pool *pgxpool.Pool
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
+
+	client.InitLogger()
 
 	container, err := postgres.Run(ctx,
 		"postgres:17",
@@ -54,25 +57,19 @@ func TestMain(m *testing.M) {
 func Test_sql_integration(t *testing.T) {
 	tests := []testCase{
 		{
-			name: "simple happy path",
-			serverConfigs: []serverConfig{
-				{
-					handler: client.NewNoopHandler(),
-				},
-				{
-					handler: client.NewNoopHandler(),
-				},
-				{
-					handler: client.NewNoopHandler(),
-				},
-			},
+			name: "simple gRPC happy path",
+			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
+				client.NewNoopGRPCHandler(),
+				client.NewNoopGRPCHandler(),
+				client.NewNoopGRPCHandler(),
+			}),
 			txCoordinator: twopc.NewCoordinator(
 				coordinator.SqlTransactionStateChecker{Pool: pool},
 				coordinator.SqlStatePersister{Pool: pool},
 				coordinator.NewGRPCClient,
 			),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-psql-1",
+				transactionID: "tx-grpc-psql-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -85,6 +82,47 @@ func Test_sql_integration(t *testing.T) {
 					{
 						participantNumber: 2,
 						payload:           "three",
+					},
+				},
+			},
+			wantErr:       false,
+			wantedOutcome: twopc.OutcomeCommitted,
+		},
+		{
+			name: "simple REST happy path",
+			runServerRequests: client.RESTServerRequests([]*http.ServeMux{
+				client.NewNoopMux(),
+				client.NewNoopMux(),
+				client.NewNoopMux(),
+			}),
+			txCoordinator: twopc.NewCoordinator(
+				coordinator.SqlTransactionStateChecker{Pool: pool},
+				coordinator.SqlStatePersister{Pool: pool},
+				coordinator.NewRESTClient,
+			),
+			distributedTransaction: distributedTransaction{
+				transactionID: "tx-rest-psql-1",
+				transactions: []transaction{
+					{
+						participantNumber: 0,
+						payload: coordinator.RESTPreparePayload{
+							Payload:   "one",
+							CreatedAt: time.Now(),
+						},
+					},
+					{
+						participantNumber: 1,
+						payload: coordinator.RESTPreparePayload{
+							Payload:   "two",
+							CreatedAt: time.Now(),
+						},
+					},
+					{
+						participantNumber: 2,
+						payload: coordinator.RESTPreparePayload{
+							Payload:   "three",
+							CreatedAt: time.Now(),
+						},
 					},
 				},
 			},
@@ -109,10 +147,11 @@ func Test_eventual_consistency(t *testing.T) {
 			coordinator.SqlTransactionStateChecker{Pool: pool},
 			coordinator.SqlStatePersister{Pool: pool},
 			coordinator.NewGRPCClient,
+			twopc.WithBackoffMax(200*time.Millisecond),
 		)
 
 		tx := distributedTransaction{
-			transactionID: "tx-psql-1",
+			transactionID: "tx-eventual-consitency-psql-1",
 			transactions: []transaction{
 				{
 					participantNumber: 0,
@@ -129,33 +168,27 @@ func Test_eventual_consistency(t *testing.T) {
 			},
 		}
 
-		srvConfig := []serverConfig{
-			{
-				handler: client.NewNoopHandler(),
-			},
-			{
-				handler: client.NewNoopHandler(),
-			},
-			{
-				handler: client.NewFailingNoopHandler(0, 30, 0),
-			},
-		}
+		srvConfig := client.GRPCServerRequests([]*client.GRPCHandler{
+			client.NewFailingNoopGRPCHandler(0, 15, 0),
+			client.NewFailingNoopGRPCHandler(0, 20, 0),
+			client.NewFailingNoopGRPCHandler(0, 30, 0),
+		})
 
-		srvBundle, err := runServers(srvConfig)
+		srvBundle, err := client.RunServers(srvConfig)
 		if err != nil {
 			t.Fatalf("failed to start servers: %v", err)
 		}
 
-		testCtx, testCancel := context.WithTimeout(context.Background(), 1*time.Minute)
+		testCtx, testCancel := context.WithTimeout(t.Context(), 5*time.Second)
 		defer testCancel()
 		for {
 			if err = testCtx.Err(); err != nil {
 				t.Fatalf("failed to eventually finish in committed state, err: %v", err)
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(testCtx, 1*time.Second)
 
-			addresses := srvBundle.addresses()
+			addresses := srvBundle.Addresses()
 			outcome := txCoordinator.Execute(ctx, tx.toTwopc(addresses))
 			cancel()
 			if outcome.Outcome() == twopc.OutcomeCommitted {
@@ -163,7 +196,7 @@ func Test_eventual_consistency(t *testing.T) {
 			}
 		}
 
-		errs := shutdownServerBundle(srvBundle)
+		errs := srvBundle.Shutdown()
 		if len(errs) != 0 {
 			t.Errorf("got %d server errors: %v", len(errs), errs)
 		}

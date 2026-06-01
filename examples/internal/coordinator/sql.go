@@ -19,9 +19,7 @@ const fetchTransactionStatesQuery = `
 	WHERE transaction_id = $1
 `
 
-func (s SqlTransactionStateChecker) Check(transactionID string) (map[string]twopc.TransactionState, error) {
-	ctx := context.TODO()
-
+func (s SqlTransactionStateChecker) Check(ctx context.Context, transactionID string) (map[string]twopc.TransactionState, error) {
 	rows, err := s.Pool.Query(ctx, fetchTransactionStatesQuery, transactionID)
 	if err != nil {
 		return nil, err

@@ -1,10 +1,10 @@
-module github.com/mat-sik/two-phase-commit-go/examples/grpc-unary
+module github.com/mat-sik/two-phase-commit-go/examples
 
 go 1.26.2
 
 require (
 	github.com/jackc/pgx/v5 v5.9.2
-	github.com/mat-sik/two-phase-commit-go/twopc v1.0.5
+	github.com/mat-sik/two-phase-commit-go/twopc v1.0.6
 	github.com/testcontainers/testcontainers-go v0.42.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.42.0
 	google.golang.org/grpc v1.81.0

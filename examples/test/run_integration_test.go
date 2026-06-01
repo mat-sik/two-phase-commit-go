@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
@@ -17,7 +18,7 @@ type distributedTransaction struct {
 
 type transaction struct {
 	participantNumber int
-	payload           string
+	payload           twopc.PreparePayload
 }
 
 func (t transaction) toTwopc(addresses []string) twopc.Transaction[string] {
@@ -44,7 +45,7 @@ func (dt distributedTransaction) toTwopc(addresses []string) twopc.DistributedTr
 
 type testCase struct {
 	name                   string
-	serverConfigs          []serverConfig
+	runServerRequests      []client.RunServerRequest
 	txCoordinator          *twopc.Coordinator[string]
 	distributedTransaction distributedTransaction
 	wantErr                bool
@@ -54,7 +55,7 @@ type testCase struct {
 func runTest(t *testing.T, tt testCase) {
 	t.Helper()
 
-	srvBundle, err := runServers(tt.serverConfigs)
+	srvBundle, err := client.RunServers(tt.runServerRequests)
 	if err != nil {
 		t.Fatalf("failed to start servers: %v", err)
 	}
@@ -62,33 +63,20 @@ func runTest(t *testing.T, tt testCase) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	addresses := srvBundle.addresses()
+	addresses := srvBundle.Addresses()
 	outcome := tt.txCoordinator.Execute(ctx, tt.distributedTransaction.toTwopc(addresses))
-	if tt.wantedOutcome != outcome.Outcome() {
-		t.Fatalf("expected outcome %v, got %v", tt.wantedOutcome, outcome.Outcome())
-	}
 	if tt.wantErr && outcome.Err() == nil {
 		t.Fatalf("expected error")
 	}
 	if !tt.wantErr && outcome.Err() != nil {
 		t.Fatalf("didn't expect error, got %v", outcome.Err())
 	}
+	if tt.wantedOutcome != outcome.Outcome() {
+		t.Fatalf("expected outcome %v, got %v", tt.wantedOutcome, outcome.Outcome())
+	}
 
-	errs := shutdownServerBundle(srvBundle)
+	errs := srvBundle.Shutdown()
 	if len(errs) != 0 {
 		t.Errorf("got %d server errors: %v", len(errs), errs)
 	}
-}
-
-func shutdownServerBundle(srvBundle serverBundle) []error {
-	for _, server := range srvBundle.servers {
-		go server.grpcServer.GracefulStop()
-	}
-	var errs []error
-	for err := range srvBundle.serverErrsChan {
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errs
 }
