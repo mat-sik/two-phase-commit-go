@@ -40,14 +40,14 @@ func NewSQLGRPCCoordinator(pool *pgxpool.Pool, opts ...twopc.Option) *twopc.Coor
 func newMockPersistenceConfig() twopc.PersistenceConfig[string] {
 	return twopc.PersistenceConfig[string]{
 		TransactionStateChecker:   MockTransactionStateChecker{},
-		TransactionStatePersister: MockStatePersister{},
+		TransactionStatePersister: MockTransactionStatePersister{},
 	}
 }
 
 func newSQLPersistenceConfig(pool *pgxpool.Pool) twopc.PersistenceConfig[string] {
 	return twopc.PersistenceConfig[string]{
 		TransactionStateChecker:   SqlTransactionStateChecker{Pool: pool},
-		TransactionStatePersister: SqlStatePersister{Pool: pool},
+		TransactionStatePersister: SqlTransactionStatePersister{Pool: pool},
 	}
 }
 

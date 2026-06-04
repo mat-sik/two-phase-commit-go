@@ -41,7 +41,7 @@ func (s SqlTransactionStateChecker) Check(ctx context.Context, transactionID str
 	return states, nil
 }
 
-type SqlStatePersister struct {
+type SqlTransactionStatePersister struct {
 	Pool *pgxpool.Pool
 }
 
@@ -52,7 +52,7 @@ const persistStateQuery = `
         SET state = EXCLUDED.state
 `
 
-func (s SqlStatePersister) PersistState(
+func (s SqlTransactionStatePersister) PersistState(
 	ctx context.Context,
 	transactionID string,
 	participantID string,
