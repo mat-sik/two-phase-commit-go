@@ -17,7 +17,7 @@ type restClient struct {
 	client *http.Client
 }
 
-func NewRESTClient(clientID string) (twopc.Client, error) {
+func newRESTClient(clientID string) (twopc.Client, error) {
 	return restClient{
 		host:   clientID,
 		client: &http.Client{},

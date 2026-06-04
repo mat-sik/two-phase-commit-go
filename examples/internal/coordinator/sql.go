@@ -9,8 +9,14 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-type SqlTransactionStateChecker struct {
-	Pool *pgxpool.Pool
+type sqlTransactionStateChecker struct {
+	pool *pgxpool.Pool
+}
+
+func newSQLTransactionStateChecker(pool *pgxpool.Pool) sqlTransactionStateChecker {
+	return sqlTransactionStateChecker{
+		pool: pool,
+	}
 }
 
 const fetchTransactionStatesQuery = `
@@ -19,8 +25,8 @@ const fetchTransactionStatesQuery = `
 	WHERE transaction_id = $1
 `
 
-func (s SqlTransactionStateChecker) Check(ctx context.Context, transactionID string) (map[string]twopc.TransactionState, error) {
-	rows, err := s.Pool.Query(ctx, fetchTransactionStatesQuery, transactionID)
+func (s sqlTransactionStateChecker) Check(ctx context.Context, transactionID string) (map[string]twopc.TransactionState, error) {
+	rows, err := s.pool.Query(ctx, fetchTransactionStatesQuery, transactionID)
 	if err != nil {
 		return nil, err
 	}
@@ -41,8 +47,14 @@ func (s SqlTransactionStateChecker) Check(ctx context.Context, transactionID str
 	return states, nil
 }
 
-type SqlStatePersister struct {
-	Pool *pgxpool.Pool
+type sqlTransactionStatePersister struct {
+	pool *pgxpool.Pool
+}
+
+func newSQLTransactionStatePersister(pool *pgxpool.Pool) sqlTransactionStatePersister {
+	return sqlTransactionStatePersister{
+		pool: pool,
+	}
 }
 
 const persistStateQuery = `
@@ -52,7 +64,7 @@ const persistStateQuery = `
         SET state = EXCLUDED.state
 `
 
-func (s SqlStatePersister) PersistState(
+func (s sqlTransactionStatePersister) PersistState(
 	ctx context.Context,
 	transactionID string,
 	participantID string,
@@ -61,7 +73,7 @@ func (s SqlStatePersister) PersistState(
 	resultCh := make(chan twopc.PersistResult, 1)
 
 	go func() {
-		tx, err := s.Pool.Begin(ctx)
+		tx, err := s.pool.Begin(ctx)
 		if err != nil {
 			resultCh <- twopc.PersistResult{
 				Err: err,

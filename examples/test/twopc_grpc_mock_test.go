@@ -8,7 +8,7 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-func Test__grpc_mock_integration(t *testing.T) {
+func Test_grpc_mock_integration(t *testing.T) {
 	tests := []testCase{
 		{
 			name: "simple happy path",
@@ -17,11 +17,7 @@ func Test__grpc_mock_integration(t *testing.T) {
 				client.NewNoopGRPCHandler(),
 				client.NewNoopGRPCHandler(),
 			}),
-			txCoordinator: twopc.NewCoordinator(
-				coordinator.MockTransactionStateChecker{},
-				coordinator.MockStatePersister{},
-				coordinator.NewGRPCClient,
-			),
+			txCoordinator: coordinator.NewMockGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-grpc-mock-1",
 				transactions: []transaction{
@@ -49,11 +45,7 @@ func Test__grpc_mock_integration(t *testing.T) {
 				client.NewFailingNoopGRPCHandler(0, 0, 1),
 				client.NewFailingNoopGRPCHandler(1, 0, 0),
 			}),
-			txCoordinator: twopc.NewCoordinator(
-				coordinator.MockTransactionStateChecker{},
-				coordinator.MockStatePersister{},
-				coordinator.NewGRPCClient,
-			),
+			txCoordinator: coordinator.NewMockGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-grpc-mock-2",
 				transactions: []transaction{
@@ -81,11 +73,7 @@ func Test__grpc_mock_integration(t *testing.T) {
 				client.NewFailingNoopGRPCHandler(0, 1, 0),
 				client.NewFailingNoopGRPCHandler(0, 1, 0),
 			}),
-			txCoordinator: twopc.NewCoordinator(
-				coordinator.MockTransactionStateChecker{},
-				coordinator.MockStatePersister{},
-				coordinator.NewGRPCClient,
-			),
+			txCoordinator: coordinator.NewMockGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-grpc-mock-3",
 				transactions: []transaction{
