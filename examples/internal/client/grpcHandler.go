@@ -52,34 +52,25 @@ type GRPCHandler struct {
 }
 
 func (h *GRPCHandler) PrepareTransaction(ctx context.Context, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
-	ok, err := h.transactionPreparer.prepareTransaction(ctx, req.GetTransactionId(), req.GetPayload())
+	err := h.transactionPreparer.prepareTransaction(ctx, req.GetTransactionId(), req.GetPayload())
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if !ok {
-		return nil, status.Error(codes.Aborted, "prepare transaction failed")
 	}
 	return &pb.PrepareTransactionResponse{}, nil
 }
 
 func (h *GRPCHandler) CommitTransaction(ctx context.Context, req *pb.CommitTransactionRequest) (*pb.CommitTransactionResponse, error) {
-	ok, err := h.transactionCommiter.commitTransaction(ctx, req.GetTransactionId())
+	err := h.transactionCommiter.commitTransaction(ctx, req.GetTransactionId())
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if !ok {
-		return nil, status.Error(codes.Aborted, "commit transaction failed")
 	}
 	return &pb.CommitTransactionResponse{}, nil
 }
 
 func (h *GRPCHandler) RollbackTransaction(ctx context.Context, req *pb.RollbackTransactionRequest) (*pb.RollbackTransactionResponse, error) {
-	ok, err := h.transactionRollbacker.rollbackTransaction(ctx, req.GetTransactionId())
+	err := h.transactionRollbacker.rollbackTransaction(ctx, req.GetTransactionId())
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if !ok {
-		return nil, status.Error(codes.Aborted, "rollback transaction failed")
 	}
 	return &pb.RollbackTransactionResponse{}, nil
 }
