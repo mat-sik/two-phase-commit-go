@@ -68,9 +68,8 @@ func (h *restTransactionPreparer) ServeHTTP(w http.ResponseWriter, req *http.Req
 	}
 
 	transactionID := req.PathValue("transactionID")
-	var ok bool
-	ok, err = h.transactionPreparer.prepareTransaction(req.Context(), transactionID, string(data))
-	if err != nil || !ok {
+	err = h.transactionPreparer.prepareTransaction(req.Context(), transactionID, string(data))
+	if err != nil {
 		http.Error(w, "failed to prepareTransaction", http.StatusInternalServerError)
 		return
 	}
@@ -82,8 +81,8 @@ type restTransactionCommitter struct {
 
 func (h restTransactionCommitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	transactionID := req.PathValue("transactionID")
-	ok, err := h.transactionCommitter.commitTransaction(req.Context(), transactionID)
-	if err != nil || !ok {
+	err := h.transactionCommitter.commitTransaction(req.Context(), transactionID)
+	if err != nil {
 		http.Error(w, "failed to commitTransaction", http.StatusInternalServerError)
 		return
 	}
@@ -95,8 +94,8 @@ type restTransactionRollbacker struct {
 
 func (h restTransactionRollbacker) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	transactionID := req.PathValue("transactionID")
-	ok, err := h.transactionRollbacker.rollbackTransaction(req.Context(), transactionID)
-	if err != nil || !ok {
+	err := h.transactionRollbacker.rollbackTransaction(req.Context(), transactionID)
+	if err != nil {
 		http.Error(w, "failed to rollbackTransaction", http.StatusInternalServerError)
 		return
 	}

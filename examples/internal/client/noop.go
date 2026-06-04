@@ -15,21 +15,21 @@ type noopTransactionHandler struct {
 	rollbackFailUntilAttempt atomic.Int64
 }
 
-func (n *noopTransactionHandler) prepareTransaction(ctx context.Context, transactionID string, body string) (bool, error) {
-	slog.DebugContext(ctx, "prepareTransaction called", "transactionID", transactionID, "body", body)
+func (n *noopTransactionHandler) prepareTransaction(ctx context.Context, transactionID string, payload string) error {
+	slog.DebugContext(ctx, "prepareTransaction called", "transactionID", transactionID, "body", payload)
 	if n.shouldFail(ctx, &n.prepareFailUntilAttempt) {
-		return false, errSimulatedFailure
+		return errSimulatedFailure
 	}
 	status, ok := n.transactionStatusMap.load(transactionID)
 	if ok && status == transactionStatusPrepared {
 		slog.DebugContext(ctx, "transaction already prepared")
-		return true, nil
+		return nil
 	}
 	if ok {
-		return false, fmt.Errorf("can't prepare transaction, because its status is already %s", status)
+		return fmt.Errorf("can't prepare transaction, because its status is already %s", status)
 	}
-	n.storePrepared(ctx, transactionID, body)
-	return true, nil
+	n.storePrepared(ctx, transactionID, payload)
+	return nil
 }
 
 func (n *noopTransactionHandler) storePrepared(ctx context.Context, transactionID string, body string) {
@@ -38,23 +38,23 @@ func (n *noopTransactionHandler) storePrepared(ctx context.Context, transactionI
 	slog.DebugContext(ctx, "prepared transaction")
 }
 
-func (n *noopTransactionHandler) commitTransaction(ctx context.Context, transactionID string) (bool, error) {
+func (n *noopTransactionHandler) commitTransaction(ctx context.Context, transactionID string) error {
 	slog.DebugContext(ctx, "commitTransaction called", "transactionID", transactionID)
 	if n.shouldFail(ctx, &n.commitFailUntilAttempt) {
-		return false, errSimulatedFailure
+		return errSimulatedFailure
 	}
 	status, ok := n.transactionStatusMap.load(transactionID)
 	if !ok {
-		return false, fmt.Errorf("transaction for '%s' not found, can't commit unprepared transaction", transactionID)
+		return fmt.Errorf("transaction for '%s' not found, can't commit unprepared transaction", transactionID)
 	}
 	if status == transactionStatusCommitted {
-		return true, nil
+		return nil
 	}
 	if status != transactionStatusPrepared {
-		return false, fmt.Errorf("can't commit %s transaction for '%s'", status, transactionID)
+		return fmt.Errorf("can't commit %s transaction for '%s'", status, transactionID)
 	}
 	n.storeCommitted(ctx, transactionID)
-	return true, nil
+	return nil
 }
 
 func (n *noopTransactionHandler) storeCommitted(ctx context.Context, transactionID string) {
@@ -63,20 +63,20 @@ func (n *noopTransactionHandler) storeCommitted(ctx context.Context, transaction
 	slog.DebugContext(ctx, "committed transaction")
 }
 
-func (n *noopTransactionHandler) rollbackTransaction(ctx context.Context, transactionID string) (bool, error) {
+func (n *noopTransactionHandler) rollbackTransaction(ctx context.Context, transactionID string) error {
 	slog.DebugContext(ctx, "rollbackTransaction called", "transactionID", transactionID)
 	if n.shouldFail(ctx, &n.rollbackFailUntilAttempt) {
-		return false, errSimulatedFailure
+		return errSimulatedFailure
 	}
 	status, ok := n.transactionStatusMap.load(transactionID)
 	if !ok || status == transactionStatusRolledBacked {
-		return true, nil
+		return nil
 	}
 	if status != transactionStatusPrepared {
-		return false, fmt.Errorf("can't rollback %s transaction for '%s'", status, transactionID)
+		return fmt.Errorf("can't rollback %s transaction for '%s'", status, transactionID)
 	}
 	n.storeRolledBack(ctx, transactionID)
-	return true, nil
+	return nil
 }
 
 func (n *noopTransactionHandler) shouldFail(ctx context.Context, counter *atomic.Int64) bool {
