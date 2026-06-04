@@ -19,11 +19,7 @@ func Test_rest_mock_integration(t *testing.T) {
 				client.NewNoopMux(),
 				client.NewNoopMux(),
 			}),
-			txCoordinator: twopc.NewCoordinator(
-				coordinator.MockTransactionStateChecker{},
-				coordinator.MockStatePersister{},
-				coordinator.NewRESTClient,
-			),
+			txCoordinator: coordinator.NewMockRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-rest-mock-1",
 				transactions: []transaction{
@@ -60,11 +56,7 @@ func Test_rest_mock_integration(t *testing.T) {
 				client.NewFailingNoopMux(0, 0, 1),
 				client.NewFailingNoopMux(1, 0, 0),
 			}),
-			txCoordinator: twopc.NewCoordinator(
-				coordinator.MockTransactionStateChecker{},
-				coordinator.MockStatePersister{},
-				coordinator.NewRESTClient,
-			),
+			txCoordinator: coordinator.NewMockRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-rest-mock-2",
 				transactions: []transaction{
@@ -101,11 +93,7 @@ func Test_rest_mock_integration(t *testing.T) {
 				client.NewFailingNoopMux(0, 1, 0),
 				client.NewFailingNoopMux(0, 1, 0),
 			}),
-			txCoordinator: twopc.NewCoordinator(
-				coordinator.MockTransactionStateChecker{},
-				coordinator.MockStatePersister{},
-				coordinator.NewRESTClient,
-			),
+			txCoordinator: coordinator.NewMockRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-rest-mock-3",
 				transactions: []transaction{
