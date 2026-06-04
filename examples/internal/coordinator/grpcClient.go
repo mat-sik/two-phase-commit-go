@@ -14,7 +14,7 @@ type gRPCClient struct {
 	client pb.ClientServiceClient
 }
 
-func NewGRPCClient(clientID string) (twopc.Client, error) {
+func newGRPCClient(clientID string) (twopc.Client, error) {
 	conn, err := grpc.NewClient(clientID, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client for %s: %w", clientID, err)

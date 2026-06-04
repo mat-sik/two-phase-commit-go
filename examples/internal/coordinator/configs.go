@@ -39,26 +39,26 @@ func NewSQLGRPCCoordinator(pool *pgxpool.Pool, opts ...twopc.Option) *twopc.Coor
 
 func newMockPersistenceConfig() twopc.PersistenceConfig[string] {
 	return twopc.PersistenceConfig[string]{
-		TransactionStateChecker:   MockTransactionStateChecker{},
-		TransactionStatePersister: MockTransactionStatePersister{},
+		TransactionStateChecker:   mockTransactionStateChecker{},
+		TransactionStatePersister: mockTransactionStatePersister{},
 	}
 }
 
 func newSQLPersistenceConfig(pool *pgxpool.Pool) twopc.PersistenceConfig[string] {
 	return twopc.PersistenceConfig[string]{
-		TransactionStateChecker:   SqlTransactionStateChecker{Pool: pool},
-		TransactionStatePersister: SqlTransactionStatePersister{Pool: pool},
+		TransactionStateChecker:   newSQLTransactionStateChecker(pool),
+		TransactionStatePersister: newSQLTransactionStatePersister(pool),
 	}
 }
 
 func newRESTClientConfig() twopc.ClientConfig[string] {
 	return twopc.ClientConfig[string]{
-		NewClientFunc: NewRESTClient,
+		NewClientFunc: newRESTClient,
 	}
 }
 
 func newGRPCClientConfig() twopc.ClientConfig[string] {
 	return twopc.ClientConfig[string]{
-		NewClientFunc: NewGRPCClient,
+		NewClientFunc: newGRPCClient,
 	}
 }
