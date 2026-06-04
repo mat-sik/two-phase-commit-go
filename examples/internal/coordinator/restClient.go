@@ -52,8 +52,7 @@ func (c restClient) PrepareTransaction(ctx context.Context, transactionID string
 		return err
 	}
 	defer func() {
-		closeErr := resp.Body.Close()
-		if err != nil {
+		if closeErr := resp.Body.Close(); err != nil {
 			err = errors.Join(err, closeErr)
 		} else {
 			err = closeErr
@@ -61,8 +60,7 @@ func (c restClient) PrepareTransaction(ctx context.Context, transactionID string
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		err = errors.New("failed to prepare")
-		return err
+		return errors.New("failed to prepare")
 	}
 
 	return nil
