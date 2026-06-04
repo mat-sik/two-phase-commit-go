@@ -1,9 +1,13 @@
 package client
 
-import "context"
+import (
+	"context"
+
+	"github.com/mat-sik/two-phase-commit-go/twopc"
+)
 
 type transactionPreparer interface {
-	prepareTransaction(ctx context.Context, transactionID string, payload string) error
+	prepareTransaction(ctx context.Context, transactionID string, payload twopc.PreparePayload) error
 }
 
 type transactionCommiter interface {

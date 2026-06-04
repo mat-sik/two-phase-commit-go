@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
+
+	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
 type noopTransactionHandler struct {
@@ -15,8 +17,12 @@ type noopTransactionHandler struct {
 	rollbackFailUntilAttempt atomic.Int64
 }
 
-func (n *noopTransactionHandler) prepareTransaction(ctx context.Context, transactionID string, payload string) error {
-	slog.DebugContext(ctx, "prepareTransaction called", "transactionID", transactionID, "body", payload)
+func (n *noopTransactionHandler) prepareTransaction(ctx context.Context, transactionID string, preparePayload twopc.PreparePayload) error {
+	payload, ok := preparePayload.(string)
+	if !ok {
+		panic("payload need to be string for this transaction handler")
+	}
+	slog.DebugContext(ctx, "prepareTransaction called", "transactionID", transactionID, "payload", payload)
 	if n.shouldFail(ctx, &n.prepareFailUntilAttempt) {
 		return errSimulatedFailure
 	}
@@ -32,8 +38,8 @@ func (n *noopTransactionHandler) prepareTransaction(ctx context.Context, transac
 	return nil
 }
 
-func (n *noopTransactionHandler) storePrepared(ctx context.Context, transactionID string, body string) {
-	slog.DebugContext(ctx, "preparing transaction", slog.String("transactionID", transactionID), slog.String("body", body))
+func (n *noopTransactionHandler) storePrepared(ctx context.Context, transactionID string, payload string) {
+	slog.DebugContext(ctx, "preparing transaction", slog.String("transactionID", transactionID), slog.String("payload", payload))
 	n.transactionStatusMap.add(transactionID, transactionStatusPrepared)
 	slog.DebugContext(ctx, "prepared transaction")
 }
