@@ -1,4 +1,16 @@
-.PHONY: generate
+.PHONY: generate test test-no-testcontainers test-with-logs test-no-testcontainers-with-logs
 
 generate:
 	go generate ./...
+
+test:
+	go test -tags testcontainers ./...
+
+test-no-testcontainers:
+	go test ./...
+
+test-with-logs:
+	go test -tags testcontainers -v ./...
+
+test-no-testcontainers-with-logs:
+	go test -v ./...
