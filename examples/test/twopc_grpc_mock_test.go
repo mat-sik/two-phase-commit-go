@@ -8,7 +8,7 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-func Test__grpc_mock_integration(t *testing.T) {
+func Test_grpc_mock_integration(t *testing.T) {
 	tests := []testCase{
 		{
 			name: "simple happy path",
