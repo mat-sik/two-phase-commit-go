@@ -76,21 +76,19 @@ func transferFunds(ctx context.Context, tx pgx.Tx, payload TransferPayload) erro
 	return nil
 }
 
-const upsertAccountQuery = `
-INSERT INTO accounts (id, balance)
-VALUES ($2, $1)
-ON CONFLICT (id)
-DO UPDATE SET balance = accounts.balance + $1
-`
-
 func upsertAccount(ctx context.Context, tx pgx.Tx, amount float64, accountID string) error {
+	const upsertAccountQuery = `
+		INSERT INTO accounts (id, balance)
+		VALUES ($2, $1)
+		ON CONFLICT (id)
+		DO UPDATE SET balance = accounts.balance + $1
+	`
 	_, err := tx.Exec(ctx, upsertAccountQuery, amount, accountID)
 	return err
 }
 
-const prepareTransactionQuery = `PREPARE TRANSACTION $1`
-
 func prepareTransaction(ctx context.Context, tx pgx.Tx, transactionID string) error {
+	const prepareTransactionQuery = "PREPARE TRANSACTION $1"
 	_, err := tx.Exec(ctx, prepareTransactionQuery, transactionID)
 	return err
 }
@@ -119,9 +117,8 @@ func (h *sqlTransactionHandler) commitTransaction(ctx context.Context, transacti
 	return nil
 }
 
-const commitPreparedQuery = `COMMIT PREPARED $1`
-
 func commitTransaction(ctx context.Context, conn *pgxpool.Conn, transactionID string) error {
+	const commitPreparedQuery = "COMMIT PREPARED $1"
 	_, err := conn.Exec(ctx, commitPreparedQuery, transactionID)
 	return err
 }
@@ -150,9 +147,8 @@ func (h *sqlTransactionHandler) rollbackTransaction(ctx context.Context, transac
 	return nil
 }
 
-const rollbackPreparedQuery = `ROLLBACK PREPARED $1`
-
 func rollbackTransaction(ctx context.Context, conn *pgxpool.Conn, transactionID string) error {
+	const rollbackPreparedQuery = "ROLLBACK PREPARED $1"
 	_, err := conn.Exec(ctx, rollbackPreparedQuery, transactionID)
 	return err
 }
@@ -181,14 +177,13 @@ type querier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-const selectTransferLogQuery = `
-SELECT sender_id, receiver_id, amount
-FROM transfer_log
-WHERE transaction_id = $1
-AND status = $2
-`
-
 func selectTransferLog(ctx context.Context, q querier, transactionID string, status transferStatus) (senderID, receiverID string, amount float64, err error) {
+	const selectTransferLogQuery = `
+		SELECT sender_id, receiver_id, amount
+		FROM transfer_log
+		WHERE transaction_id = $1
+		AND status = $2
+	`
 	err = q.QueryRow(ctx, selectTransferLogQuery, transactionID, status).Scan(&senderID, &receiverID, &amount)
 	return
 }
@@ -197,12 +192,11 @@ type execer interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 }
 
-const insertTransferLogQuery = `
-INSERT INTO transfer_log (transaction_id, sender_id, receiver_id, amount, status)
-VALUES ($1, $2, $3, $4, $5)
-`
-
 func insertTransferLog(ctx context.Context, e execer, transactionID, senderID, receiverID string, amount float64, status transferStatus) error {
+	const insertTransferLogQuery = `
+		INSERT INTO transfer_log (transaction_id, sender_id, receiver_id, amount, status)
+		VALUES ($1, $2, $3, $4, $5)
+	`
 	_, err := e.Exec(ctx, insertTransferLogQuery, transactionID, senderID, receiverID, amount, status)
 	return err
 }
