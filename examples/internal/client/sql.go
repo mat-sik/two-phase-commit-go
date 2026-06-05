@@ -45,6 +45,16 @@ func (h *sqlTransactionHandler) prepareTransaction(ctx context.Context, transact
 		}
 	}()
 
+	var exists bool
+	exists, err = isPrepared(ctx, tx, transactionID)
+	if err != nil {
+		return fmt.Errorf("%s: check prepared: %w", method, err)
+	}
+	if exists {
+		slog.DebugContext(ctx, "already prepared", "method", method, "transactionID", transactionID)
+		return nil
+	}
+
 	if err = transferFunds(ctx, tx, payload); err != nil {
 		return fmt.Errorf("%s: transfer funds: %w", method, err)
 	}
@@ -104,6 +114,16 @@ func (h *sqlTransactionHandler) commitTransaction(ctx context.Context, transacti
 	}
 	defer conn.Release()
 
+	var exists bool
+	exists, err = isPrepared(ctx, conn, transactionID)
+	if err != nil {
+		return fmt.Errorf("%s: check prepared: %w", method, err)
+	}
+	if !exists {
+		slog.DebugContext(ctx, "already committed", "method", method, "transactionID", transactionID)
+		return nil
+	}
+
 	if err = commitTransaction(ctx, conn, transactionID); err != nil {
 		return fmt.Errorf("%s: commit prepared: %w", method, err)
 	}
@@ -133,6 +153,16 @@ func (h *sqlTransactionHandler) rollbackTransaction(ctx context.Context, transac
 		return fmt.Errorf("%s: acquire connection: %w", method, err)
 	}
 	defer conn.Release()
+
+	var exists bool
+	exists, err = isPrepared(ctx, conn, transactionID)
+	if err != nil {
+		return fmt.Errorf("%s: check prepared: %w", method, err)
+	}
+	if !exists {
+		slog.DebugContext(ctx, "already rolled back", "method", method, "transactionID", transactionID)
+		return nil
+	}
 
 	if err = rollbackTransaction(ctx, conn, transactionID); err != nil {
 		return fmt.Errorf("%s: rollback prepared: %w", method, err)
@@ -199,6 +229,13 @@ func insertTransferLog(ctx context.Context, e execer, transactionID, senderID, r
 	`
 	_, err := e.Exec(ctx, insertTransferLogQuery, transactionID, senderID, receiverID, amount, status)
 	return err
+}
+
+func isPrepared(ctx context.Context, q querier, transactionID string) (bool, error) {
+	const existsPreparedQuery = "SELECT EXISTS(SELECT 1 FROM pg_prepared_xacts WHERE gid = $1)"
+	var exists bool
+	err := q.QueryRow(ctx, existsPreparedQuery, transactionID).Scan(&exists)
+	return exists, err
 }
 
 type transferStatus int
