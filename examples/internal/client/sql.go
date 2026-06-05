@@ -59,7 +59,7 @@ func (h *sqlTransactionHandler) prepareTransaction(ctx context.Context, transact
 		return fmt.Errorf("%s: transfer funds: %w", method, err)
 	}
 
-	if err = insertTransferLog(ctx, tx, transactionID, payload.SenderID, payload.ReceiverID, payload.Amount, statusPending); err != nil {
+	if err = insertTransferLog(ctx, tx, transactionID, payload.SenderID, payload.ReceiverID, payload.Amount, transferStatusPending); err != nil {
 		return fmt.Errorf("%s: insert log: %w", method, err)
 	}
 
@@ -128,7 +128,7 @@ func (h *sqlTransactionHandler) commitTransaction(ctx context.Context, transacti
 		return fmt.Errorf("%s: commit prepared: %w", method, err)
 	}
 
-	if err = insertAuditLog(ctx, conn, transactionID, statusCommitted); err != nil {
+	if err = insertAuditLog(ctx, conn, transactionID, transferStatusCommitted); err != nil {
 		return fmt.Errorf("%s: insert audit log: %w", method, err)
 	}
 
@@ -168,7 +168,7 @@ func (h *sqlTransactionHandler) rollbackTransaction(ctx context.Context, transac
 		return fmt.Errorf("%s: rollback prepared: %w", method, err)
 	}
 
-	if err = insertAuditLog(ctx, conn, transactionID, statusRolledBack); err != nil {
+	if err = insertAuditLog(ctx, conn, transactionID, transferStatusRolledBack); err != nil {
 		return fmt.Errorf("%s: insert audit log: %w", method, err)
 	}
 
@@ -191,7 +191,7 @@ type execQuerier interface {
 func insertAuditLog(ctx context.Context, execQuerier execQuerier, transactionID string, status transferStatus) error {
 	const method = "insertAuditLog"
 
-	senderID, receiverID, amount, err := selectTransferLog(ctx, execQuerier, transactionID, statusPending)
+	senderID, receiverID, amount, err := selectTransferLog(ctx, execQuerier, transactionID, transferStatusPending)
 	if err != nil {
 		return fmt.Errorf("%s: read pending log: %w", method, err)
 	}
@@ -241,7 +241,7 @@ func isPrepared(ctx context.Context, q querier, transactionID string) (bool, err
 type transferStatus int
 
 const (
-	statusPending transferStatus = iota
-	statusCommitted
-	statusRolledBack
+	transferStatusPending transferStatus = iota
+	transferStatusCommitted
+	transferStatusRolledBack
 )
