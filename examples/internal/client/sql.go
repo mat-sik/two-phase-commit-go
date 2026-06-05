@@ -73,14 +73,14 @@ func (h *sqlTransactionHandler) prepareTransaction(ctx context.Context, transact
 }
 
 func transferFunds(ctx context.Context, tx pgx.Tx, payload TransferPayload) error {
-	const method = "transferFunds"
+	const function = "transferFunds"
 
 	if err := upsertAccount(ctx, tx, -payload.Amount, payload.SenderID); err != nil {
-		return fmt.Errorf("%s: debit sender: %w", method, err)
+		return fmt.Errorf("%s: debit sender: %w", function, err)
 	}
 
 	if err := upsertAccount(ctx, tx, payload.Amount, payload.ReceiverID); err != nil {
-		return fmt.Errorf("%s: credit receiver: %w", method, err)
+		return fmt.Errorf("%s: credit receiver: %w", function, err)
 	}
 
 	return nil
@@ -189,15 +189,15 @@ type execQuerier interface {
 }
 
 func insertAuditLog(ctx context.Context, execQuerier execQuerier, transactionID string, status transferStatus) error {
-	const method = "insertAuditLog"
+	const function = "insertAuditLog"
 
 	senderID, receiverID, amount, err := selectTransferLog(ctx, execQuerier, transactionID, transferStatusPending)
 	if err != nil {
-		return fmt.Errorf("%s: read pending log: %w", method, err)
+		return fmt.Errorf("%s: read pending log: %w", function, err)
 	}
 
 	if err = insertTransferLog(ctx, execQuerier, transactionID, senderID, receiverID, amount, status); err != nil {
-		return fmt.Errorf("%s: insert log: %w", method, err)
+		return fmt.Errorf("%s: insert log: %w", function, err)
 	}
 
 	return nil
