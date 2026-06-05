@@ -13,7 +13,7 @@ import (
 func Test_rest_mock_integration(t *testing.T) {
 	tests := []testCase{
 		{
-			name: "simple happy path",
+			name: "simple mock noop REST happy path",
 			runServerRequests: client.RESTServerRequests([]*http.ServeMux{
 				client.NewNoopMux(),
 				client.NewNoopMux(),
@@ -21,7 +21,7 @@ func Test_rest_mock_integration(t *testing.T) {
 			}),
 			txCoordinator: coordinator.NewMockRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-rest-mock-1",
+				transactionID: "tx-mock-noop-REST-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -50,7 +50,7 @@ func Test_rest_mock_integration(t *testing.T) {
 			wantedOutcome: twopc.OutcomeCommitted,
 		},
 		{
-			name: "Some failing on prepare some other on rollback, but eventually all rollbacks go through",
+			name: "failing mock noop REST -> committed",
 			runServerRequests: client.RESTServerRequests([]*http.ServeMux{
 				client.NewFailingNoopMux(1, 0, 1),
 				client.NewFailingNoopMux(0, 0, 1),
@@ -58,7 +58,7 @@ func Test_rest_mock_integration(t *testing.T) {
 			}),
 			txCoordinator: coordinator.NewMockRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-rest-mock-2",
+				transactionID: "tx-mock-noop-REST-2",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -87,7 +87,7 @@ func Test_rest_mock_integration(t *testing.T) {
 			wantedOutcome: twopc.OutcomeRolledBack,
 		},
 		{
-			name: "some commits fail, but eventually all commits go through",
+			name: "failing mock noop REST -> committed",
 			runServerRequests: client.RESTServerRequests([]*http.ServeMux{
 				client.NewFailingNoopMux(0, 1, 0),
 				client.NewFailingNoopMux(0, 1, 0),
@@ -95,7 +95,7 @@ func Test_rest_mock_integration(t *testing.T) {
 			}),
 			txCoordinator: coordinator.NewMockRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-rest-mock-3",
+				transactionID: "tx-mock-noop-REST-3",
 				transactions: []transaction{
 					{
 						participantNumber: 0,

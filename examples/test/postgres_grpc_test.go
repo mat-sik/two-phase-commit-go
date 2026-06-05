@@ -16,7 +16,7 @@ import (
 func Test_grpc_sql_integration(t *testing.T) {
 	tests := []testContainersTestCase{
 		{
-			name: "simple gRPC happy path",
+			name: "simple postgres noop gRPC happy path",
 			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
 				client.NewNoopGRPCHandler(),
 				client.NewNoopGRPCHandler(),
@@ -26,7 +26,7 @@ func Test_grpc_sql_integration(t *testing.T) {
 				return coordinator.NewSQLGRPCCoordinator(pool)
 			},
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-grpc-psql-1",
+				transactionID: "tx-postgres-noop-gRPC-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -55,7 +55,7 @@ func Test_grpc_sql_integration(t *testing.T) {
 }
 
 func Test_grpc_sql_eventual_consistency(t *testing.T) {
-	t.Run("first coordinator doesn't finish, second does", func(t *testing.T) {
+	t.Run("eventual consistency postgres noop gRPC", func(t *testing.T) {
 		t.Parallel()
 
 		coordinatorPool, coordinatorDbDropper := createCoordinatorDb(t.Context(), t.Name())
@@ -67,7 +67,7 @@ func Test_grpc_sql_eventual_consistency(t *testing.T) {
 		)
 
 		tx := distributedTransaction{
-			transactionID: "tx-eventual-consitency-grpc-psql-1",
+			transactionID: "tx-eventual-consistency-postgres-noop-gRPC-1",
 			transactions: []transaction{
 				{
 					participantNumber: 0,

@@ -26,7 +26,7 @@ func Test_sql_rest_integration(t *testing.T) {
 				return coordinator.NewSQLRESTCoordinator(pool)
 			},
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-rest-psql-1",
+				transactionID: "tx-postres-noop-REST-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,

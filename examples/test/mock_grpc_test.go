@@ -11,7 +11,7 @@ import (
 func Test_grpc_mock_integration(t *testing.T) {
 	tests := []testCase{
 		{
-			name: "simple happy path",
+			name: "simple mock noop gRPC happy path",
 			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
 				client.NewNoopGRPCHandler(),
 				client.NewNoopGRPCHandler(),
@@ -19,7 +19,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 			}),
 			txCoordinator: coordinator.NewMockGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-grpc-mock-1",
+				transactionID: "tx-mock-noop-gRPC-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -39,7 +39,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 			wantedOutcome: twopc.OutcomeCommitted,
 		},
 		{
-			name: "Some failing on prepare some other on rollback, but eventually all rollbacks go through",
+			name: "failing mock noop gRPC -> rollback",
 			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
 				client.NewFailingNoopGRPCHandler(1, 0, 1),
 				client.NewFailingNoopGRPCHandler(0, 0, 1),
@@ -47,7 +47,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 			}),
 			txCoordinator: coordinator.NewMockGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-grpc-mock-2",
+				transactionID: "tx-mock-noop-gRPC-2",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -67,7 +67,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 			wantedOutcome: twopc.OutcomeRolledBack,
 		},
 		{
-			name: "some commits fail, but eventually all commits go through",
+			name: "failing mock noop gRPC -> committed",
 			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
 				client.NewFailingNoopGRPCHandler(0, 1, 0),
 				client.NewFailingNoopGRPCHandler(0, 1, 0),
@@ -75,7 +75,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 			}),
 			txCoordinator: coordinator.NewMockGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-grpc-mock-3",
+				transactionID: "tx-mock-noop-gRPC-3",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
