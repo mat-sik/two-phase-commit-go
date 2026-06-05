@@ -23,7 +23,7 @@ func TestMain(m *testing.M) {
 
 	container, err := postgres.Run(ctx,
 		"postgres:17",
-		postgres.WithInitScripts("testdata/schema.sql"),
+		postgres.WithInitScripts("testdata/coordinator-schema.sql"),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
 		),

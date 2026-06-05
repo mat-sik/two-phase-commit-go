@@ -4,7 +4,20 @@ import (
 	"io"
 	"net/http"
 	"sync/atomic"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func NewSQLMux(pool *pgxpool.Pool) *http.ServeMux {
+	handler := &sqlTransactionHandler{
+		pool: pool,
+	}
+	return newMux(restHandler{
+		transactionPreparer:   restTransactionPreparer{transactionPreparer: handler},
+		transactionCommitter:  restTransactionCommitter{transactionCommitter: handler},
+		transactionRollbacker: restTransactionRollbacker{transactionRollbacker: handler},
+	})
+}
 
 func NewNoopMux() *http.ServeMux {
 	handler := &noopTransactionHandler{

@@ -4,10 +4,22 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/client/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+func NewSQLGRPCHandler(pool *pgxpool.Pool) *GRPCHandler {
+	handler := &sqlTransactionHandler{
+		pool: pool,
+	}
+	return &GRPCHandler{
+		transactionPreparer:   handler,
+		transactionCommiter:   handler,
+		transactionRollbacker: handler,
+	}
+}
 
 func NewNoopGRPCHandler() *GRPCHandler {
 	handler := &noopTransactionHandler{
