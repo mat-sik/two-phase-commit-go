@@ -7,6 +7,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math/rand/v2"
+	"strconv"
 	"testing"
 	"time"
 
@@ -15,22 +17,29 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-type testContainersTestCase struct {
+type testContainersTestCase[T any] struct {
 	name                   string
-	runServerRequests      []client.RunServerRequest
+	handlers               []T
+	handlersProviders      []handlerProvider[T]
+	handlersMapper         func([]T) []client.RunServerRequest
 	txCoordinatorProvider  txCoordinatorProvider
 	distributedTransaction distributedTransaction
 	wantErr                bool
 	wantedOutcome          twopc.Outcome
 }
 
-func runTestContainersTest(t *testing.T, tt testContainersTestCase) {
+func runTestContainersTest[T any](t *testing.T, tt testContainersTestCase[T]) {
 	t.Helper()
 
 	coordinatorPool, coordinatorDbDropper := createCoordinatorDb(t.Context(), t.Name())
 	t.Cleanup(coordinatorDbDropper)
 
-	srvBundle, err := client.RunServers(tt.runServerRequests)
+	handlers, clientDBDroppers := getHandlers(t.Context(), tt)
+	for _, dbDropper := range clientDBDroppers {
+		t.Cleanup(dbDropper)
+	}
+
+	srvBundle, err := client.RunServers(tt.handlersMapper(handlers))
 	if err != nil {
 		t.Fatalf("failed to start servers: %v", err)
 	}
@@ -50,6 +59,21 @@ func runTestContainersTest(t *testing.T, tt testContainersTestCase) {
 	}
 }
 
+func getHandlers[T any](ctx context.Context, tt testContainersTestCase[T]) ([]T, []databaseDropper) {
+	if tt.handlers != nil {
+		return tt.handlers, nil
+	}
+
+	handlers := make([]T, 0, len(tt.handlersProviders))
+	dbDroppers := make([]databaseDropper, 0, len(tt.handlersProviders))
+	for _, provider := range tt.handlersProviders {
+		clientPool, dbDropper := createClientDb(ctx, provider.getPort())
+		handlers = append(handlers, provider.providerFunc(clientPool))
+		dbDroppers = append(dbDroppers, dbDropper)
+	}
+	return handlers, dbDroppers
+}
+
 func assertOutcome(t *testing.T, wantErr bool, wantedOutcome twopc.Outcome, result twopc.Result) {
 	t.Helper()
 	if wantErr && result.Err() == nil {
@@ -61,6 +85,10 @@ func assertOutcome(t *testing.T, wantErr bool, wantedOutcome twopc.Outcome, resu
 	if wantedOutcome != result.Outcome() {
 		t.Fatalf("expected outcome %v, got %v", wantedOutcome, result.Outcome())
 	}
+}
+
+func createClientDb(ctx context.Context, port int) (*pgxpool.Pool, databaseDropper) {
+	return createDatabaseFunc(ctx, strconv.Itoa(port), "testdata/client-schema.sql")
 }
 
 func createCoordinatorDb(ctx context.Context, testName string) (*pgxpool.Pool, databaseDropper) {
@@ -77,3 +105,19 @@ func getTestHashID(testName string) string {
 }
 
 type txCoordinatorProvider func(pool *pgxpool.Pool) *twopc.Coordinator[string]
+
+type handlerProvider[T any] struct {
+	providerFunc func(pool *pgxpool.Pool) T
+	port         *int
+}
+
+func (hp handlerProvider[T]) getPort() int {
+	if hp.port != nil {
+		return *hp.port
+	}
+
+	const minPort = 32768
+	const maxPort = 60999
+	const rangeSize = maxPort - minPort + 1
+	return minPort + rand.N(rangeSize)
+}

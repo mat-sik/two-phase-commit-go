@@ -14,14 +14,15 @@ import (
 )
 
 func Test_sql_rest_integration(t *testing.T) {
-	tests := []testContainersTestCase{
+	tests := []testContainersTestCase[*http.ServeMux]{
 		{
 			name: "simple REST happy path",
-			runServerRequests: client.RESTServerRequests([]*http.ServeMux{
+			handlers: []*http.ServeMux{
 				client.NewNoopMux(),
 				client.NewNoopMux(),
 				client.NewNoopMux(),
-			}),
+			},
+			handlersMapper: client.RESTServerRequests,
 			txCoordinatorProvider: func(pool *pgxpool.Pool) *twopc.Coordinator[string] {
 				return coordinator.NewSQLRESTCoordinator(pool)
 			},

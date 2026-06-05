@@ -14,14 +14,15 @@ import (
 )
 
 func Test_grpc_sql_integration(t *testing.T) {
-	tests := []testContainersTestCase{
+	tests := []testContainersTestCase[*client.GRPCHandler]{
 		{
 			name: "simple postgres noop gRPC happy path",
-			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
+			handlers: []*client.GRPCHandler{
 				client.NewNoopGRPCHandler(),
 				client.NewNoopGRPCHandler(),
 				client.NewNoopGRPCHandler(),
-			}),
+			},
+			handlersMapper: client.GRPCServerRequests,
 			txCoordinatorProvider: func(pool *pgxpool.Pool) *twopc.Coordinator[string] {
 				return coordinator.NewSQLGRPCCoordinator(pool)
 			},
@@ -39,6 +40,61 @@ func Test_grpc_sql_integration(t *testing.T) {
 					{
 						participantNumber: 2,
 						payload:           "three",
+					},
+				},
+			},
+			wantErr:       false,
+			wantedOutcome: twopc.OutcomeCommitted,
+		},
+		{
+			name: "simple postgres sql gRPC happy path",
+			handlersProviders: []handlerProvider[*client.GRPCHandler]{
+				{
+					providerFunc: func(pool *pgxpool.Pool) *client.GRPCHandler {
+						return client.NewSQLGRPCHandler(pool)
+					},
+				},
+				{
+					providerFunc: func(pool *pgxpool.Pool) *client.GRPCHandler {
+						return client.NewSQLGRPCHandler(pool)
+					},
+				},
+				{
+					providerFunc: func(pool *pgxpool.Pool) *client.GRPCHandler {
+						return client.NewSQLGRPCHandler(pool)
+					},
+				},
+			},
+			handlersMapper: client.GRPCServerRequests,
+			txCoordinatorProvider: func(pool *pgxpool.Pool) *twopc.Coordinator[string] {
+				return coordinator.NewSQLGRPCCoordinator(pool)
+			},
+			distributedTransaction: distributedTransaction{
+				transactionID: "tx-postgres-sql-gRPC-1",
+				transactions: []transaction{
+					{
+						participantNumber: 0,
+						payload: client.TransferPayload{
+							SenderID:   "Alice",
+							ReceiverID: "Bob",
+							Amount:     100.5,
+						},
+					},
+					{
+						participantNumber: 1,
+						payload: client.TransferPayload{
+							SenderID:   "Bob",
+							ReceiverID: "Cecile",
+							Amount:     100.5,
+						},
+					},
+					{
+						participantNumber: 2,
+						payload: client.TransferPayload{
+							SenderID:   "Cecile",
+							ReceiverID: "Alice",
+							Amount:     100.5,
+						},
 					},
 				},
 			},

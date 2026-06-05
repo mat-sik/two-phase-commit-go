@@ -71,7 +71,7 @@ func newDatabaseCreator(adminPool *pgxpool.Pool, container *postgres.PostgresCon
 func createDatabase(ctx context.Context, adminPool *pgxpool.Pool, container *postgres.PostgresContainer, dbName string, scripts ...string) *pgxpool.Pool {
 	const function = "createDatabase"
 
-	createDatabaseQuery := "CREATE DATABASE " + dbName
+	createDatabaseQuery := fmt.Sprintf(`CREATE DATABASE "%s"`, dbName)
 	if _, err := adminPool.Exec(ctx, createDatabaseQuery); err != nil {
 		panic(fmt.Sprintf("%s: %v", function, err))
 	}
@@ -117,7 +117,7 @@ func dropDatabase(adminPool *pgxpool.Pool, pool *pgxpool.Pool, dbName string) {
 
 	pool.Close()
 
-	dropDatabaseQuery := "DROP DATABASE " + dbName
+	dropDatabaseQuery := fmt.Sprintf(`DROP DATABASE "%s"`, dbName)
 	if _, err := adminPool.Exec(context.Background(), dropDatabaseQuery); err != nil {
 		panic(fmt.Sprintf("%s: %v", function, err))
 	}

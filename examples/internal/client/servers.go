@@ -9,10 +9,10 @@ import (
 	"sync"
 )
 
-func RunServers(req []RunServerRequest) (ServerBundle, error) {
-	listeners := make([]net.Listener, 0, len(req))
-	for range req {
-		lis, err := net.Listen("tcp", ":0")
+func RunServers(requests []RunServerRequest) (ServerBundle, error) {
+	listeners := make([]net.Listener, 0, len(requests))
+	for _, req := range requests {
+		lis, err := net.Listen("tcp", req.getAddr())
 		if err != nil {
 			return ServerBundle{}, err
 		}
@@ -20,17 +20,17 @@ func RunServers(req []RunServerRequest) (ServerBundle, error) {
 	}
 
 	wg := sync.WaitGroup{}
-	wg.Add(len(req))
+	wg.Add(len(requests))
 
-	serversErrCh := make(chan error, len(req))
+	serversErrCh := make(chan error, len(requests))
 
-	serverHandles := make([]serverHandle, 0, len(req))
+	serverHandles := make([]serverHandle, 0, len(requests))
 	for i, lis := range listeners {
-		go req[i].serverRunner(&wg, serversErrCh, lis)
+		go requests[i].serverRunner(&wg, serversErrCh, lis)
 
 		serverHandles = append(serverHandles, serverHandle{
 			address:       localhostAddress(lis),
-			serverStopper: req[i].serverStopper,
+			serverStopper: requests[i].serverStopper,
 		})
 	}
 
@@ -54,6 +54,14 @@ func localhostAddress(lis net.Listener) string {
 type RunServerRequest struct {
 	serverRunner  ServerRunner
 	serverStopper ServerStopper
+	addr          *string
+}
+
+func (rsr RunServerRequest) getAddr() string {
+	if rsr.addr != nil {
+		return *rsr.addr
+	}
+	return ":0"
 }
 
 type ServerBundle struct {
