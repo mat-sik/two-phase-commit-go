@@ -6,7 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/client/v1"
+	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/basic/v1"
 	"google.golang.org/grpc"
 )
 
@@ -36,7 +36,7 @@ func newGRPCServer(handler *GRPCHandler, addr net.Addr) *grpc.Server {
 	server := grpc.NewServer(
 		grpc.UnaryInterceptor(serverAddrInterceptor(addr)),
 	)
-	pb.RegisterClientServiceServer(server, handler)
+	pb.RegisterBasicServiceServer(server, handler)
 	return server
 }
 

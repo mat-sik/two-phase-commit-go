@@ -4,14 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/client/v1"
+	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/basic/v1"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 type gRPCClient struct {
-	client pb.ClientServiceClient
+	client pb.BasicServiceClient
 }
 
 func newGRPCClient(clientID string) (twopc.Client, error) {
@@ -19,7 +19,7 @@ func newGRPCClient(clientID string) (twopc.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client for %s: %w", clientID, err)
 	}
-	client := pb.NewClientServiceClient(conn)
+	client := pb.NewBasicServiceClient(conn)
 	return gRPCClient{client: client}, nil
 }
 

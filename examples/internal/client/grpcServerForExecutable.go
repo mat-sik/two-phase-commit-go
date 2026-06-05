@@ -9,13 +9,13 @@ import (
 	"syscall"
 	"time"
 
-	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/client/v1"
+	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/basic/v1"
 	"google.golang.org/grpc"
 )
 
 func RunServer(listener net.Listener, handler *GRPCHandler) error {
 	s := grpc.NewServer()
-	pb.RegisterClientServiceServer(s, handler)
+	pb.RegisterBasicServiceServer(s, handler)
 
 	var wg sync.WaitGroup
 	wg.Add(1)

@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/client/v1"
+	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/basic/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -56,7 +56,7 @@ func NewFailingNoopGRPCHandler(prepareFailUntilAttempt, commitFailUntilAttempt, 
 }
 
 type GRPCHandler struct {
-	pb.UnimplementedClientServiceServer
+	pb.UnimplementedBasicServiceServer
 
 	transactionPreparer   transactionPreparer
 	transactionCommiter   transactionCommiter

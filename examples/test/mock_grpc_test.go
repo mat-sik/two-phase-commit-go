@@ -12,6 +12,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 	tests := []testCase{
 		{
 			name: "simple mock noop gRPC happy path",
+			// TODO: It should be possible to mix gRPC with REST clients
 			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
 				client.NewNoopGRPCHandler(),
 				client.NewNoopGRPCHandler(),
