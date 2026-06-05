@@ -7,13 +7,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
 func Test_grpc_sql_integration(t *testing.T) {
-	tests := []testCase{
+	tests := []testContainersTestCase{
 		{
 			name: "simple gRPC happy path",
 			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
@@ -21,7 +22,9 @@ func Test_grpc_sql_integration(t *testing.T) {
 				client.NewNoopGRPCHandler(),
 				client.NewNoopGRPCHandler(),
 			}),
-			txCoordinator: coordinator.NewSQLGRPCCoordinator(pool),
+			txCoordinatorProvider: func(pool *pgxpool.Pool) *twopc.Coordinator[string] {
+				return coordinator.NewSQLGRPCCoordinator(pool)
+			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-grpc-psql-1",
 				transactions: []transaction{
@@ -46,8 +49,7 @@ func Test_grpc_sql_integration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			t.Cleanup(cleanup)
-			runTest(t, tt)
+			runTestContainersTest(t, tt)
 		})
 	}
 }
@@ -56,8 +58,11 @@ func Test_grpc_sql_eventual_consistency(t *testing.T) {
 	t.Run("first coordinator doesn't finish, second does", func(t *testing.T) {
 		t.Parallel()
 
+		coordinatorPool, coordinatorDbDropper := createCoordinatorDb(t)
+		t.Cleanup(coordinatorDbDropper)
+
 		txCoordinator := coordinator.NewSQLGRPCCoordinator(
-			pool,
+			coordinatorPool,
 			twopc.WithBackoffMax(200*time.Millisecond),
 		)
 
@@ -100,7 +105,7 @@ func Test_grpc_sql_eventual_consistency(t *testing.T) {
 			ctx, cancel := context.WithTimeout(testCtx, 1*time.Second)
 
 			addresses := srvBundle.Addresses()
-			outcome := txCoordinator.Execute(ctx, tx.toTwopc(addresses))
+			outcome := txCoordinator.Execute(ctx, tx.toTwopc(t, addresses))
 			cancel()
 			if outcome.Outcome() == twopc.OutcomeCommitted {
 				break

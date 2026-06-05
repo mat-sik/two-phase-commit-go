@@ -4,7 +4,9 @@ package test
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,7 +16,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-var pool *pgxpool.Pool
+var createDatabaseFunc databaseCreator
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -23,7 +25,6 @@ func TestMain(m *testing.M) {
 
 	container, err := postgres.Run(ctx,
 		"postgres:17",
-		postgres.WithInitScripts("testdata/coordinator-schema.sql"),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
 		),
@@ -38,22 +39,84 @@ func TestMain(m *testing.M) {
 		}
 	}()
 
-	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
+	var connStr string
+	connStr, err = container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
-		slog.Error("failed to get connection string", "err", err)
+		slog.Error("failed to get admin connection string", "err", err)
 	}
 
-	pool, err = pgxpool.New(ctx, connStr)
+	var adminPool *pgxpool.Pool
+	adminPool, err = pgxpool.New(ctx, connStr)
 	if err != nil {
 		panic(err)
 	}
-	defer pool.Close()
+	defer adminPool.Close()
+
+	createDatabaseFunc = newDatabaseCreator(adminPool, container)
 
 	m.Run()
 }
 
-func cleanup() {
-	if _, err := pool.Exec(context.Background(), "TRUNCATE transaction_states"); err != nil {
-		slog.Error("failed to cleanup", "err", err)
+type databaseCreator func(ctx context.Context, dbName string, scripts ...string) (*pgxpool.Pool, databaseDropper)
+
+func newDatabaseCreator(adminPool *pgxpool.Pool, container *postgres.PostgresContainer) databaseCreator {
+	return func(ctx context.Context, dbName string, scripts ...string) (*pgxpool.Pool, databaseDropper) {
+		pool := createDatabase(ctx, adminPool, container, dbName, scripts...)
+		return pool, newDatabaseDropper(adminPool, pool, dbName)
+	}
+}
+
+func createDatabase(ctx context.Context, adminPool *pgxpool.Pool, container *postgres.PostgresContainer, dbName string, scripts ...string) *pgxpool.Pool {
+	const method = "createDatabase"
+
+	createDatabaseQuery := "CREATE DATABASE " + dbName
+	if _, err := adminPool.Exec(ctx, createDatabaseQuery); err != nil {
+		panic(fmt.Sprintf("%s: %v", method, err))
+	}
+
+	connStr, err := container.ConnectionString(ctx, "sslmode=disable", "dbname="+dbName)
+	if err != nil {
+		panic(fmt.Sprintf("%s: new connections tring: %v", method, err))
+	}
+
+	var pool *pgxpool.Pool
+	pool, err = pgxpool.New(ctx, connStr)
+	if err != nil {
+		panic(fmt.Sprintf("%s: new pool: %v", method, err))
+	}
+
+	for _, scriptPath := range scripts {
+		var sqlContent []byte
+		sqlContent, err = os.ReadFile(scriptPath)
+		if err != nil {
+			pool.Close()
+			panic(fmt.Sprintf("%s: failed to read schema script %s: %v", method, scriptPath, err))
+		}
+
+		if _, err = pool.Exec(ctx, string(sqlContent)); err != nil {
+			pool.Close()
+			panic(fmt.Sprintf("%s: failed to execute schema %s: %v", method, scriptPath, err))
+		}
+	}
+
+	return pool
+}
+
+type databaseDropper func()
+
+func newDatabaseDropper(adminPool *pgxpool.Pool, pool *pgxpool.Pool, dbName string) databaseDropper {
+	return func() {
+		dropDatabase(adminPool, pool, dbName)
+	}
+}
+
+func dropDatabase(adminPool *pgxpool.Pool, pool *pgxpool.Pool, dbName string) {
+	const method = "dropDatabase"
+
+	pool.Close()
+
+	dropDatabaseQuery := "DROP DATABASE " + dbName
+	if _, err := adminPool.Exec(context.Background(), dropDatabaseQuery); err != nil {
+		panic(fmt.Sprintf("%s: %v", method, err))
 	}
 }
