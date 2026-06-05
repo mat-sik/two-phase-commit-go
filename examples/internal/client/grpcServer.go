@@ -15,16 +15,20 @@ func GRPCServerRequests(handlers []*GRPCHandler) []RunServerRequest {
 }
 
 func mapToGRPCServerRequest(handler *GRPCHandler) RunServerRequest {
+	registerer := func(server *grpc.Server) {
+		pb.RegisterBasicServiceServer(server, handler)
+	}
+
 	var serverPtr atomic.Pointer[grpc.Server]
 	return RunServerRequest{
-		serverRunner:  newGRPCServerRunner(handler, &serverPtr),
+		serverRunner:  newGRPCServerRunner(registerer, &serverPtr),
 		serverStopper: newGRPCServerStopper(&serverPtr),
 	}
 }
 
-func newGRPCServerRunner(handler *GRPCHandler, ref *atomic.Pointer[grpc.Server]) ServerRunner {
+func newGRPCServerRunner(registerer gRPCHandlerRegisterer, ref *atomic.Pointer[grpc.Server]) ServerRunner {
 	return func(wg *sync.WaitGroup, errCh chan<- error, lis net.Listener) {
-		srv := newGRPCServer(handler, lis.Addr())
+		srv := newGRPCServer(registerer, lis.Addr())
 		ref.Store(srv)
 		runServer(wg, errCh, func() error {
 			return srv.Serve(lis)
@@ -32,13 +36,15 @@ func newGRPCServerRunner(handler *GRPCHandler, ref *atomic.Pointer[grpc.Server])
 	}
 }
 
-func newGRPCServer(handler *GRPCHandler, addr net.Addr) *grpc.Server {
+func newGRPCServer(registerer gRPCHandlerRegisterer, addr net.Addr) *grpc.Server {
 	server := grpc.NewServer(
 		grpc.UnaryInterceptor(serverAddrInterceptor(addr)),
 	)
-	pb.RegisterBasicServiceServer(server, handler)
+	registerer(server)
 	return server
 }
+
+type gRPCHandlerRegisterer func(server *grpc.Server)
 
 func serverAddrInterceptor(addr net.Addr) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
