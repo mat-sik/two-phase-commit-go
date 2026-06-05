@@ -10,18 +10,18 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func NewSQLGRPCHandler(pool *pgxpool.Pool) *GRPCHandler {
+func NewSQLGRPCHandler(pool *pgxpool.Pool) *GRPCBasicHandler {
 	handler := &sqlTransactionHandler{
 		pool: pool,
 	}
-	return &GRPCHandler{
+	return &GRPCBasicHandler{
 		transactionPreparer:   handler,
 		transactionCommiter:   handler,
 		transactionRollbacker: handler,
 	}
 }
 
-func NewNoopGRPCHandler() *GRPCHandler {
+func NewNoopGRPCHandler() *GRPCBasicHandler {
 	handler := &noopTransactionHandler{
 		transactionStatusMap:     &transactionStatusMap{},
 		prepareFailUntilAttempt:  atomic.Int64{},
@@ -31,14 +31,14 @@ func NewNoopGRPCHandler() *GRPCHandler {
 	handler.prepareFailUntilAttempt.Store(0)
 	handler.commitFailUntilAttempt.Store(0)
 	handler.rollbackFailUntilAttempt.Store(0)
-	return &GRPCHandler{
+	return &GRPCBasicHandler{
 		transactionPreparer:   handler,
 		transactionCommiter:   handler,
 		transactionRollbacker: handler,
 	}
 }
 
-func NewFailingNoopGRPCHandler(prepareFailUntilAttempt, commitFailUntilAttempt, rollbackFailUntilAttempt int) *GRPCHandler {
+func NewFailingNoopGRPCHandler(prepareFailUntilAttempt, commitFailUntilAttempt, rollbackFailUntilAttempt int) *GRPCBasicHandler {
 	handler := &noopTransactionHandler{
 		transactionStatusMap:     &transactionStatusMap{},
 		prepareFailUntilAttempt:  atomic.Int64{},
@@ -48,14 +48,14 @@ func NewFailingNoopGRPCHandler(prepareFailUntilAttempt, commitFailUntilAttempt, 
 	handler.prepareFailUntilAttempt.Store(int64(prepareFailUntilAttempt))
 	handler.commitFailUntilAttempt.Store(int64(commitFailUntilAttempt))
 	handler.rollbackFailUntilAttempt.Store(int64(rollbackFailUntilAttempt))
-	return &GRPCHandler{
+	return &GRPCBasicHandler{
 		transactionPreparer:   handler,
 		transactionCommiter:   handler,
 		transactionRollbacker: handler,
 	}
 }
 
-type GRPCHandler struct {
+type GRPCBasicHandler struct {
 	pb.UnimplementedBasicServiceServer
 
 	transactionPreparer   transactionPreparer
@@ -63,7 +63,7 @@ type GRPCHandler struct {
 	transactionRollbacker transactionRollbacker
 }
 
-func (h *GRPCHandler) PrepareTransaction(ctx context.Context, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
+func (h *GRPCBasicHandler) PrepareTransaction(ctx context.Context, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
 	err := h.transactionPreparer.prepareTransaction(ctx, req.GetTransactionId(), req.GetPayload())
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -71,7 +71,7 @@ func (h *GRPCHandler) PrepareTransaction(ctx context.Context, req *pb.PrepareTra
 	return &pb.PrepareTransactionResponse{}, nil
 }
 
-func (h *GRPCHandler) CommitTransaction(ctx context.Context, req *pb.CommitTransactionRequest) (*pb.CommitTransactionResponse, error) {
+func (h *GRPCBasicHandler) CommitTransaction(ctx context.Context, req *pb.CommitTransactionRequest) (*pb.CommitTransactionResponse, error) {
 	err := h.transactionCommiter.commitTransaction(ctx, req.GetTransactionId())
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -79,7 +79,7 @@ func (h *GRPCHandler) CommitTransaction(ctx context.Context, req *pb.CommitTrans
 	return &pb.CommitTransactionResponse{}, nil
 }
 
-func (h *GRPCHandler) RollbackTransaction(ctx context.Context, req *pb.RollbackTransactionRequest) (*pb.RollbackTransactionResponse, error) {
+func (h *GRPCBasicHandler) RollbackTransaction(ctx context.Context, req *pb.RollbackTransactionRequest) (*pb.RollbackTransactionResponse, error) {
 	err := h.transactionRollbacker.rollbackTransaction(ctx, req.GetTransactionId())
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())

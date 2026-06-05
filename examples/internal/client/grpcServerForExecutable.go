@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-func RunServer(listener net.Listener, handler *GRPCHandler) error {
+func RunServer(listener net.Listener, handler *GRPCBasicHandler) error {
 	s := grpc.NewServer()
 	pb.RegisterBasicServiceServer(s, handler)
 

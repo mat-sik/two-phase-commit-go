@@ -14,10 +14,10 @@ import (
 )
 
 func Test_grpc_sql_integration(t *testing.T) {
-	tests := []testContainersTestCase[*client.GRPCHandler]{
+	tests := []testContainersTestCase[*client.GRPCBasicHandler]{
 		{
 			name: "simple postgres noop gRPC happy path",
-			handlers: []*client.GRPCHandler{
+			handlers: []*client.GRPCBasicHandler{
 				client.NewNoopGRPCHandler(),
 				client.NewNoopGRPCHandler(),
 				client.NewNoopGRPCHandler(),
@@ -140,7 +140,7 @@ func Test_grpc_sql_eventual_consistency(t *testing.T) {
 			},
 		}
 
-		srvConfig := client.GRPCServerRequests([]*client.GRPCHandler{
+		srvConfig := client.GRPCServerRequests([]*client.GRPCBasicHandler{
 			client.NewFailingNoopGRPCHandler(0, 15, 0),
 			client.NewFailingNoopGRPCHandler(0, 20, 0),
 			client.NewFailingNoopGRPCHandler(0, 30, 0),

@@ -10,11 +10,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-func GRPCServerRequests(handlers []*GRPCHandler) []RunServerRequest {
+func GRPCServerRequests(handlers []*GRPCBasicHandler) []RunServerRequest {
 	return mapToRunServerRequests(handlers, mapToGRPCServerRequest)
 }
 
-func mapToGRPCServerRequest(handler *GRPCHandler) RunServerRequest {
+func mapToGRPCServerRequest(handler *GRPCBasicHandler) RunServerRequest {
 	registerer := func(server *grpc.Server) {
 		pb.RegisterBasicServiceServer(server, handler)
 	}
