@@ -58,7 +58,7 @@ func Test_grpc_sql_eventual_consistency(t *testing.T) {
 	t.Run("first coordinator doesn't finish, second does", func(t *testing.T) {
 		t.Parallel()
 
-		coordinatorPool, coordinatorDbDropper := createCoordinatorDb(t)
+		coordinatorPool, coordinatorDbDropper := createCoordinatorDb(t.Context(), t.Name())
 		t.Cleanup(coordinatorDbDropper)
 
 		txCoordinator := coordinator.NewSQLGRPCCoordinator(
@@ -105,7 +105,7 @@ func Test_grpc_sql_eventual_consistency(t *testing.T) {
 			ctx, cancel := context.WithTimeout(testCtx, 1*time.Second)
 
 			addresses := srvBundle.Addresses()
-			outcome := txCoordinator.Execute(ctx, tx.toTwopc(t, addresses))
+			outcome := txCoordinator.Execute(ctx, tx.toTwopc(addresses))
 			cancel()
 			if outcome.Outcome() == twopc.OutcomeCommitted {
 				break

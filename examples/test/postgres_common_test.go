@@ -27,7 +27,7 @@ type testContainersTestCase struct {
 func runTestContainersTest(t *testing.T, tt testContainersTestCase) {
 	t.Helper()
 
-	coordinatorPool, coordinatorDbDropper := createCoordinatorDb(t)
+	coordinatorPool, coordinatorDbDropper := createCoordinatorDb(t.Context(), t.Name())
 	t.Cleanup(coordinatorDbDropper)
 
 	srvBundle, err := client.RunServers(tt.runServerRequests)
@@ -40,7 +40,7 @@ func runTestContainersTest(t *testing.T, tt testContainersTestCase) {
 
 	addresses := srvBundle.Addresses()
 	txCoordinator := tt.txCoordinatorProvider(coordinatorPool)
-	outcome := txCoordinator.Execute(ctx, tt.distributedTransaction.toTwopc(t, addresses))
+	outcome := txCoordinator.Execute(ctx, tt.distributedTransaction.toTwopc(addresses))
 
 	assertOutcome(t, tt.wantErr, tt.wantedOutcome, outcome)
 
@@ -51,6 +51,7 @@ func runTestContainersTest(t *testing.T, tt testContainersTestCase) {
 }
 
 func assertOutcome(t *testing.T, wantErr bool, wantedOutcome twopc.Outcome, result twopc.Result) {
+	t.Helper()
 	if wantErr && result.Err() == nil {
 		t.Fatalf("expected error")
 	}
@@ -62,21 +63,16 @@ func assertOutcome(t *testing.T, wantErr bool, wantedOutcome twopc.Outcome, resu
 	}
 }
 
-func createCoordinatorDb(t *testing.T) (*pgxpool.Pool, databaseDropper) {
-	t.Helper()
-	return createDatabaseFunc(t.Context(), uniqueCoordinatorDbName(t), "testdata/coordinator-schema.sql")
+func createCoordinatorDb(ctx context.Context, testName string) (*pgxpool.Pool, databaseDropper) {
+	return createDatabaseFunc(ctx, uniqueCoordinatorDbName(testName), "testdata/coordinator-schema.sql")
 }
 
-func uniqueCoordinatorDbName(t *testing.T) string {
-	t.Helper()
-	return fmt.Sprintf("coordinator_%s", getTestHashID(t))
+func uniqueCoordinatorDbName(testName string) string {
+	return fmt.Sprintf("coordinator_%s", getTestHashID(testName))
 }
 
-func getTestHashID(t *testing.T) string {
-	t.Helper()
-
-	hash := sha256.Sum256([]byte(t.Name()))
-
+func getTestHashID(testName string) string {
+	hash := sha256.Sum256([]byte(testName))
 	return hex.EncodeToString(hash[:])
 }
 

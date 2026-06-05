@@ -32,7 +32,7 @@ func runTest(t *testing.T, tt testCase) {
 	defer cancel()
 
 	addresses := srvBundle.Addresses()
-	outcome := tt.txCoordinator.Execute(ctx, tt.distributedTransaction.toTwopc(t, addresses))
+	outcome := tt.txCoordinator.Execute(ctx, tt.distributedTransaction.toTwopc(addresses))
 
 	assertOutcome(t, tt.wantErr, tt.wantedOutcome, outcome)
 
@@ -52,12 +52,10 @@ type transaction struct {
 	payload           twopc.PreparePayload
 }
 
-func (dt distributedTransaction) toTwopc(t *testing.T, addresses []string) twopc.DistributedTransaction[string] {
-	t.Helper()
-
+func (dt distributedTransaction) toTwopc(addresses []string) twopc.DistributedTransaction[string] {
 	transactions := make([]twopc.Transaction[string], 0, len(dt.transactions))
 	for _, tx := range dt.transactions {
-		transactions = append(transactions, tx.toTwopc(t, addresses))
+		transactions = append(transactions, tx.toTwopc(addresses))
 	}
 	return twopc.DistributedTransaction[string]{
 		TransactionID: dt.transactionID,
@@ -65,8 +63,7 @@ func (dt distributedTransaction) toTwopc(t *testing.T, addresses []string) twopc
 	}
 }
 
-func (tx transaction) toTwopc(t *testing.T, addresses []string) twopc.Transaction[string] {
-	t.Helper()
+func (tx transaction) toTwopc(addresses []string) twopc.Transaction[string] {
 	participantID := fmt.Sprintf("localhost:%d", rand.Intn(65535-1024)+1024)
 	if tx.participantNumber <= len(addresses)-1 {
 		participantID = addresses[tx.participantNumber]
