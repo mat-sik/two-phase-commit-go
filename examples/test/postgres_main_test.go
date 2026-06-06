@@ -30,6 +30,14 @@ func TestMain(m *testing.M) {
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
 		),
+		testcontainers.CustomizeRequestOption(func(req *testcontainers.GenericContainerRequest) error {
+			req.Cmd = []string{
+				"postgres",
+				"-c", "fsync=off",
+				"-c", "max_prepared_transactions=100",
+			}
+			return nil
+		}),
 	)
 	if err != nil {
 		slog.Error("failed to start container", "function", function, "err", err)

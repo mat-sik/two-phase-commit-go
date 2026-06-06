@@ -98,8 +98,8 @@ func upsertAccount(ctx context.Context, tx pgx.Tx, amount float64, accountID str
 }
 
 func prepareTransaction(ctx context.Context, tx pgx.Tx, transactionID string) error {
-	const prepareTransactionQuery = "PREPARE TRANSACTION $1"
-	_, err := tx.Exec(ctx, prepareTransactionQuery, transactionID)
+	prepareTransactionQuery := fmt.Sprintf(`PREPARE TRANSACTION '%s'`, transactionID)
+	_, err := tx.Exec(ctx, prepareTransactionQuery)
 	return err
 }
 
@@ -138,8 +138,8 @@ func (h *sqlTransactionHandler) commitTransaction(ctx context.Context, transacti
 }
 
 func commitTransaction(ctx context.Context, conn *pgxpool.Conn, transactionID string) error {
-	const commitPreparedQuery = "COMMIT PREPARED $1"
-	_, err := conn.Exec(ctx, commitPreparedQuery, transactionID)
+	commitPreparedQuery := fmt.Sprintf(`COMMIT PREPARED '%s'`, transactionID)
+	_, err := conn.Exec(ctx, commitPreparedQuery)
 	return err
 }
 
@@ -178,8 +178,8 @@ func (h *sqlTransactionHandler) rollbackTransaction(ctx context.Context, transac
 }
 
 func rollbackTransaction(ctx context.Context, conn *pgxpool.Conn, transactionID string) error {
-	const rollbackPreparedQuery = "ROLLBACK PREPARED $1"
-	_, err := conn.Exec(ctx, rollbackPreparedQuery, transactionID)
+	rollbackPreparedQuery := fmt.Sprintf(`ROLLBACK PREPARED '%s'`, transactionID)
+	_, err := conn.Exec(ctx, rollbackPreparedQuery)
 	return err
 }
 

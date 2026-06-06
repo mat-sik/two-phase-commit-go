@@ -6,19 +6,34 @@ import (
 	"sync"
 	"sync/atomic"
 
-	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/basic/v1"
+	basic "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/basic/v1"
+	transfer "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/transfer/v1"
 	"google.golang.org/grpc"
 )
 
-func GRPCServerRequests(handlers []*GRPCBasicHandler) []RunServerRequest {
-	return mapToRunServerRequests(handlers, mapToGRPCServerRequest)
+func BasicGRPCServerRequests(handlers []*GRPCBasicHandler) []RunServerRequest {
+	return mapToRunServerRequests(handlers, mapFromBasicHandler)
 }
 
-func mapToGRPCServerRequest(handler *GRPCBasicHandler) RunServerRequest {
+func mapFromBasicHandler(handler *GRPCBasicHandler) RunServerRequest {
 	registerer := func(server *grpc.Server) {
-		pb.RegisterBasicServiceServer(server, handler)
+		basic.RegisterBasicServiceServer(server, handler)
 	}
+	return newRunServerRequest(registerer)
+}
 
+func TransferGRPCServerRequests(handlers []*GRPCTransferHandler) []RunServerRequest {
+	return mapToRunServerRequests(handlers, mapFromTransferHandler)
+}
+
+func mapFromTransferHandler(handler *GRPCTransferHandler) RunServerRequest {
+	registerer := func(server *grpc.Server) {
+		transfer.RegisterTransferServiceServer(server, handler)
+	}
+	return newRunServerRequest(registerer)
+}
+
+func newRunServerRequest(registerer gRPCHandlerRegisterer) RunServerRequest {
 	var serverPtr atomic.Pointer[grpc.Server]
 	return RunServerRequest{
 		serverRunner:  newGRPCServerRunner(registerer, &serverPtr),
