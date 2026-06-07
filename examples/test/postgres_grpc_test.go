@@ -59,16 +59,16 @@ func Test_postgres_basic_grpc_integration(t *testing.T) {
 
 func Test_postgres_transfer_grpc_integration(t *testing.T) {
 	t.Parallel()
-	var sqlProvider = func(pool *pgxpool.Pool) *adapter.GRPCTransferHandler {
+	var transferProvider = func(pool *pgxpool.Pool) *adapter.GRPCTransferHandler {
 		return adapter.NewTransferGRPCHandler(pool)
 	}
 	tests := []testContainersTestCase[*adapter.GRPCTransferHandler]{
 		{
 			name: "postgres transfer gRPC happy path",
 			handlersProviders: []handlerProvider[*adapter.GRPCTransferHandler]{
-				sqlProvider,
-				sqlProvider,
-				sqlProvider,
+				transferProvider,
+				transferProvider,
+				transferProvider,
 			},
 			handlersMapper: transferGRPCServerRequests,
 			txCoordinatorProvider: func(pool *pgxpool.Pool) *twopc.Coordinator[string] {

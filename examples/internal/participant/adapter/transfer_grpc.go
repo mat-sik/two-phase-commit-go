@@ -10,7 +10,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// todo: do the same for rest
 func NewTransferGRPCHandler(pool *pgxpool.Pool) *GRPCTransferHandler {
 	handler := participant.NewTransferTransactionHandler(pool)
 	return &GRPCTransferHandler{

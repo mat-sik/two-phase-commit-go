@@ -27,21 +27,21 @@ func Test_mock_basic_rest_integration(t *testing.T) {
 				transactions: []transaction{
 					{
 						participantNumber: 0,
-						payload: basic.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "one",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 1,
-						payload: basic.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "two",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 2,
-						payload: basic.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "three",
 							CreatedAt: time.Now(),
 						},
@@ -64,21 +64,21 @@ func Test_mock_basic_rest_integration(t *testing.T) {
 				transactions: []transaction{
 					{
 						participantNumber: 0,
-						payload: basic.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "one",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 1,
-						payload: basic.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "two",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 2,
-						payload: basic.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "three",
 							CreatedAt: time.Now(),
 						},
@@ -101,21 +101,21 @@ func Test_mock_basic_rest_integration(t *testing.T) {
 				transactions: []transaction{
 					{
 						participantNumber: 0,
-						payload: basic.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "one",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 1,
-						payload: basic.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "two",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 2,
-						payload: basic.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "three",
 							CreatedAt: time.Now(),
 						},
