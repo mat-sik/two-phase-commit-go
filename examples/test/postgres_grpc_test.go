@@ -56,25 +56,16 @@ func Test_grpc_sql_basic_integration(t *testing.T) {
 }
 
 func Test_grpc_sql_transfer_integration(t *testing.T) {
+	var sqlProvider = func(pool *pgxpool.Pool) *client.GRPCTransferHandler {
+		return client.NewSQLGRPCHandler(pool)
+	}
 	tests := []testContainersTestCase[*client.GRPCTransferHandler]{
 		{
 			name: "simple postgres sql gRPC happy path",
 			handlersProviders: []handlerProvider[*client.GRPCTransferHandler]{
-				{
-					providerFunc: func(pool *pgxpool.Pool) *client.GRPCTransferHandler {
-						return client.NewSQLGRPCHandler(pool)
-					},
-				},
-				{
-					providerFunc: func(pool *pgxpool.Pool) *client.GRPCTransferHandler {
-						return client.NewSQLGRPCHandler(pool)
-					},
-				},
-				{
-					providerFunc: func(pool *pgxpool.Pool) *client.GRPCTransferHandler {
-						return client.NewSQLGRPCHandler(pool)
-					},
-				},
+				sqlProvider,
+				sqlProvider,
+				sqlProvider,
 			},
 			handlersMapper: client.TransferGRPCServerRequests,
 			txCoordinatorProvider: func(pool *pgxpool.Pool) *twopc.Coordinator[string] {
@@ -125,8 +116,11 @@ func Test_grpc_sql_eventual_consistency(t *testing.T) {
 	t.Run("eventual consistency postgres noop gRPC", func(t *testing.T) {
 		t.Parallel()
 
-		coordinatorPool, coordinatorDbDropper := createCoordinatorDb(t.Context(), t.Name())
-		t.Cleanup(coordinatorDbDropper)
+		coordinatorPool, coordinatorPostgresTerminator, err := runPostgresForCoordinatorPool(t.Context())
+		if err != nil {
+			t.Fatalf("failed to run coordinator postgres container: %v", err)
+		}
+		t.Cleanup(coordinatorPostgresTerminator)
 
 		txCoordinator := coordinator.NewSQLGRPCCoordinator(
 			coordinatorPool,

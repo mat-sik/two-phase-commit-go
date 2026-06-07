@@ -4,11 +4,8 @@ package test
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
-	"math/rand/v2"
-	"strconv"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,13 +28,9 @@ type testContainersTestCase[T any] struct {
 func runTestContainersTest[T any](t *testing.T, tt testContainersTestCase[T]) {
 	t.Helper()
 
-	coordinatorPool, coordinatorDbDropper := createCoordinatorDb(t.Context(), t.Name())
-	t.Cleanup(coordinatorDbDropper)
+	coordinatorPool, participantPools := runPostgresForPools(t, len(tt.handlersProviders))
 
-	handlers, clientDBDroppers := getHandlers(t.Context(), tt)
-	for _, dbDropper := range clientDBDroppers {
-		t.Cleanup(dbDropper)
-	}
+	handlers := getHandlers(tt, participantPools)
 
 	srvBundle, err := client.RunServers(tt.handlersMapper(handlers))
 	if err != nil {
@@ -59,65 +52,83 @@ func runTestContainersTest[T any](t *testing.T, tt testContainersTestCase[T]) {
 	}
 }
 
-func getHandlers[T any](ctx context.Context, tt testContainersTestCase[T]) ([]T, []databaseDropper) {
+func runPostgresForPools(t *testing.T, participantAmount int) (*pgxpool.Pool, []*pgxpool.Pool) {
+	t.Helper()
+
+	coordinatorCh := make(chan runContainerResult, participantAmount)
+	go func() {
+		pool, terminator, err := runPostgresForCoordinatorPool(t.Context())
+		coordinatorCh <- runContainerResult{
+			pool:       pool,
+			terminator: terminator,
+			err:        err,
+		}
+	}()
+
+	wg := sync.WaitGroup{}
+	wg.Add(participantAmount)
+	participantCh := make(chan runContainerResult, participantAmount)
+	for range participantAmount {
+		go func() {
+			defer wg.Done()
+			pool, terminator, err := runPostgresForParticipantPool(t.Context())
+			participantCh <- runContainerResult{
+				pool:       pool,
+				terminator: terminator,
+				err:        err,
+			}
+		}()
+	}
+	go func() {
+		wg.Wait()
+		close(participantCh)
+	}()
+
+	var errs []error
+
+	var coordinatorPool *pgxpool.Pool
+	if coordinatorResult := <-coordinatorCh; coordinatorResult.err != nil {
+		errs = append(errs, coordinatorResult.err)
+	} else {
+		coordinatorPool = coordinatorResult.pool
+		t.Cleanup(coordinatorResult.terminator)
+	}
+
+	var participantPools []*pgxpool.Pool
+	for participantResult := range participantCh {
+		if participantResult.err != nil {
+			errs = append(errs, participantResult.err)
+			continue
+		}
+		participantPools = append(participantPools, participantResult.pool)
+		t.Cleanup(participantResult.terminator)
+	}
+
+	if len(errs) > 0 {
+		t.Fatalf("failed to run required amount of postgres containers: %v", errors.Join(errs...))
+	}
+
+	return coordinatorPool, participantPools
+}
+
+type runContainerResult struct {
+	pool       *pgxpool.Pool
+	terminator postgresTerminator
+	err        error
+}
+
+func getHandlers[T any](tt testContainersTestCase[T], participantPools []*pgxpool.Pool) []T {
 	if tt.handlers != nil {
-		return tt.handlers, nil
+		return tt.handlers
 	}
 
 	handlers := make([]T, 0, len(tt.handlersProviders))
-	dbDroppers := make([]databaseDropper, 0, len(tt.handlersProviders))
-	for _, provider := range tt.handlersProviders {
-		clientPool, dbDropper := createClientDb(ctx, provider.getPort())
-		handlers = append(handlers, provider.providerFunc(clientPool))
-		dbDroppers = append(dbDroppers, dbDropper)
+	for i, provider := range tt.handlersProviders {
+		handlers = append(handlers, provider(participantPools[i]))
 	}
-	return handlers, dbDroppers
-}
-
-func assertOutcome(t *testing.T, wantErr bool, wantedOutcome twopc.Outcome, result twopc.Result) {
-	t.Helper()
-	if wantErr && result.Err() == nil {
-		t.Fatalf("expected error")
-	}
-	if !wantErr && result.Err() != nil {
-		t.Fatalf("didn't expect error, got %v", result.Err())
-	}
-	if wantedOutcome != result.Outcome() {
-		t.Fatalf("expected outcome %v, got %v", wantedOutcome, result.Outcome())
-	}
-}
-
-func createClientDb(ctx context.Context, port int) (*pgxpool.Pool, databaseDropper) {
-	return createDatabaseFunc(ctx, strconv.Itoa(port), "testdata/client-schema.sql")
-}
-
-func createCoordinatorDb(ctx context.Context, testName string) (*pgxpool.Pool, databaseDropper) {
-	return createDatabaseFunc(ctx, uniqueCoordinatorDbName(testName), "testdata/coordinator-schema.sql")
-}
-
-func uniqueCoordinatorDbName(testName string) string {
-	return fmt.Sprintf("coordinator_%s", getTestHashID(testName))
-}
-
-func getTestHashID(testName string) string {
-	hash := sha256.Sum256([]byte(testName))
-	return hex.EncodeToString(hash[:])
+	return handlers
 }
 
 type txCoordinatorProvider func(pool *pgxpool.Pool) *twopc.Coordinator[string]
 
-type handlerProvider[T any] struct {
-	providerFunc func(pool *pgxpool.Pool) T
-	port         *int
-}
-
-func (hp handlerProvider[T]) getPort() int {
-	if hp.port != nil {
-		return *hp.port
-	}
-
-	const minPort = 32768
-	const maxPort = 60999
-	const rangeSize = maxPort - minPort + 1
-	return minPort + rand.N(rangeSize)
-}
+type handlerProvider[T any] func(pool *pgxpool.Pool) T

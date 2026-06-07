@@ -42,6 +42,19 @@ func runTest(t *testing.T, tt testCase) {
 	}
 }
 
+func assertOutcome(t *testing.T, wantErr bool, wantedOutcome twopc.Outcome, result twopc.Result) {
+	t.Helper()
+	if wantErr && result.Err() == nil {
+		t.Fatalf("expected error")
+	}
+	if !wantErr && result.Err() != nil {
+		t.Fatalf("didn't expect error, got %v", result.Err())
+	}
+	if wantedOutcome != result.Outcome() {
+		t.Fatalf("expected outcome %v, got %v", wantedOutcome, result.Outcome())
+	}
+}
+
 type distributedTransaction struct {
 	transactionID string
 	transactions  []transaction

@@ -11,8 +11,8 @@ import (
 
 func RunServers(requests []RunServerRequest) (ServerBundle, error) {
 	listeners := make([]net.Listener, 0, len(requests))
-	for _, req := range requests {
-		lis, err := net.Listen("tcp", req.getAddr())
+	for range requests {
+		lis, err := net.Listen("tcp", ":0")
 		if err != nil {
 			return ServerBundle{}, err
 		}
