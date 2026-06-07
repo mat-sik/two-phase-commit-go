@@ -23,7 +23,7 @@ func Test_grpc_sql_basic_integration(t *testing.T) {
 				client.NewNoopGRPCHandler(),
 				client.NewNoopGRPCHandler(),
 			},
-			handlersMapper: client.BasicGRPCServerRequests,
+			handlersMapper: basicGRPCServerRequests,
 			txCoordinatorProvider: func(pool *pgxpool.Pool) *twopc.Coordinator[string] {
 				return coordinator.NewSQLGRPCCoordinator(pool)
 			},
@@ -69,7 +69,7 @@ func Test_grpc_sql_transfer_integration(t *testing.T) {
 				sqlProvider,
 				sqlProvider,
 			},
-			handlersMapper: client.TransferGRPCServerRequests,
+			handlersMapper: transferGRPCServerRequests,
 			txCoordinatorProvider: func(pool *pgxpool.Pool) *twopc.Coordinator[string] {
 				return coordinator.NewTransferSQLGRPCCoordinator(pool)
 			},
@@ -135,17 +135,17 @@ func Test_grpc_sql_eventual_consistency_postgres_noop_gRPC(t *testing.T) {
 			{participantNumber: 2, payload: "three"},
 		},
 	}
-	srvConfig := client.BasicGRPCServerRequests([]*client.GRPCBasicHandler{
+	srvConfig := basicGRPCServerRequests([]*client.GRPCBasicHandler{
 		client.NewFailingNoopGRPCHandler(0, 15, 0),
 		client.NewFailingNoopGRPCHandler(0, 20, 0),
 		client.NewFailingNoopGRPCHandler(0, 30, 0),
 	})
-	srvBundle, err := client.RunServers(srvConfig)
+	srvBundle, err := runServers(srvConfig)
 	if err != nil {
 		t.Fatalf("failed to start servers: %v", err)
 	}
 	t.Cleanup(func() {
-		errs := srvBundle.Shutdown()
+		errs := srvBundle.shutdown()
 		if len(errs) != 0 {
 			t.Errorf("got %d server errors: %v", len(errs), errs)
 		}
@@ -158,7 +158,7 @@ func Test_grpc_sql_eventual_consistency_postgres_noop_gRPC(t *testing.T) {
 			t.Fatalf("failed to eventually finish in committed state, err: %v", err)
 		}
 		ctx, cancel := context.WithTimeout(testCtx, 1*time.Second)
-		addresses := srvBundle.Addresses()
+		addresses := srvBundle.addresses()
 		outcome := txCoordinator.Execute(ctx, tx.toTwopc(addresses))
 		cancel()
 		if outcome.Outcome() == twopc.OutcomeCommitted {

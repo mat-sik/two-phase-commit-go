@@ -7,13 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
 type testCase struct {
 	name                   string
-	runServerRequests      []client.RunServerRequest
+	runServerRequests      []runServerRequest
 	txCoordinator          *twopc.Coordinator[string]
 	distributedTransaction distributedTransaction
 	wantErr                bool
@@ -23,7 +22,7 @@ type testCase struct {
 func runTest(t *testing.T, tt testCase) {
 	t.Helper()
 
-	srvBundle, err := client.RunServers(tt.runServerRequests)
+	srvBundle, err := runServers(tt.runServerRequests)
 	if err != nil {
 		t.Fatalf("failed to start servers: %v", err)
 	}
@@ -31,12 +30,12 @@ func runTest(t *testing.T, tt testCase) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	addresses := srvBundle.Addresses()
+	addresses := srvBundle.addresses()
 	outcome := tt.txCoordinator.Execute(ctx, tt.distributedTransaction.toTwopc(addresses))
 
 	assertOutcome(t, tt.wantErr, tt.wantedOutcome, outcome)
 
-	errs := srvBundle.Shutdown()
+	errs := srvBundle.shutdown()
 	if len(errs) > 0 {
 		t.Errorf("got %d server errors: %v", len(errs), errs)
 	}

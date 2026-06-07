@@ -14,7 +14,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 		{
 			name: "simple mock noop gRPC happy path",
 			// TODO: It should be possible to mix gRPC with REST clients
-			runServerRequests: client.BasicGRPCServerRequests([]*client.GRPCBasicHandler{
+			runServerRequests: basicGRPCServerRequests([]*client.GRPCBasicHandler{
 				client.NewNoopGRPCHandler(),
 				client.NewNoopGRPCHandler(),
 				client.NewNoopGRPCHandler(),
@@ -42,7 +42,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 		},
 		{
 			name: "failing mock noop gRPC -> rollback",
-			runServerRequests: client.BasicGRPCServerRequests([]*client.GRPCBasicHandler{
+			runServerRequests: basicGRPCServerRequests([]*client.GRPCBasicHandler{
 				client.NewFailingNoopGRPCHandler(1, 0, 1),
 				client.NewFailingNoopGRPCHandler(0, 0, 1),
 				client.NewFailingNoopGRPCHandler(1, 0, 0),
@@ -70,7 +70,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 		},
 		{
 			name: "failing mock noop gRPC -> committed",
-			runServerRequests: client.BasicGRPCServerRequests([]*client.GRPCBasicHandler{
+			runServerRequests: basicGRPCServerRequests([]*client.GRPCBasicHandler{
 				client.NewFailingNoopGRPCHandler(0, 1, 0),
 				client.NewFailingNoopGRPCHandler(0, 1, 0),
 				client.NewFailingNoopGRPCHandler(0, 1, 0),

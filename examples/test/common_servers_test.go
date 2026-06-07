@@ -1,16 +1,16 @@
-package client
+package test
 
 import (
 	"net"
 	"sync"
 )
 
-func RunServers(requests []RunServerRequest) (ServerBundle, error) {
+func runServers(requests []runServerRequest) (serverBundle, error) {
 	listeners := make([]net.Listener, 0, len(requests))
 	for range requests {
 		lis, err := net.Listen("tcp", ":0")
 		if err != nil {
-			return ServerBundle{}, err
+			return serverBundle{}, err
 		}
 		listeners = append(listeners, lis)
 	}
@@ -35,7 +35,7 @@ func RunServers(requests []RunServerRequest) (ServerBundle, error) {
 		close(serversErrCh)
 	}()
 
-	return ServerBundle{
+	return serverBundle{
 		serverHandles: serverHandles,
 		serversErrCh:  serversErrCh,
 	}, nil
@@ -47,30 +47,30 @@ func localhostAddress(lis net.Listener) string {
 	return "localhost:" + port
 }
 
-type RunServerRequest struct {
-	serverRunner  ServerRunner
-	serverStopper ServerStopper
+type runServerRequest struct {
+	serverRunner  serverRunner
+	serverStopper serverStopper
 	addr          *string
 }
 
-func (rsr RunServerRequest) getAddr() string {
+func (rsr runServerRequest) getAddr() string {
 	if rsr.addr != nil {
 		return *rsr.addr
 	}
 	return ":0"
 }
 
-type ServerBundle struct {
+type serverBundle struct {
 	serverHandles []serverHandle
 	serversErrCh  <-chan error
 }
 
 type serverHandle struct {
 	address       string
-	serverStopper ServerStopper
+	serverStopper serverStopper
 }
 
-func (sb ServerBundle) Addresses() []string {
+func (sb serverBundle) addresses() []string {
 	addresses := make([]string, 0, len(sb.serverHandles))
 	for _, srv := range sb.serverHandles {
 		addresses = append(addresses, srv.address)
@@ -78,7 +78,7 @@ func (sb ServerBundle) Addresses() []string {
 	return addresses
 }
 
-func (sb ServerBundle) Shutdown() []error {
+func (sb serverBundle) shutdown() []error {
 	wg := sync.WaitGroup{}
 	serverStoppers := sb.serverStoppers()
 	errCh := make(chan error, len(serverStoppers))
@@ -111,17 +111,17 @@ func (sb ServerBundle) Shutdown() []error {
 	return errs
 }
 
-func (sb ServerBundle) serverStoppers() []ServerStopper {
-	serverStoppers := make([]ServerStopper, 0, len(sb.serverHandles))
+func (sb serverBundle) serverStoppers() []serverStopper {
+	serverStoppers := make([]serverStopper, 0, len(sb.serverHandles))
 	for _, srv := range sb.serverHandles {
 		serverStoppers = append(serverStoppers, srv.serverStopper)
 	}
 	return serverStoppers
 }
 
-type ServerRunner func(wg *sync.WaitGroup, errCh chan<- error, lis net.Listener)
+type serverRunner func(wg *sync.WaitGroup, errCh chan<- error, lis net.Listener)
 
-type ServerStopper func() error
+type serverStopper func() error
 
 func runServer(wg *sync.WaitGroup, errCh chan<- error, serveFunc func() error) {
 	defer wg.Done()
@@ -130,8 +130,8 @@ func runServer(wg *sync.WaitGroup, errCh chan<- error, serveFunc func() error) {
 	}
 }
 
-func mapToRunServerRequests[T any](elements []T, mappingFunc func(T) RunServerRequest) []RunServerRequest {
-	runServerRequests := make([]RunServerRequest, 0, len(elements))
+func mapToRunServerRequests[T any](elements []T, mappingFunc func(T) runServerRequest) []runServerRequest {
+	runServerRequests := make([]runServerRequest, 0, len(elements))
 	for _, el := range elements {
 		runServerRequests = append(runServerRequests, mappingFunc(el))
 	}

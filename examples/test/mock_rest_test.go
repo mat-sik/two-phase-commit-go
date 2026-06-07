@@ -15,7 +15,7 @@ func Test_rest_mock_integration(t *testing.T) {
 	tests := []testCase{
 		{
 			name: "simple mock noop REST happy path",
-			runServerRequests: client.RESTServerRequests([]*http.ServeMux{
+			runServerRequests: restServerRequests([]*http.ServeMux{
 				client.NewNoopMux(),
 				client.NewNoopMux(),
 				client.NewNoopMux(),
@@ -52,7 +52,7 @@ func Test_rest_mock_integration(t *testing.T) {
 		},
 		{
 			name: "failing mock noop REST -> rollback",
-			runServerRequests: client.RESTServerRequests([]*http.ServeMux{
+			runServerRequests: restServerRequests([]*http.ServeMux{
 				client.NewFailingNoopMux(1, 0, 1),
 				client.NewFailingNoopMux(0, 0, 1),
 				client.NewFailingNoopMux(1, 0, 0),
@@ -89,7 +89,7 @@ func Test_rest_mock_integration(t *testing.T) {
 		},
 		{
 			name: "failing mock noop REST -> committed",
-			runServerRequests: client.RESTServerRequests([]*http.ServeMux{
+			runServerRequests: restServerRequests([]*http.ServeMux{
 				client.NewFailingNoopMux(0, 1, 0),
 				client.NewFailingNoopMux(0, 1, 0),
 				client.NewFailingNoopMux(0, 1, 0),

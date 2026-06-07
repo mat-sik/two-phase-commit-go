@@ -23,7 +23,7 @@ func Test_sql_rest_integration(t *testing.T) {
 				client.NewNoopMux(),
 				client.NewNoopMux(),
 			},
-			handlersMapper: client.RESTServerRequests,
+			handlersMapper: restServerRequests,
 			txCoordinatorProvider: func(pool *pgxpool.Pool) *twopc.Coordinator[string] {
 				return coordinator.NewSQLRESTCoordinator(pool)
 			},

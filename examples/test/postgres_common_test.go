@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -22,7 +21,7 @@ type testContainersTestCase[T any] struct {
 	name                   string
 	handlers               []T
 	handlersProviders      []handlerProvider[T]
-	handlersMapper         func([]T) []client.RunServerRequest
+	handlersMapper         func([]T) []runServerRequest
 	txCoordinatorProvider  txCoordinatorProvider
 	distributedTransaction distributedTransaction
 	wantErr                bool
@@ -40,7 +39,7 @@ func runTestContainersTest[T any](t *testing.T, tt testContainersTestCase[T]) {
 
 	handlers := getHandlers(tt, participantPools)
 
-	srvBundle, err := client.RunServers(tt.handlersMapper(handlers))
+	srvBundle, err := runServers(tt.handlersMapper(handlers))
 	if err != nil {
 		t.Fatalf("failed to start servers: %v", err)
 	}
@@ -48,13 +47,13 @@ func runTestContainersTest[T any](t *testing.T, tt testContainersTestCase[T]) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	addresses := srvBundle.Addresses()
+	addresses := srvBundle.addresses()
 	txCoordinator := tt.txCoordinatorProvider(coordinatorPool)
 	outcome := txCoordinator.Execute(ctx, tt.distributedTransaction.toTwopc(addresses))
 
 	assertOutcome(t, tt.wantErr, tt.wantedOutcome, outcome)
 
-	errs := srvBundle.Shutdown()
+	errs := srvBundle.shutdown()
 	if len(errs) > 0 {
 		t.Errorf("got %d server errors: %v", len(errs), errs)
 	}
