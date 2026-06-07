@@ -3,10 +3,10 @@ package test
 import (
 	"testing"
 
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/client/server"
 )
 
 func TestMain(m *testing.M) {
-	client.InitLogger()
+	server.InitLogger()
 	m.Run()
 }

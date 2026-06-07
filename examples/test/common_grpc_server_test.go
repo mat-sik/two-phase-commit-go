@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/client/server"
 	basic "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/basic/v1"
 	transfer "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/transfer/v1"
 	"google.golang.org/grpc"
@@ -33,7 +34,7 @@ func mapFromTransferHandler(handler *client.GRPCTransferHandler) runServerReques
 	return newRunServerRequest(registerer)
 }
 
-func newRunServerRequest(registerer client.GRPCHandlerRegisterer) runServerRequest {
+func newRunServerRequest(registerer server.GRPCHandlerRegisterer) runServerRequest {
 	var serverPtr atomic.Pointer[grpc.Server]
 	return runServerRequest{
 		serverRunner:  newGRPCServerRunner(registerer, &serverPtr),
@@ -41,9 +42,9 @@ func newRunServerRequest(registerer client.GRPCHandlerRegisterer) runServerReque
 	}
 }
 
-func newGRPCServerRunner(registerer client.GRPCHandlerRegisterer, ref *atomic.Pointer[grpc.Server]) serverRunner {
+func newGRPCServerRunner(registerer server.GRPCHandlerRegisterer, ref *atomic.Pointer[grpc.Server]) serverRunner {
 	return func(wg *sync.WaitGroup, errCh chan<- error, lis net.Listener) {
-		srv := client.NewGRPCServer(registerer, lis.Addr())
+		srv := server.NewGRPCServer(registerer, lis.Addr())
 		ref.Store(srv)
 		runServer(wg, errCh, func() error {
 			return srv.Serve(lis)
