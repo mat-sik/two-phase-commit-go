@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// todo: do the same for rest
 type transferGRPCClient struct {
 	client transfer.TransferServiceClient
 }
