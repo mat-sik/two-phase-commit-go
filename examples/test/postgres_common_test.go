@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -148,8 +147,6 @@ func runPostgresForPool(ctx context.Context, scripts ...string) (*pgxpool.Pool, 
 		return nil, nil, fmt.Errorf("%s: failed to get connection string: %v", function, err)
 	}
 
-	slog.Info("obtained new connection", "function", function, "connections string", connStr)
-
 	var pool *pgxpool.Pool
 	pool, err = pgxpool.New(ctx, connStr)
 	if err != nil {
@@ -183,8 +180,6 @@ func runPostgres(ctx context.Context, scripts ...string) (*postgres.PostgresCont
 		return nil, fmt.Errorf("%s: failed to run container: %v", function, err)
 	}
 
-	slog.Info("started postgres container", "function", function, "scripts", scripts)
-
 	return container, nil
 }
 
@@ -199,8 +194,6 @@ func newPostgresTerminator(pool *pgxpool.Pool, container *postgres.PostgresConta
 		if err := container.Terminate(context.Background()); err != nil {
 			panic(fmt.Sprintf("%s: failed to terminate container: %v", function, err))
 		}
-
-		slog.Info("terminated postgres container", "function", function)
 	}
 }
 
