@@ -14,6 +14,7 @@ import (
 )
 
 func Test_sql_rest_integration(t *testing.T) {
+	t.Parallel()
 	tests := []testContainersTestCase[*http.ServeMux]{
 		{
 			name: "simple REST happy path",

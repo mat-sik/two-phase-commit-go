@@ -14,6 +14,7 @@ import (
 )
 
 func Test_grpc_sql_basic_integration(t *testing.T) {
+	t.Parallel()
 	tests := []testContainersTestCase[*client.GRPCBasicHandler]{
 		{
 			name: "simple postgres noop gRPC happy path",
@@ -56,6 +57,7 @@ func Test_grpc_sql_basic_integration(t *testing.T) {
 }
 
 func Test_grpc_sql_transfer_integration(t *testing.T) {
+	t.Parallel()
 	var sqlProvider = func(pool *pgxpool.Pool) *client.GRPCTransferHandler {
 		return client.NewSQLGRPCHandler(pool)
 	}
@@ -112,70 +114,55 @@ func Test_grpc_sql_transfer_integration(t *testing.T) {
 	}
 }
 
-func Test_grpc_sql_eventual_consistency(t *testing.T) {
-	t.Run("eventual consistency postgres noop gRPC", func(t *testing.T) {
-		t.Parallel()
+func Test_grpc_sql_eventual_consistency_postgres_noop_gRPC(t *testing.T) {
+	t.Parallel()
 
-		coordinatorPool, coordinatorPostgresTerminator, err := runPostgresForCoordinatorPool(t.Context())
-		if err != nil {
-			t.Fatalf("failed to run coordinator postgres container: %v", err)
-		}
-		t.Cleanup(coordinatorPostgresTerminator)
+	coordinatorPool, coordinatorPostgresTerminator, err := runPostgresForCoordinatorPool(t.Context())
+	if err != nil {
+		t.Fatalf("failed to run coordinator postgres container: %v", err)
+	}
+	t.Cleanup(coordinatorPostgresTerminator)
 
-		txCoordinator := coordinator.NewSQLGRPCCoordinator(
-			coordinatorPool,
-			twopc.WithBackoffMax(200*time.Millisecond),
-		)
-
-		tx := distributedTransaction{
-			transactionID: "tx-eventual-consistency-postgres-noop-gRPC-1",
-			transactions: []transaction{
-				{
-					participantNumber: 0,
-					payload:           "one",
-				},
-				{
-					participantNumber: 1,
-					payload:           "two",
-				},
-				{
-					participantNumber: 2,
-					payload:           "three",
-				},
-			},
-		}
-
-		srvConfig := client.BasicGRPCServerRequests([]*client.GRPCBasicHandler{
-			client.NewFailingNoopGRPCHandler(0, 15, 0),
-			client.NewFailingNoopGRPCHandler(0, 20, 0),
-			client.NewFailingNoopGRPCHandler(0, 30, 0),
-		})
-
-		srvBundle, err := client.RunServers(srvConfig)
-		if err != nil {
-			t.Fatalf("failed to start servers: %v", err)
-		}
-
-		testCtx, testCancel := context.WithTimeout(t.Context(), 5*time.Second)
-		defer testCancel()
-		for {
-			if err = testCtx.Err(); err != nil {
-				t.Fatalf("failed to eventually finish in committed state, err: %v", err)
-			}
-
-			ctx, cancel := context.WithTimeout(testCtx, 1*time.Second)
-
-			addresses := srvBundle.Addresses()
-			outcome := txCoordinator.Execute(ctx, tx.toTwopc(addresses))
-			cancel()
-			if outcome.Outcome() == twopc.OutcomeCommitted {
-				break
-			}
-		}
-
+	txCoordinator := coordinator.NewSQLGRPCCoordinator(
+		coordinatorPool,
+		twopc.WithBackoffMax(200*time.Millisecond),
+	)
+	tx := distributedTransaction{
+		transactionID: "tx-eventual-consistency-postgres-noop-gRPC-1",
+		transactions: []transaction{
+			{participantNumber: 0, payload: "one"},
+			{participantNumber: 1, payload: "two"},
+			{participantNumber: 2, payload: "three"},
+		},
+	}
+	srvConfig := client.BasicGRPCServerRequests([]*client.GRPCBasicHandler{
+		client.NewFailingNoopGRPCHandler(0, 15, 0),
+		client.NewFailingNoopGRPCHandler(0, 20, 0),
+		client.NewFailingNoopGRPCHandler(0, 30, 0),
+	})
+	srvBundle, err := client.RunServers(srvConfig)
+	if err != nil {
+		t.Fatalf("failed to start servers: %v", err)
+	}
+	t.Cleanup(func() {
 		errs := srvBundle.Shutdown()
 		if len(errs) != 0 {
 			t.Errorf("got %d server errors: %v", len(errs), errs)
 		}
 	})
+
+	testCtx, testCancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer testCancel()
+	for {
+		if err = testCtx.Err(); err != nil {
+			t.Fatalf("failed to eventually finish in committed state, err: %v", err)
+		}
+		ctx, cancel := context.WithTimeout(testCtx, 1*time.Second)
+		addresses := srvBundle.Addresses()
+		outcome := txCoordinator.Execute(ctx, tx.toTwopc(addresses))
+		cancel()
+		if outcome.Outcome() == twopc.OutcomeCommitted {
+			break
+		}
+	}
 }

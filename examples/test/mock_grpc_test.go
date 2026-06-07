@@ -9,6 +9,7 @@ import (
 )
 
 func Test_grpc_mock_integration(t *testing.T) {
+	t.Parallel()
 	tests := []testCase{
 		{
 			name: "simple mock noop gRPC happy path",
