@@ -50,7 +50,7 @@ func Test_rest_mock_integration(t *testing.T) {
 			wantedOutcome: twopc.OutcomeCommitted,
 		},
 		{
-			name: "failing mock noop REST -> committed",
+			name: "failing mock noop REST -> rollback",
 			runServerRequests: client.RESTServerRequests([]*http.ServeMux{
 				client.NewFailingNoopMux(1, 0, 1),
 				client.NewFailingNoopMux(0, 0, 1),
