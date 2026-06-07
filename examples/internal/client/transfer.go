@@ -9,11 +9,16 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-type sqlTransactionHandler struct {
+type TransferTransactionHandler struct {
 	pool *pgxpool.Pool
+}
+
+func NewTransferTransactionHandler(pool *pgxpool.Pool) *TransferTransactionHandler {
+	return &TransferTransactionHandler{
+		pool: pool,
+	}
 }
 
 type TransferPayload struct {
@@ -22,13 +27,8 @@ type TransferPayload struct {
 	Amount     float64 `json:"amount"`
 }
 
-func (h *sqlTransactionHandler) prepareTransaction(ctx context.Context, transactionID string, preparePayload twopc.PreparePayload) (err error) {
+func (h *TransferTransactionHandler) PrepareTransaction(ctx context.Context, transactionID string, payload TransferPayload) (err error) {
 	const method = "prepareTransaction"
-
-	payload, ok := preparePayload.(TransferPayload)
-	if !ok {
-		panic(fmt.Sprintf("%s: unexpected payload type %T", method, payload))
-	}
 
 	slog.DebugContext(ctx, "called", "method", method, "transactionID", transactionID, "payload", payload)
 
@@ -103,7 +103,7 @@ func prepareTransaction(ctx context.Context, tx pgx.Tx, transactionID string) er
 	return err
 }
 
-func (h *sqlTransactionHandler) commitTransaction(ctx context.Context, transactionID string) error {
+func (h *TransferTransactionHandler) CommitTransaction(ctx context.Context, transactionID string) error {
 	const method = "commitTransaction"
 
 	slog.DebugContext(ctx, "called", "method", method, "transactionID", transactionID)
@@ -143,7 +143,7 @@ func commitTransaction(ctx context.Context, conn *pgxpool.Conn, transactionID st
 	return err
 }
 
-func (h *sqlTransactionHandler) rollbackTransaction(ctx context.Context, transactionID string) error {
+func (h *TransferTransactionHandler) RollbackTransaction(ctx context.Context, transactionID string) error {
 	const method = "rollbackTransaction"
 
 	slog.DebugContext(ctx, "called", "method", method, "transactionID", transactionID)

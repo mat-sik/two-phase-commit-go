@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/client/adapter"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
@@ -19,9 +19,9 @@ func Test_sql_rest_integration(t *testing.T) {
 		{
 			name: "simple REST happy path",
 			handlers: []*http.ServeMux{
-				client.NewNoopMux(),
-				client.NewNoopMux(),
-				client.NewNoopMux(),
+				adapter.NewBasicMux(),
+				adapter.NewBasicMux(),
+				adapter.NewBasicMux(),
 			},
 			handlersMapper: restServerRequests,
 			txCoordinatorProvider: func(pool *pgxpool.Pool) *twopc.Coordinator[string] {

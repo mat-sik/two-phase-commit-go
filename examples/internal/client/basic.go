@@ -6,24 +6,34 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
-
-	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-type noopTransactionHandler struct {
+type BasicTransactionHandler struct {
 	transactionStatusMap     *transactionStatusMap
 	prepareFailUntilAttempt  atomic.Int64
 	commitFailUntilAttempt   atomic.Int64
 	rollbackFailUntilAttempt atomic.Int64
 }
 
-func (h *noopTransactionHandler) prepareTransaction(ctx context.Context, transactionID string, preparePayload twopc.PreparePayload) error {
-	const method = "prepareTransaction"
+func NewBasicTransactionHandler() *BasicTransactionHandler {
+	return NewFailingBasicTransactionHandler(0, 0, 0)
+}
 
-	payload, ok := preparePayload.(string)
-	if !ok {
-		panic(fmt.Sprintf("%s: unexpected payload type %T", method, payload))
+func NewFailingBasicTransactionHandler(prepareFailUntilAttempt, commitFailUntilAttempt, rollbackFailUntilAttempt int) *BasicTransactionHandler {
+	handler := &BasicTransactionHandler{
+		transactionStatusMap:     &transactionStatusMap{},
+		prepareFailUntilAttempt:  atomic.Int64{},
+		commitFailUntilAttempt:   atomic.Int64{},
+		rollbackFailUntilAttempt: atomic.Int64{},
 	}
+	handler.prepareFailUntilAttempt.Store(int64(prepareFailUntilAttempt))
+	handler.commitFailUntilAttempt.Store(int64(commitFailUntilAttempt))
+	handler.rollbackFailUntilAttempt.Store(int64(rollbackFailUntilAttempt))
+	return handler
+}
+
+func (h *BasicTransactionHandler) PrepareTransaction(ctx context.Context, transactionID string, payload string) error {
+	const method = "prepareTransaction"
 
 	slog.DebugContext(ctx, "called", "method", method, "transactionID", transactionID, "payload", payload)
 
@@ -45,7 +55,7 @@ func (h *noopTransactionHandler) prepareTransaction(ctx context.Context, transac
 	return nil
 }
 
-func (h *noopTransactionHandler) commitTransaction(ctx context.Context, transactionID string) error {
+func (h *BasicTransactionHandler) CommitTransaction(ctx context.Context, transactionID string) error {
 	const method = "commitTransaction"
 
 	slog.DebugContext(ctx, "called", "method", method, "transactionID", transactionID)
@@ -71,7 +81,7 @@ func (h *noopTransactionHandler) commitTransaction(ctx context.Context, transact
 	return nil
 }
 
-func (h *noopTransactionHandler) rollbackTransaction(ctx context.Context, transactionID string) error {
+func (h *BasicTransactionHandler) RollbackTransaction(ctx context.Context, transactionID string) error {
 	const method = "rollbackTransaction"
 
 	slog.DebugContext(ctx, "called", "method", method, "transactionID", transactionID)
@@ -94,7 +104,7 @@ func (h *noopTransactionHandler) rollbackTransaction(ctx context.Context, transa
 	return nil
 }
 
-func (h *noopTransactionHandler) shouldFail(ctx context.Context, method string, counter *atomic.Int64) bool {
+func (h *BasicTransactionHandler) shouldFail(ctx context.Context, method string, counter *atomic.Int64) bool {
 	for {
 		current := counter.Load()
 		if current <= 0 {

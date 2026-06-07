@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/client/adapter"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
@@ -14,10 +14,10 @@ func Test_grpc_mock_integration(t *testing.T) {
 		{
 			name: "simple mock noop gRPC happy path",
 			// TODO: It should be possible to mix gRPC with REST clients
-			runServerRequests: basicGRPCServerRequests([]*client.GRPCBasicHandler{
-				client.NewNoopGRPCHandler(),
-				client.NewNoopGRPCHandler(),
-				client.NewNoopGRPCHandler(),
+			runServerRequests: basicGRPCServerRequests([]*adapter.GRPCBasicHandler{
+				adapter.NewBasicGRPCHandler(),
+				adapter.NewBasicGRPCHandler(),
+				adapter.NewBasicGRPCHandler(),
 			}),
 			txCoordinator: coordinator.NewMockGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
@@ -42,10 +42,10 @@ func Test_grpc_mock_integration(t *testing.T) {
 		},
 		{
 			name: "failing mock noop gRPC -> rollback",
-			runServerRequests: basicGRPCServerRequests([]*client.GRPCBasicHandler{
-				client.NewFailingNoopGRPCHandler(1, 0, 1),
-				client.NewFailingNoopGRPCHandler(0, 0, 1),
-				client.NewFailingNoopGRPCHandler(1, 0, 0),
+			runServerRequests: basicGRPCServerRequests([]*adapter.GRPCBasicHandler{
+				adapter.NewFailingBasicGRPCHandler(1, 0, 1),
+				adapter.NewFailingBasicGRPCHandler(0, 0, 1),
+				adapter.NewFailingBasicGRPCHandler(1, 0, 0),
 			}),
 			txCoordinator: coordinator.NewMockGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
@@ -70,10 +70,10 @@ func Test_grpc_mock_integration(t *testing.T) {
 		},
 		{
 			name: "failing mock noop gRPC -> committed",
-			runServerRequests: basicGRPCServerRequests([]*client.GRPCBasicHandler{
-				client.NewFailingNoopGRPCHandler(0, 1, 0),
-				client.NewFailingNoopGRPCHandler(0, 1, 0),
-				client.NewFailingNoopGRPCHandler(0, 1, 0),
+			runServerRequests: basicGRPCServerRequests([]*adapter.GRPCBasicHandler{
+				adapter.NewFailingBasicGRPCHandler(0, 1, 0),
+				adapter.NewFailingBasicGRPCHandler(0, 1, 0),
+				adapter.NewFailingBasicGRPCHandler(0, 1, 0),
 			}),
 			txCoordinator: coordinator.NewMockGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{

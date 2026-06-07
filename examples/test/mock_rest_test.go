@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/client/adapter"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
@@ -16,9 +16,9 @@ func Test_rest_mock_integration(t *testing.T) {
 		{
 			name: "simple mock noop REST happy path",
 			runServerRequests: restServerRequests([]*http.ServeMux{
-				client.NewNoopMux(),
-				client.NewNoopMux(),
-				client.NewNoopMux(),
+				adapter.NewBasicMux(),
+				adapter.NewBasicMux(),
+				adapter.NewBasicMux(),
 			}),
 			txCoordinator: coordinator.NewMockRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
@@ -53,9 +53,9 @@ func Test_rest_mock_integration(t *testing.T) {
 		{
 			name: "failing mock noop REST -> rollback",
 			runServerRequests: restServerRequests([]*http.ServeMux{
-				client.NewFailingNoopMux(1, 0, 1),
-				client.NewFailingNoopMux(0, 0, 1),
-				client.NewFailingNoopMux(1, 0, 0),
+				adapter.NewFailingBasicMux(1, 0, 1),
+				adapter.NewFailingBasicMux(0, 0, 1),
+				adapter.NewFailingBasicMux(1, 0, 0),
 			}),
 			txCoordinator: coordinator.NewMockRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
@@ -90,9 +90,9 @@ func Test_rest_mock_integration(t *testing.T) {
 		{
 			name: "failing mock noop REST -> committed",
 			runServerRequests: restServerRequests([]*http.ServeMux{
-				client.NewFailingNoopMux(0, 1, 0),
-				client.NewFailingNoopMux(0, 1, 0),
-				client.NewFailingNoopMux(0, 1, 0),
+				adapter.NewFailingBasicMux(0, 1, 0),
+				adapter.NewFailingBasicMux(0, 1, 0),
+				adapter.NewFailingBasicMux(0, 1, 0),
 			}),
 			txCoordinator: coordinator.NewMockRESTCoordinator(),
 			distributedTransaction: distributedTransaction{

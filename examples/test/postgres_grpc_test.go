@@ -9,19 +9,20 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/client/adapter"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
 func Test_grpc_sql_basic_integration(t *testing.T) {
 	t.Parallel()
-	tests := []testContainersTestCase[*client.GRPCBasicHandler]{
+	tests := []testContainersTestCase[*adapter.GRPCBasicHandler]{
 		{
 			name: "simple postgres noop gRPC happy path",
-			handlers: []*client.GRPCBasicHandler{
-				client.NewNoopGRPCHandler(),
-				client.NewNoopGRPCHandler(),
-				client.NewNoopGRPCHandler(),
+			handlers: []*adapter.GRPCBasicHandler{
+				adapter.NewBasicGRPCHandler(),
+				adapter.NewBasicGRPCHandler(),
+				adapter.NewBasicGRPCHandler(),
 			},
 			handlersMapper: basicGRPCServerRequests,
 			txCoordinatorProvider: func(pool *pgxpool.Pool) *twopc.Coordinator[string] {
@@ -58,13 +59,13 @@ func Test_grpc_sql_basic_integration(t *testing.T) {
 
 func Test_grpc_sql_transfer_integration(t *testing.T) {
 	t.Parallel()
-	var sqlProvider = func(pool *pgxpool.Pool) *client.GRPCTransferHandler {
-		return client.NewSQLGRPCHandler(pool)
+	var sqlProvider = func(pool *pgxpool.Pool) *adapter.GRPCTransferHandler {
+		return adapter.NewTransferGRPCHandler(pool)
 	}
-	tests := []testContainersTestCase[*client.GRPCTransferHandler]{
+	tests := []testContainersTestCase[*adapter.GRPCTransferHandler]{
 		{
 			name: "simple postgres sql gRPC happy path",
-			handlersProviders: []handlerProvider[*client.GRPCTransferHandler]{
+			handlersProviders: []handlerProvider[*adapter.GRPCTransferHandler]{
 				sqlProvider,
 				sqlProvider,
 				sqlProvider,
@@ -135,10 +136,10 @@ func Test_grpc_sql_eventual_consistency_postgres_noop_gRPC(t *testing.T) {
 			{participantNumber: 2, payload: "three"},
 		},
 	}
-	srvConfig := basicGRPCServerRequests([]*client.GRPCBasicHandler{
-		client.NewFailingNoopGRPCHandler(0, 15, 0),
-		client.NewFailingNoopGRPCHandler(0, 20, 0),
-		client.NewFailingNoopGRPCHandler(0, 30, 0),
+	srvConfig := basicGRPCServerRequests([]*adapter.GRPCBasicHandler{
+		adapter.NewFailingBasicGRPCHandler(0, 15, 0),
+		adapter.NewFailingBasicGRPCHandler(0, 20, 0),
+		adapter.NewFailingBasicGRPCHandler(0, 30, 0),
 	})
 	srvBundle, err := runServers(srvConfig)
 	if err != nil {

@@ -1,17 +1,14 @@
-package client
+package adapter
 
 import (
 	"io"
 	"net/http"
-	"sync/atomic"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
 )
 
-func NewSQLMux(pool *pgxpool.Pool) *http.ServeMux {
-	handler := &sqlTransactionHandler{
-		pool: pool,
-	}
+func NewBasicMux() *http.ServeMux {
+	handler := client.NewBasicTransactionHandler()
 	return newMux(restHandler{
 		transactionPreparer:   restTransactionPreparer{transactionPreparer: handler},
 		transactionCommitter:  restTransactionCommitter{transactionCommitter: handler},
@@ -19,33 +16,8 @@ func NewSQLMux(pool *pgxpool.Pool) *http.ServeMux {
 	})
 }
 
-func NewNoopMux() *http.ServeMux {
-	handler := &noopTransactionHandler{
-		transactionStatusMap:     &transactionStatusMap{},
-		prepareFailUntilAttempt:  atomic.Int64{},
-		commitFailUntilAttempt:   atomic.Int64{},
-		rollbackFailUntilAttempt: atomic.Int64{},
-	}
-	handler.prepareFailUntilAttempt.Store(0)
-	handler.commitFailUntilAttempt.Store(0)
-	handler.rollbackFailUntilAttempt.Store(0)
-	return newMux(restHandler{
-		transactionPreparer:   restTransactionPreparer{transactionPreparer: handler},
-		transactionCommitter:  restTransactionCommitter{transactionCommitter: handler},
-		transactionRollbacker: restTransactionRollbacker{transactionRollbacker: handler},
-	})
-}
-
-func NewFailingNoopMux(prepareFailUntilAttempt, commitFailUntilAttempt, rollbackFailUntilAttempt int) *http.ServeMux {
-	handler := &noopTransactionHandler{
-		transactionStatusMap:     &transactionStatusMap{},
-		prepareFailUntilAttempt:  atomic.Int64{},
-		commitFailUntilAttempt:   atomic.Int64{},
-		rollbackFailUntilAttempt: atomic.Int64{},
-	}
-	handler.prepareFailUntilAttempt.Store(int64(prepareFailUntilAttempt))
-	handler.commitFailUntilAttempt.Store(int64(commitFailUntilAttempt))
-	handler.rollbackFailUntilAttempt.Store(int64(rollbackFailUntilAttempt))
+func NewFailingBasicMux(prepareFailUntilAttempt, commitFailUntilAttempt, rollbackFailUntilAttempt int) *http.ServeMux {
+	handler := client.NewFailingBasicTransactionHandler(prepareFailUntilAttempt, commitFailUntilAttempt, rollbackFailUntilAttempt)
 	return newMux(restHandler{
 		transactionPreparer:   restTransactionPreparer{transactionPreparer: handler},
 		transactionCommitter:  restTransactionCommitter{transactionCommitter: handler},
@@ -70,7 +42,7 @@ type restHandler struct {
 }
 
 type restTransactionPreparer struct {
-	transactionPreparer transactionPreparer
+	transactionPreparer BasicTransactionPreparer
 }
 
 func (h *restTransactionPreparer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -81,7 +53,7 @@ func (h *restTransactionPreparer) ServeHTTP(w http.ResponseWriter, req *http.Req
 	}
 
 	transactionID := req.PathValue("transactionID")
-	err = h.transactionPreparer.prepareTransaction(req.Context(), transactionID, string(data))
+	err = h.transactionPreparer.PrepareTransaction(req.Context(), transactionID, string(data))
 	if err != nil {
 		http.Error(w, "failed to prepareTransaction", http.StatusInternalServerError)
 		return
@@ -89,12 +61,12 @@ func (h *restTransactionPreparer) ServeHTTP(w http.ResponseWriter, req *http.Req
 }
 
 type restTransactionCommitter struct {
-	transactionCommitter transactionCommiter
+	transactionCommitter TransactionCommiter
 }
 
 func (h restTransactionCommitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	transactionID := req.PathValue("transactionID")
-	err := h.transactionCommitter.commitTransaction(req.Context(), transactionID)
+	err := h.transactionCommitter.CommitTransaction(req.Context(), transactionID)
 	if err != nil {
 		http.Error(w, "failed to commitTransaction", http.StatusInternalServerError)
 		return
@@ -102,12 +74,12 @@ func (h restTransactionCommitter) ServeHTTP(w http.ResponseWriter, req *http.Req
 }
 
 type restTransactionRollbacker struct {
-	transactionRollbacker transactionRollbacker
+	transactionRollbacker TransactionRollbacker
 }
 
 func (h restTransactionRollbacker) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	transactionID := req.PathValue("transactionID")
-	err := h.transactionRollbacker.rollbackTransaction(req.Context(), transactionID)
+	err := h.transactionRollbacker.RollbackTransaction(req.Context(), transactionID)
 	if err != nil {
 		http.Error(w, "failed to rollbackTransaction", http.StatusInternalServerError)
 		return
