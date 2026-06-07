@@ -1,0 +1,247 @@
+package participant
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type TransferTransactionHandler struct {
+	pool *pgxpool.Pool
+}
+
+func NewTransferTransactionHandler(pool *pgxpool.Pool) *TransferTransactionHandler {
+	return &TransferTransactionHandler{
+		pool: pool,
+	}
+}
+
+type TransferPayload struct {
+	SenderID   string  `json:"sender_id"`
+	ReceiverID string  `json:"receiver_id"`
+	Amount     float64 `json:"amount"`
+}
+
+func (h *TransferTransactionHandler) PrepareTransaction(ctx context.Context, transactionID string, payload TransferPayload) (err error) {
+	const method = "prepareTransaction"
+
+	slog.DebugContext(ctx, "called", "method", method, "transactionID", transactionID, "payload", payload)
+
+	var tx pgx.Tx
+	tx, err = h.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("%s: begin: %w", method, err)
+	}
+	defer func() {
+		if rollbackErr := tx.Rollback(ctx); err != nil {
+			err = errors.Join(err, rollbackErr)
+		} else {
+			err = rollbackErr
+		}
+	}()
+
+	var exists bool
+	exists, err = isPrepared(ctx, tx, transactionID)
+	if err != nil {
+		return fmt.Errorf("%s: check prepared: %w", method, err)
+	}
+	if exists {
+		slog.DebugContext(ctx, "already prepared", "method", method, "transactionID", transactionID)
+		return nil
+	}
+
+	if err = transferFunds(ctx, tx, payload); err != nil {
+		return fmt.Errorf("%s: transfer funds: %w", method, err)
+	}
+
+	if err = insertTransferLog(ctx, tx, transactionID, payload.SenderID, payload.ReceiverID, payload.Amount, transferStatusPending); err != nil {
+		return fmt.Errorf("%s: insert log: %w", method, err)
+	}
+
+	if err = prepareTransaction(ctx, tx, transactionID); err != nil {
+		return fmt.Errorf("%s: prepare transaction: %w", method, err)
+	}
+
+	slog.DebugContext(ctx, "prepared", "method", method, "transactionID", transactionID)
+
+	return nil
+}
+
+func transferFunds(ctx context.Context, tx pgx.Tx, payload TransferPayload) error {
+	const function = "transferFunds"
+
+	if err := upsertAccount(ctx, tx, -payload.Amount, payload.SenderID); err != nil {
+		return fmt.Errorf("%s: debit sender: %w", function, err)
+	}
+
+	if err := upsertAccount(ctx, tx, payload.Amount, payload.ReceiverID); err != nil {
+		return fmt.Errorf("%s: credit receiver: %w", function, err)
+	}
+
+	return nil
+}
+
+func upsertAccount(ctx context.Context, tx pgx.Tx, amount float64, accountID string) error {
+	const upsertAccountQuery = `
+		INSERT INTO accounts (id, balance)
+		VALUES ($2, $1)
+		ON CONFLICT (id)
+		DO UPDATE SET balance = accounts.balance + $1
+	`
+	_, err := tx.Exec(ctx, upsertAccountQuery, amount, accountID)
+	return err
+}
+
+func prepareTransaction(ctx context.Context, tx pgx.Tx, transactionID string) error {
+	prepareTransactionQuery := fmt.Sprintf(`PREPARE TRANSACTION '%s'`, transactionID)
+	_, err := tx.Exec(ctx, prepareTransactionQuery)
+	return err
+}
+
+func (h *TransferTransactionHandler) CommitTransaction(ctx context.Context, transactionID string) error {
+	const method = "commitTransaction"
+
+	slog.DebugContext(ctx, "called", "method", method, "transactionID", transactionID)
+
+	conn, err := h.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("%s: acquire connection: %w", method, err)
+	}
+	defer conn.Release()
+
+	var exists bool
+	exists, err = isPrepared(ctx, conn, transactionID)
+	if err != nil {
+		return fmt.Errorf("%s: check prepared: %w", method, err)
+	}
+	if !exists {
+		slog.DebugContext(ctx, "already committed", "method", method, "transactionID", transactionID)
+		return nil
+	}
+
+	if err = commitTransaction(ctx, conn, transactionID); err != nil {
+		return fmt.Errorf("%s: commit prepared: %w", method, err)
+	}
+
+	if err = insertAuditLog(ctx, conn, transactionID, transferStatusCommitted); err != nil {
+		return fmt.Errorf("%s: insert audit log: %w", method, err)
+	}
+
+	slog.DebugContext(ctx, "committed", "method", method, "transactionID", transactionID)
+
+	return nil
+}
+
+func commitTransaction(ctx context.Context, conn *pgxpool.Conn, transactionID string) error {
+	commitPreparedQuery := fmt.Sprintf(`COMMIT PREPARED '%s'`, transactionID)
+	_, err := conn.Exec(ctx, commitPreparedQuery)
+	return err
+}
+
+func (h *TransferTransactionHandler) RollbackTransaction(ctx context.Context, transactionID string) error {
+	const method = "rollbackTransaction"
+
+	slog.DebugContext(ctx, "called", "method", method, "transactionID", transactionID)
+
+	conn, err := h.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("%s: acquire connection: %w", method, err)
+	}
+	defer conn.Release()
+
+	var exists bool
+	exists, err = isPrepared(ctx, conn, transactionID)
+	if err != nil {
+		return fmt.Errorf("%s: check prepared: %w", method, err)
+	}
+	if !exists {
+		slog.DebugContext(ctx, "already rolled back", "method", method, "transactionID", transactionID)
+		return nil
+	}
+
+	if err = rollbackTransaction(ctx, conn, transactionID); err != nil {
+		return fmt.Errorf("%s: rollback prepared: %w", method, err)
+	}
+
+	if err = insertAuditLog(ctx, conn, transactionID, transferStatusRolledBack); err != nil {
+		return fmt.Errorf("%s: insert audit log: %w", method, err)
+	}
+
+	slog.DebugContext(ctx, "rolled back", "method", method, "transactionID", transactionID)
+
+	return nil
+}
+
+func rollbackTransaction(ctx context.Context, conn *pgxpool.Conn, transactionID string) error {
+	rollbackPreparedQuery := fmt.Sprintf(`ROLLBACK PREPARED '%s'`, transactionID)
+	_, err := conn.Exec(ctx, rollbackPreparedQuery)
+	return err
+}
+
+type execQuerier interface {
+	querier
+	execer
+}
+
+func insertAuditLog(ctx context.Context, execQuerier execQuerier, transactionID string, status transferStatus) error {
+	const function = "insertAuditLog"
+
+	senderID, receiverID, amount, err := selectTransferLog(ctx, execQuerier, transactionID, transferStatusPending)
+	if err != nil {
+		return fmt.Errorf("%s: read pending log: %w", function, err)
+	}
+
+	if err = insertTransferLog(ctx, execQuerier, transactionID, senderID, receiverID, amount, status); err != nil {
+		return fmt.Errorf("%s: insert log: %w", function, err)
+	}
+
+	return nil
+}
+
+type querier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func selectTransferLog(ctx context.Context, q querier, transactionID string, status transferStatus) (senderID, receiverID string, amount float64, err error) {
+	const selectTransferLogQuery = `
+		SELECT sender_id, receiver_id, amount
+		FROM transfer_log
+		WHERE transaction_id = $1
+		AND status = $2
+	`
+	err = q.QueryRow(ctx, selectTransferLogQuery, transactionID, status).Scan(&senderID, &receiverID, &amount)
+	return
+}
+
+type execer interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
+
+func insertTransferLog(ctx context.Context, e execer, transactionID, senderID, receiverID string, amount float64, status transferStatus) error {
+	const insertTransferLogQuery = `
+		INSERT INTO transfer_log (transaction_id, sender_id, receiver_id, amount, status)
+		VALUES ($1, $2, $3, $4, $5)
+	`
+	_, err := e.Exec(ctx, insertTransferLogQuery, transactionID, senderID, receiverID, amount, status)
+	return err
+}
+
+func isPrepared(ctx context.Context, q querier, transactionID string) (bool, error) {
+	const existsPreparedQuery = "SELECT EXISTS(SELECT 1 FROM pg_prepared_xacts WHERE gid = $1)"
+	var exists bool
+	err := q.QueryRow(ctx, existsPreparedQuery, transactionID).Scan(&exists)
+	return exists, err
+}
+
+type transferStatus int
+
+const (
+	transferStatusPending transferStatus = iota
+	transferStatusCommitted
+	transferStatusRolledBack
+)

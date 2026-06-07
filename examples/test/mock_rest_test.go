@@ -5,41 +5,43 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator/client/basic"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-func Test_rest_mock_integration(t *testing.T) {
+func Test_mock_basic_rest_integration(t *testing.T) {
+	t.Parallel()
 	tests := []testCase{
 		{
-			name: "simple happy path",
-			runServerRequests: client.RESTServerRequests([]*http.ServeMux{
-				client.NewNoopMux(),
-				client.NewNoopMux(),
-				client.NewNoopMux(),
+			name: "mock basic REST happy path",
+			runServerRequests: restServerRequests([]*http.ServeMux{
+				adapter.NewBasicMux(),
+				adapter.NewBasicMux(),
+				adapter.NewBasicMux(),
 			}),
-			txCoordinator: coordinator.NewMockRESTCoordinator(),
+			txCoordinator: coordinator.NewMockBasicRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-rest-mock-1",
+				transactionID: "tx-mock-basic-REST-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "one",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 1,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "two",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 2,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "three",
 							CreatedAt: time.Now(),
 						},
@@ -50,33 +52,33 @@ func Test_rest_mock_integration(t *testing.T) {
 			wantedOutcome: twopc.OutcomeCommitted,
 		},
 		{
-			name: "Some failing on prepare some other on rollback, but eventually all rollbacks go through",
-			runServerRequests: client.RESTServerRequests([]*http.ServeMux{
-				client.NewFailingNoopMux(1, 0, 1),
-				client.NewFailingNoopMux(0, 0, 1),
-				client.NewFailingNoopMux(1, 0, 0),
+			name: "mock failing basic REST -> rollback",
+			runServerRequests: restServerRequests([]*http.ServeMux{
+				adapter.NewFailingBasicMux(1, 0, 1),
+				adapter.NewFailingBasicMux(0, 0, 1),
+				adapter.NewFailingBasicMux(1, 0, 0),
 			}),
-			txCoordinator: coordinator.NewMockRESTCoordinator(),
+			txCoordinator: coordinator.NewMockBasicRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-rest-mock-2",
+				transactionID: "tx-mock-basic-REST-2",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "one",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 1,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "two",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 2,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "three",
 							CreatedAt: time.Now(),
 						},
@@ -87,33 +89,33 @@ func Test_rest_mock_integration(t *testing.T) {
 			wantedOutcome: twopc.OutcomeRolledBack,
 		},
 		{
-			name: "some commits fail, but eventually all commits go through",
-			runServerRequests: client.RESTServerRequests([]*http.ServeMux{
-				client.NewFailingNoopMux(0, 1, 0),
-				client.NewFailingNoopMux(0, 1, 0),
-				client.NewFailingNoopMux(0, 1, 0),
+			name: "mock failing basic REST -> committed",
+			runServerRequests: restServerRequests([]*http.ServeMux{
+				adapter.NewFailingBasicMux(0, 1, 0),
+				adapter.NewFailingBasicMux(0, 1, 0),
+				adapter.NewFailingBasicMux(0, 1, 0),
 			}),
-			txCoordinator: coordinator.NewMockRESTCoordinator(),
+			txCoordinator: coordinator.NewMockBasicRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-rest-mock-3",
+				transactionID: "tx-mock-basic-REST-3",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "one",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 1,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "two",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 2,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.PreparePayload{
 							Payload:   "three",
 							CreatedAt: time.Now(),
 						},

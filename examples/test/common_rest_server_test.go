@@ -1,35 +1,27 @@
-package client
+package test
 
 import (
-	"context"
 	"errors"
 	"net"
 	"net/http"
 	"sync"
+
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/server"
 )
 
-func RESTServerRequests(muxes []*http.ServeMux) []RunServerRequest {
-	return mapToRunServerRequests(muxes, RunRESTServerRequest)
+func restServerRequests(muxes []*http.ServeMux) []runServerRequest {
+	return mapToRunServerRequests(muxes, runRESTServerRequest)
 }
 
-func RunRESTServerRequest(mux *http.ServeMux) RunServerRequest {
-	srv := newRESTServer(mux)
-	return RunServerRequest{
+func runRESTServerRequest(mux *http.ServeMux) runServerRequest {
+	srv := server.NewRESTServer(mux)
+	return runServerRequest{
 		serverRunner:  newRESTServerRunner(srv),
 		serverStopper: newRESTServerStopper(srv),
 	}
 }
 
-func newRESTServer(mux *http.ServeMux) *http.Server {
-	return &http.Server{
-		Handler: mux,
-		BaseContext: func(l net.Listener) context.Context {
-			return contextWithAddress(context.Background(), l.Addr())
-		},
-	}
-}
-
-func newRESTServerRunner(srv *http.Server) ServerRunner {
+func newRESTServerRunner(srv *http.Server) serverRunner {
 	return func(wg *sync.WaitGroup, errCh chan<- error, lis net.Listener) {
 		serveFunc := func() error {
 			return srv.Serve(lis)
@@ -38,7 +30,7 @@ func newRESTServerRunner(srv *http.Server) ServerRunner {
 	}
 }
 
-func newRESTServerStopper(srv *http.Server) ServerStopper {
+func newRESTServerStopper(srv *http.Server) serverStopper {
 	return withIgnoreErr(srv.Close, http.ErrServerClosed)
 }
 

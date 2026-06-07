@@ -3,23 +3,25 @@ package test
 import (
 	"testing"
 
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-func Test_grpc_mock_integration(t *testing.T) {
+func Test_mock_basic_grpc_integration(t *testing.T) {
+	t.Parallel()
 	tests := []testCase{
 		{
-			name: "simple happy path",
-			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
-				client.NewNoopGRPCHandler(),
-				client.NewNoopGRPCHandler(),
-				client.NewNoopGRPCHandler(),
+			name: "basic gRPC happy path",
+			// TODO: It should be possible to mix gRPC with REST clients
+			runServerRequests: basicGRPCServerRequests([]*adapter.GRPCBasicHandler{
+				adapter.NewBasicGRPCHandler(),
+				adapter.NewBasicGRPCHandler(),
+				adapter.NewBasicGRPCHandler(),
 			}),
-			txCoordinator: coordinator.NewMockGRPCCoordinator(),
+			txCoordinator: coordinator.NewMockBasicGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-grpc-mock-1",
+				transactionID: "tx-mock-basic-gRPC-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -39,15 +41,15 @@ func Test_grpc_mock_integration(t *testing.T) {
 			wantedOutcome: twopc.OutcomeCommitted,
 		},
 		{
-			name: "Some failing on prepare some other on rollback, but eventually all rollbacks go through",
-			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
-				client.NewFailingNoopGRPCHandler(1, 0, 1),
-				client.NewFailingNoopGRPCHandler(0, 0, 1),
-				client.NewFailingNoopGRPCHandler(1, 0, 0),
+			name: "failing basic gRPC -> rollback",
+			runServerRequests: basicGRPCServerRequests([]*adapter.GRPCBasicHandler{
+				adapter.NewFailingBasicGRPCHandler(1, 0, 1),
+				adapter.NewFailingBasicGRPCHandler(0, 0, 1),
+				adapter.NewFailingBasicGRPCHandler(1, 0, 0),
 			}),
-			txCoordinator: coordinator.NewMockGRPCCoordinator(),
+			txCoordinator: coordinator.NewMockBasicGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-grpc-mock-2",
+				transactionID: "tx-mock-basic-gRPC-2",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -67,15 +69,15 @@ func Test_grpc_mock_integration(t *testing.T) {
 			wantedOutcome: twopc.OutcomeRolledBack,
 		},
 		{
-			name: "some commits fail, but eventually all commits go through",
-			runServerRequests: client.GRPCServerRequests([]*client.GRPCHandler{
-				client.NewFailingNoopGRPCHandler(0, 1, 0),
-				client.NewFailingNoopGRPCHandler(0, 1, 0),
-				client.NewFailingNoopGRPCHandler(0, 1, 0),
+			name: "failing basic gRPC -> committed",
+			runServerRequests: basicGRPCServerRequests([]*adapter.GRPCBasicHandler{
+				adapter.NewFailingBasicGRPCHandler(0, 1, 0),
+				adapter.NewFailingBasicGRPCHandler(0, 1, 0),
+				adapter.NewFailingBasicGRPCHandler(0, 1, 0),
 			}),
-			txCoordinator: coordinator.NewMockGRPCCoordinator(),
+			txCoordinator: coordinator.NewMockBasicGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-grpc-mock-3",
+				transactionID: "tx-mock-basic-gRPC-3",
 				transactions: []transaction{
 					{
 						participantNumber: 0,

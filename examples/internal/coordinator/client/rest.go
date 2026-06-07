@@ -1,4 +1,4 @@
-package coordinator
+package client
 
 import (
 	"bytes"
@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
@@ -17,7 +16,7 @@ type restClient struct {
 	client *http.Client
 }
 
-func newRESTClient(clientID string) (twopc.Client, error) {
+func NewRESTClient(clientID string) (twopc.Client, error) {
 	return restClient{
 		host:   clientID,
 		client: &http.Client{},
@@ -25,11 +24,6 @@ func newRESTClient(clientID string) (twopc.Client, error) {
 }
 
 func (c restClient) PrepareTransaction(ctx context.Context, transactionID string, payload twopc.PreparePayload) (err error) {
-	payload, ok := payload.(RESTPreparePayload)
-	if !ok {
-		return errors.New("invalid type provided in the request")
-	}
-
 	var prepareURL string
 	prepareURL, err = c.prepareURL(transactionID)
 	if err != nil {
@@ -52,8 +46,7 @@ func (c restClient) PrepareTransaction(ctx context.Context, transactionID string
 		return err
 	}
 	defer func() {
-		closeErr := resp.Body.Close()
-		if err != nil {
+		if closeErr := resp.Body.Close(); err != nil {
 			err = errors.Join(err, closeErr)
 		} else {
 			err = closeErr
@@ -61,8 +54,7 @@ func (c restClient) PrepareTransaction(ctx context.Context, transactionID string
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		err = errors.New("failed to prepare")
-		return err
+		return errors.New("failed to prepare")
 	}
 
 	return nil
@@ -70,11 +62,6 @@ func (c restClient) PrepareTransaction(ctx context.Context, transactionID string
 
 func (c restClient) prepareURL(transactionID string) (string, error) {
 	return c.operationURL(transactionID, "prepare")
-}
-
-type RESTPreparePayload struct {
-	Payload   string    `json:"payload"`
-	CreatedAt time.Time `json:"created_at"`
 }
 
 func (c restClient) CommitTransaction(ctx context.Context, transactionID string) error {

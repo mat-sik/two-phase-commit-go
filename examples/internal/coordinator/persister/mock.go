@@ -1,4 +1,4 @@
-package coordinator
+package persister
 
 import (
 	"context"
@@ -6,13 +6,13 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-type mockTransactionStatePersister struct {
+type MockTransactionStatePersister struct {
 	Err         error
 	ErrCommit   error
 	ErrRollback error
 }
 
-func (m mockTransactionStatePersister) PersistState(_ context.Context, _ string, _ string, _ twopc.TransactionState) <-chan twopc.PersistResult {
+func (m MockTransactionStatePersister) PersistState(_ context.Context, _ string, _ string, _ twopc.TransactionState) <-chan twopc.PersistResult {
 	ch := make(chan twopc.PersistResult, 1)
 	if m.Err != nil {
 		ch <- twopc.PersistResult{Err: m.Err}
@@ -25,11 +25,11 @@ func (m mockTransactionStatePersister) PersistState(_ context.Context, _ string,
 	return ch
 }
 
-type mockTransactionStateChecker struct {
+type MockTransactionStateChecker struct {
 	stateByClientID map[string]twopc.TransactionState
 	err             error
 }
 
-func (m mockTransactionStateChecker) Check(_ context.Context, _ string) (map[string]twopc.TransactionState, error) {
+func (m MockTransactionStateChecker) Check(_ context.Context, _ string) (map[string]twopc.TransactionState, error) {
 	return m.stateByClientID, m.err
 }
