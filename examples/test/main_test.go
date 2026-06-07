@@ -1,5 +1,3 @@
-//go:build !testcontainers
-
 package test
 
 import (
