@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client/adapter"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
@@ -79,7 +79,7 @@ func Test_grpc_sql_transfer_integration(t *testing.T) {
 				transactions: []transaction{
 					{
 						participantNumber: 0,
-						payload: client.TransferPayload{
+						payload: participant.TransferPayload{
 							SenderID:   "Alice",
 							ReceiverID: "Bob",
 							Amount:     100.5,
@@ -87,7 +87,7 @@ func Test_grpc_sql_transfer_integration(t *testing.T) {
 					},
 					{
 						participantNumber: 1,
-						payload: client.TransferPayload{
+						payload: participant.TransferPayload{
 							SenderID:   "Bob",
 							ReceiverID: "Cecile",
 							Amount:     100.5,
@@ -95,7 +95,7 @@ func Test_grpc_sql_transfer_integration(t *testing.T) {
 					},
 					{
 						participantNumber: 2,
-						payload: client.TransferPayload{
+						payload: participant.TransferPayload{
 							SenderID:   "Cecile",
 							ReceiverID: "Alice",
 							Amount:     100.5,

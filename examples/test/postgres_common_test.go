@@ -125,8 +125,7 @@ type runContainerResult struct {
 }
 
 func runPostgresForParticipantPool(ctx context.Context) (*pgxpool.Pool, postgresTerminator, error) {
-	// TODO: rename client-schema to participant-schema
-	return runPostgresForPool(ctx, "testdata/client-schema.sql")
+	return runPostgresForPool(ctx, "testdata/participant-schema.sql")
 }
 
 func runPostgresForCoordinatorPool(ctx context.Context) (*pgxpool.Pool, postgresTerminator, error) {

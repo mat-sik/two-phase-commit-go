@@ -4,11 +4,11 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant"
 )
 
 func NewBasicMux() *http.ServeMux {
-	handler := client.NewBasicTransactionHandler()
+	handler := participant.NewBasicTransactionHandler()
 	return newMux(restHandler{
 		transactionPreparer:   restTransactionPreparer{transactionPreparer: handler},
 		transactionCommitter:  restTransactionCommitter{transactionCommitter: handler},
@@ -17,7 +17,7 @@ func NewBasicMux() *http.ServeMux {
 }
 
 func NewFailingBasicMux(prepareFailUntilAttempt, commitFailUntilAttempt, rollbackFailUntilAttempt int) *http.ServeMux {
-	handler := client.NewFailingBasicTransactionHandler(prepareFailUntilAttempt, commitFailUntilAttempt, rollbackFailUntilAttempt)
+	handler := participant.NewFailingBasicTransactionHandler(prepareFailUntilAttempt, commitFailUntilAttempt, rollbackFailUntilAttempt)
 	return newMux(restHandler{
 		transactionPreparer:   restTransactionPreparer{transactionPreparer: handler},
 		transactionCommitter:  restTransactionCommitter{transactionCommitter: handler},

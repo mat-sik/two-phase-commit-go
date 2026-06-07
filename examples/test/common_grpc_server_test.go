@@ -5,10 +5,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client/adapter"
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client/server"
 	basic "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/basic/v1"
 	transfer "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/transfer/v1"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/server"
 	"google.golang.org/grpc"
 )
 

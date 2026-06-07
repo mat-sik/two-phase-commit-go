@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client/server"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/server"
 )
 
 func restServerRequests(muxes []*http.ServeMux) []runServerRequest {

@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client/adapter"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 

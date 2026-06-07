@@ -3,7 +3,7 @@ package adapter
 import (
 	"context"
 
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant"
 )
 
 type BasicTransactionPreparer interface {
@@ -11,7 +11,7 @@ type BasicTransactionPreparer interface {
 }
 
 type TransferTransactionPreparer interface {
-	PrepareTransaction(ctx context.Context, transactionID string, payload client.TransferPayload) error
+	PrepareTransaction(ctx context.Context, transactionID string, payload participant.TransferPayload) error
 }
 
 type TransactionCommiter interface {

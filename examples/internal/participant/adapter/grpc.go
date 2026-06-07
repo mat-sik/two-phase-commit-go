@@ -4,15 +4,15 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
 	basic "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/basic/v1"
 	transfer "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/transfer/v1"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 func NewBasicGRPCHandler() *GRPCBasicHandler {
-	handler := client.NewBasicTransactionHandler()
+	handler := participant.NewBasicTransactionHandler()
 	return &GRPCBasicHandler{
 		transactionPreparer:   handler,
 		transactionCommiter:   handler,
@@ -21,7 +21,7 @@ func NewBasicGRPCHandler() *GRPCBasicHandler {
 }
 
 func NewFailingBasicGRPCHandler(prepareFailUntilAttempt, commitFailUntilAttempt, rollbackFailUntilAttempt int) *GRPCBasicHandler {
-	handler := client.NewFailingBasicTransactionHandler(prepareFailUntilAttempt, commitFailUntilAttempt, rollbackFailUntilAttempt)
+	handler := participant.NewFailingBasicTransactionHandler(prepareFailUntilAttempt, commitFailUntilAttempt, rollbackFailUntilAttempt)
 	return &GRPCBasicHandler{
 		transactionPreparer:   handler,
 		transactionCommiter:   handler,
@@ -62,7 +62,7 @@ func (h *GRPCBasicHandler) RollbackTransaction(ctx context.Context, req *basic.R
 }
 
 func NewTransferGRPCHandler(pool *pgxpool.Pool) *GRPCTransferHandler {
-	handler := client.NewTransferTransactionHandler(pool)
+	handler := participant.NewTransferTransactionHandler(pool)
 	return &GRPCTransferHandler{
 		transactionPreparer:   handler,
 		transactionCommiter:   handler,
@@ -80,7 +80,7 @@ type GRPCTransferHandler struct {
 
 func (h *GRPCTransferHandler) PrepareTransaction(ctx context.Context, req *transfer.PrepareTransactionRequest) (*transfer.PrepareTransactionResponse, error) {
 	payload := req.GetPayload()
-	transferPayload := client.TransferPayload{
+	transferPayload := participant.TransferPayload{
 		SenderID:   payload.GetSenderId(),
 		ReceiverID: payload.GetReceiverId(),
 		Amount:     payload.GetAmount(),

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/client"
 	basic "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/basic/v1"
 	transfer "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/transfer/v1"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -61,7 +61,7 @@ func newTransferGRPCClient(clientID string) (twopc.Client, error) {
 func (c transferGRPCClient) PrepareTransaction(ctx context.Context, transactionID string, payload twopc.PreparePayload) error {
 	const method = "PrepareTransaction"
 
-	transferPayload, ok := payload.(client.TransferPayload)
+	transferPayload, ok := payload.(participant.TransferPayload)
 	if !ok {
 		panic(fmt.Sprintf("%s: unexpected payload type %T", method, payload))
 	}
