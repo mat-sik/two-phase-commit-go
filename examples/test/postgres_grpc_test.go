@@ -26,7 +26,7 @@ func Test_grpc_sql_basic_integration(t *testing.T) {
 			},
 			handlersMapper: basicGRPCServerRequests,
 			txCoordinatorProvider: func(pool *pgxpool.Pool) *twopc.Coordinator[string] {
-				return coordinator.NewSQLGRPCCoordinator(pool)
+				return coordinator.NewPostgresBasicGRPCCoordinator(pool)
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-noop-gRPC-1",
@@ -72,7 +72,7 @@ func Test_grpc_sql_transfer_integration(t *testing.T) {
 			},
 			handlersMapper: transferGRPCServerRequests,
 			txCoordinatorProvider: func(pool *pgxpool.Pool) *twopc.Coordinator[string] {
-				return coordinator.NewTransferSQLGRPCCoordinator(pool)
+				return coordinator.NewPostgresTransferGRPCCoordinator(pool)
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-sql-gRPC-1",
@@ -124,7 +124,7 @@ func Test_grpc_sql_eventual_consistency_postgres_noop_gRPC(t *testing.T) {
 	}
 	t.Cleanup(coordinatorPostgresTerminator)
 
-	txCoordinator := coordinator.NewSQLGRPCCoordinator(
+	txCoordinator := coordinator.NewPostgresBasicGRPCCoordinator(
 		coordinatorPool,
 		twopc.WithBackoffMax(200*time.Millisecond),
 	)

@@ -1,10 +1,9 @@
-package coordinator
+package transfer
 
 import (
 	"context"
 	"fmt"
 
-	basic "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/basic/v1"
 	transfer "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/transfer/v1"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
@@ -12,43 +11,11 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type basicGRPCClient struct {
-	client basic.BasicServiceClient
-}
-
-func newBasicGRPCClient(clientID string) (twopc.Client, error) {
-	conn, err := grpc.NewClient(clientID, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create client for %s: %w", clientID, err)
-	}
-	return basicGRPCClient{
-		client: basic.NewBasicServiceClient(conn),
-	}, nil
-}
-
-func (c basicGRPCClient) PrepareTransaction(ctx context.Context, transactionID string, payload twopc.PreparePayload) error {
-	req := basic.PrepareTransactionRequest{TransactionId: transactionID, Payload: payload.(string)}
-	_, err := c.client.PrepareTransaction(ctx, &req, grpc.WaitForReady(true))
-	return err
-}
-
-func (c basicGRPCClient) CommitTransaction(ctx context.Context, transactionID string) error {
-	req := basic.CommitTransactionRequest{TransactionId: transactionID}
-	_, err := c.client.CommitTransaction(ctx, &req, grpc.WaitForReady(true))
-	return err
-}
-
-func (c basicGRPCClient) RollbackTransaction(ctx context.Context, transactionID string) error {
-	req := basic.RollbackTransactionRequest{TransactionId: transactionID}
-	_, err := c.client.RollbackTransaction(ctx, &req, grpc.WaitForReady(true))
-	return err
-}
-
 type transferGRPCClient struct {
 	client transfer.TransferServiceClient
 }
 
-func newTransferGRPCClient(clientID string) (twopc.Client, error) {
+func NewGRPCClient(clientID string) (twopc.Client, error) {
 	conn, err := grpc.NewClient(clientID, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client for %s: %w", clientID, err)

@@ -1,4 +1,4 @@
-package coordinator
+package basic
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ type restClient struct {
 	client *http.Client
 }
 
-func newRESTClient(clientID string) (twopc.Client, error) {
+func NewRESTClient(clientID string) (twopc.Client, error) {
 	return restClient{
 		host:   clientID,
 		client: &http.Client{},

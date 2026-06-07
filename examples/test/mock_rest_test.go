@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator/client/basic"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
@@ -20,27 +21,27 @@ func Test_rest_mock_integration(t *testing.T) {
 				adapter.NewBasicMux(),
 				adapter.NewBasicMux(),
 			}),
-			txCoordinator: coordinator.NewMockRESTCoordinator(),
+			txCoordinator: coordinator.NewMockBasicRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-mock-noop-REST-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.RESTPreparePayload{
 							Payload:   "one",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 1,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.RESTPreparePayload{
 							Payload:   "two",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 2,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.RESTPreparePayload{
 							Payload:   "three",
 							CreatedAt: time.Now(),
 						},
@@ -57,27 +58,27 @@ func Test_rest_mock_integration(t *testing.T) {
 				adapter.NewFailingBasicMux(0, 0, 1),
 				adapter.NewFailingBasicMux(1, 0, 0),
 			}),
-			txCoordinator: coordinator.NewMockRESTCoordinator(),
+			txCoordinator: coordinator.NewMockBasicRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-mock-noop-REST-2",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.RESTPreparePayload{
 							Payload:   "one",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 1,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.RESTPreparePayload{
 							Payload:   "two",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 2,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.RESTPreparePayload{
 							Payload:   "three",
 							CreatedAt: time.Now(),
 						},
@@ -94,27 +95,27 @@ func Test_rest_mock_integration(t *testing.T) {
 				adapter.NewFailingBasicMux(0, 1, 0),
 				adapter.NewFailingBasicMux(0, 1, 0),
 			}),
-			txCoordinator: coordinator.NewMockRESTCoordinator(),
+			txCoordinator: coordinator.NewMockBasicRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-mock-noop-REST-3",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.RESTPreparePayload{
 							Payload:   "one",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 1,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.RESTPreparePayload{
 							Payload:   "two",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 2,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.RESTPreparePayload{
 							Payload:   "three",
 							CreatedAt: time.Now(),
 						},

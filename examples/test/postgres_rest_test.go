@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator/client/basic"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
@@ -25,28 +26,28 @@ func Test_sql_rest_integration(t *testing.T) {
 			},
 			handlersMapper: restServerRequests,
 			txCoordinatorProvider: func(pool *pgxpool.Pool) *twopc.Coordinator[string] {
-				return coordinator.NewSQLRESTCoordinator(pool)
+				return coordinator.NewPostgresBasicRESTCoordinator(pool)
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postres-noop-REST-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.RESTPreparePayload{
 							Payload:   "one",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 1,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.RESTPreparePayload{
 							Payload:   "two",
 							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 2,
-						payload: coordinator.RESTPreparePayload{
+						payload: basic.RESTPreparePayload{
 							Payload:   "three",
 							CreatedAt: time.Now(),
 						},

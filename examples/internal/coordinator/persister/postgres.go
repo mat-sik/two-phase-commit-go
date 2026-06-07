@@ -1,4 +1,4 @@
-package coordinator
+package persister
 
 import (
 	"context"
@@ -9,12 +9,12 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-type sqlTransactionStateChecker struct {
+type PostgresTransactionStateChecker struct {
 	pool *pgxpool.Pool
 }
 
-func newSQLTransactionStateChecker(pool *pgxpool.Pool) sqlTransactionStateChecker {
-	return sqlTransactionStateChecker{
+func NewPostgresTransactionStateChecker(pool *pgxpool.Pool) PostgresTransactionStateChecker {
+	return PostgresTransactionStateChecker{
 		pool: pool,
 	}
 }
@@ -25,7 +25,7 @@ const fetchTransactionStatesQuery = `
 	WHERE transaction_id = $1
 `
 
-func (s sqlTransactionStateChecker) Check(ctx context.Context, transactionID string) (map[string]twopc.TransactionState, error) {
+func (s PostgresTransactionStateChecker) Check(ctx context.Context, transactionID string) (map[string]twopc.TransactionState, error) {
 	rows, err := s.pool.Query(ctx, fetchTransactionStatesQuery, transactionID)
 	if err != nil {
 		return nil, err
@@ -47,12 +47,12 @@ func (s sqlTransactionStateChecker) Check(ctx context.Context, transactionID str
 	return states, nil
 }
 
-type sqlTransactionStatePersister struct {
+type PostgresTransactionStatePersister struct {
 	pool *pgxpool.Pool
 }
 
-func newSQLTransactionStatePersister(pool *pgxpool.Pool) sqlTransactionStatePersister {
-	return sqlTransactionStatePersister{
+func NewPostgresTransactionStatePersister(pool *pgxpool.Pool) PostgresTransactionStatePersister {
+	return PostgresTransactionStatePersister{
 		pool: pool,
 	}
 }
@@ -64,7 +64,7 @@ const persistStateQuery = `
         SET state = EXCLUDED.state
 `
 
-func (s sqlTransactionStatePersister) PersistState(
+func (s PostgresTransactionStatePersister) PersistState(
 	ctx context.Context,
 	transactionID string,
 	participantID string,

@@ -19,7 +19,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 				adapter.NewBasicGRPCHandler(),
 				adapter.NewBasicGRPCHandler(),
 			}),
-			txCoordinator: coordinator.NewMockGRPCCoordinator(),
+			txCoordinator: coordinator.NewMockBasicGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-mock-noop-gRPC-1",
 				transactions: []transaction{
@@ -47,7 +47,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 				adapter.NewFailingBasicGRPCHandler(0, 0, 1),
 				adapter.NewFailingBasicGRPCHandler(1, 0, 0),
 			}),
-			txCoordinator: coordinator.NewMockGRPCCoordinator(),
+			txCoordinator: coordinator.NewMockBasicGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-mock-noop-gRPC-2",
 				transactions: []transaction{
@@ -75,7 +75,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 				adapter.NewFailingBasicGRPCHandler(0, 1, 0),
 				adapter.NewFailingBasicGRPCHandler(0, 1, 0),
 			}),
-			txCoordinator: coordinator.NewMockGRPCCoordinator(),
+			txCoordinator: coordinator.NewMockBasicGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-mock-noop-gRPC-3",
 				transactions: []transaction{
