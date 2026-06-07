@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	transfer "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/transfer/v1"
+	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/transfer/v1"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 	"google.golang.org/grpc"
@@ -13,7 +13,7 @@ import (
 
 // todo: do the same for rest
 type transferGRPCClient struct {
-	client transfer.TransferServiceClient
+	client pb.TransferServiceClient
 }
 
 func NewGRPCClient(clientID string) (twopc.Client, error) {
@@ -22,7 +22,7 @@ func NewGRPCClient(clientID string) (twopc.Client, error) {
 		return nil, fmt.Errorf("failed to create client for %s: %w", clientID, err)
 	}
 	return transferGRPCClient{
-		client: transfer.NewTransferServiceClient(conn),
+		client: pb.NewTransferServiceClient(conn),
 	}, nil
 }
 
@@ -34,25 +34,25 @@ func (c transferGRPCClient) PrepareTransaction(ctx context.Context, transactionI
 		panic(fmt.Sprintf("%s: unexpected payload type %T", method, payload))
 	}
 
-	grpcTransferPayload := &transfer.TransferPayload{
+	grpcTransferPayload := &pb.TransferPayload{
 		SenderId:   transferPayload.SenderID,
 		ReceiverId: transferPayload.ReceiverID,
 		Amount:     transferPayload.Amount,
 	}
 
-	req := transfer.PrepareTransactionRequest{TransactionId: transactionID, Payload: grpcTransferPayload}
+	req := pb.PrepareTransactionRequest{TransactionId: transactionID, Payload: grpcTransferPayload}
 	_, err := c.client.PrepareTransaction(ctx, &req, grpc.WaitForReady(true))
 	return err
 }
 
 func (c transferGRPCClient) CommitTransaction(ctx context.Context, transactionID string) error {
-	req := transfer.CommitTransactionRequest{TransactionId: transactionID}
+	req := pb.CommitTransactionRequest{TransactionId: transactionID}
 	_, err := c.client.CommitTransaction(ctx, &req, grpc.WaitForReady(true))
 	return err
 }
 
 func (c transferGRPCClient) RollbackTransaction(ctx context.Context, transactionID string) error {
-	req := transfer.RollbackTransactionRequest{TransactionId: transactionID}
+	req := pb.RollbackTransactionRequest{TransactionId: transactionID}
 	_, err := c.client.RollbackTransaction(ctx, &req, grpc.WaitForReady(true))
 	return err
 }
