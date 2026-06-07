@@ -14,11 +14,11 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-func Test_grpc_sql_basic_integration(t *testing.T) {
+func Test_postgres_basic_grpc_integration(t *testing.T) {
 	t.Parallel()
 	tests := []testContainersTestCase[*adapter.GRPCBasicHandler]{
 		{
-			name: "simple postgres noop gRPC happy path",
+			name: "postgres basic gRPC happy path",
 			handlers: []*adapter.GRPCBasicHandler{
 				adapter.NewBasicGRPCHandler(),
 				adapter.NewBasicGRPCHandler(),
@@ -29,7 +29,7 @@ func Test_grpc_sql_basic_integration(t *testing.T) {
 				return coordinator.NewPostgresBasicGRPCCoordinator(pool)
 			},
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-postgres-noop-gRPC-1",
+				transactionID: "tx-postgres-basic-grpc-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -57,14 +57,14 @@ func Test_grpc_sql_basic_integration(t *testing.T) {
 	}
 }
 
-func Test_grpc_sql_transfer_integration(t *testing.T) {
+func Test_postgres_transfer_grpc_integration(t *testing.T) {
 	t.Parallel()
 	var sqlProvider = func(pool *pgxpool.Pool) *adapter.GRPCTransferHandler {
 		return adapter.NewTransferGRPCHandler(pool)
 	}
 	tests := []testContainersTestCase[*adapter.GRPCTransferHandler]{
 		{
-			name: "simple postgres sql gRPC happy path",
+			name: "postgres transfer gRPC happy path",
 			handlersProviders: []handlerProvider[*adapter.GRPCTransferHandler]{
 				sqlProvider,
 				sqlProvider,
@@ -75,7 +75,7 @@ func Test_grpc_sql_transfer_integration(t *testing.T) {
 				return coordinator.NewPostgresTransferGRPCCoordinator(pool)
 			},
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-postgres-sql-gRPC-1",
+				transactionID: "tx-postgres-transfer-grpc-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -115,7 +115,7 @@ func Test_grpc_sql_transfer_integration(t *testing.T) {
 	}
 }
 
-func Test_grpc_sql_eventual_consistency_postgres_noop_gRPC(t *testing.T) {
+func Test_postgres_basic_grpc_eventual_consistency(t *testing.T) {
 	t.Parallel()
 
 	coordinatorPool, coordinatorPostgresTerminator, err := runPostgresForCoordinatorPool(t.Context())
@@ -129,7 +129,7 @@ func Test_grpc_sql_eventual_consistency_postgres_noop_gRPC(t *testing.T) {
 		twopc.WithBackoffMax(200*time.Millisecond),
 	)
 	tx := distributedTransaction{
-		transactionID: "tx-eventual-consistency-postgres-noop-gRPC-1",
+		transactionID: "tx-postgres-basic-grpc-eventual-consistency-1",
 		transactions: []transaction{
 			{participantNumber: 0, payload: "one"},
 			{participantNumber: 1, payload: "two"},

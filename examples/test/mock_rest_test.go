@@ -11,11 +11,11 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-func Test_rest_mock_integration(t *testing.T) {
+func Test_mock_basic_rest_integration(t *testing.T) {
 	t.Parallel()
 	tests := []testCase{
 		{
-			name: "simple mock noop REST happy path",
+			name: "mock basic REST happy path",
 			runServerRequests: restServerRequests([]*http.ServeMux{
 				adapter.NewBasicMux(),
 				adapter.NewBasicMux(),
@@ -23,7 +23,7 @@ func Test_rest_mock_integration(t *testing.T) {
 			}),
 			txCoordinator: coordinator.NewMockBasicRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-mock-noop-REST-1",
+				transactionID: "tx-mock-basic-REST-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -52,7 +52,7 @@ func Test_rest_mock_integration(t *testing.T) {
 			wantedOutcome: twopc.OutcomeCommitted,
 		},
 		{
-			name: "failing mock noop REST -> rollback",
+			name: "mock failing basic REST -> rollback",
 			runServerRequests: restServerRequests([]*http.ServeMux{
 				adapter.NewFailingBasicMux(1, 0, 1),
 				adapter.NewFailingBasicMux(0, 0, 1),
@@ -60,7 +60,7 @@ func Test_rest_mock_integration(t *testing.T) {
 			}),
 			txCoordinator: coordinator.NewMockBasicRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-mock-noop-REST-2",
+				transactionID: "tx-mock-basic-REST-2",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -89,7 +89,7 @@ func Test_rest_mock_integration(t *testing.T) {
 			wantedOutcome: twopc.OutcomeRolledBack,
 		},
 		{
-			name: "failing mock noop REST -> committed",
+			name: "mock failing basic REST -> committed",
 			runServerRequests: restServerRequests([]*http.ServeMux{
 				adapter.NewFailingBasicMux(0, 1, 0),
 				adapter.NewFailingBasicMux(0, 1, 0),
@@ -97,7 +97,7 @@ func Test_rest_mock_integration(t *testing.T) {
 			}),
 			txCoordinator: coordinator.NewMockBasicRESTCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-mock-noop-REST-3",
+				transactionID: "tx-mock-basic-REST-3",
 				transactions: []transaction{
 					{
 						participantNumber: 0,

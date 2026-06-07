@@ -8,11 +8,11 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-func Test_grpc_mock_integration(t *testing.T) {
+func Test_mock_basic_grpc_integration(t *testing.T) {
 	t.Parallel()
 	tests := []testCase{
 		{
-			name: "simple mock noop gRPC happy path",
+			name: "basic gRPC happy path",
 			// TODO: It should be possible to mix gRPC with REST clients
 			runServerRequests: basicGRPCServerRequests([]*adapter.GRPCBasicHandler{
 				adapter.NewBasicGRPCHandler(),
@@ -21,7 +21,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 			}),
 			txCoordinator: coordinator.NewMockBasicGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-mock-noop-gRPC-1",
+				transactionID: "tx-mock-basic-gRPC-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -41,7 +41,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 			wantedOutcome: twopc.OutcomeCommitted,
 		},
 		{
-			name: "failing mock noop gRPC -> rollback",
+			name: "failing basic gRPC -> rollback",
 			runServerRequests: basicGRPCServerRequests([]*adapter.GRPCBasicHandler{
 				adapter.NewFailingBasicGRPCHandler(1, 0, 1),
 				adapter.NewFailingBasicGRPCHandler(0, 0, 1),
@@ -49,7 +49,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 			}),
 			txCoordinator: coordinator.NewMockBasicGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-mock-noop-gRPC-2",
+				transactionID: "tx-mock-basic-gRPC-2",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -69,7 +69,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 			wantedOutcome: twopc.OutcomeRolledBack,
 		},
 		{
-			name: "failing mock noop gRPC -> committed",
+			name: "failing basic gRPC -> committed",
 			runServerRequests: basicGRPCServerRequests([]*adapter.GRPCBasicHandler{
 				adapter.NewFailingBasicGRPCHandler(0, 1, 0),
 				adapter.NewFailingBasicGRPCHandler(0, 1, 0),
@@ -77,7 +77,7 @@ func Test_grpc_mock_integration(t *testing.T) {
 			}),
 			txCoordinator: coordinator.NewMockBasicGRPCCoordinator(),
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-mock-noop-gRPC-3",
+				transactionID: "tx-mock-basic-gRPC-3",
 				transactions: []transaction{
 					{
 						participantNumber: 0,

@@ -14,11 +14,11 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-func Test_sql_rest_integration(t *testing.T) {
+func Test_postgres_basic_rest_integration(t *testing.T) {
 	t.Parallel()
 	tests := []testContainersTestCase[*http.ServeMux]{
 		{
-			name: "simple REST happy path",
+			name: "postgres basic REST happy path",
 			handlers: []*http.ServeMux{
 				adapter.NewBasicMux(),
 				adapter.NewBasicMux(),
@@ -29,7 +29,7 @@ func Test_sql_rest_integration(t *testing.T) {
 				return coordinator.NewPostgresBasicRESTCoordinator(pool)
 			},
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-postres-noop-REST-1",
+				transactionID: "tx-postgres-basic-REST-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
