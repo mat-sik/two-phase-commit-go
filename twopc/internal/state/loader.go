@@ -36,7 +36,7 @@ func (l Loader[ID]) LoadState(ctx context.Context, transactionID string, partici
 
 	stateByParticipantID, err := l.transactionStateChecker.Check(ctx, transactionID)
 	if err != nil {
-		return State[ID]{}, err
+		return State[ID]{}, fmt.Errorf("checking tx %s states: %w", transactionID, err)
 	}
 
 	if len(stateByParticipantID) == 0 {
@@ -70,13 +70,23 @@ func toSet[ID comparable](participantIDs []ID) map[ID]struct{} {
 
 func validateParticipantIDs[ID comparable](loadedFromPersistentStore map[ID]transaction.State, providedAsInput []ID) error {
 	if len(loadedFromPersistentStore) != len(providedAsInput) {
-		return errors.New("differing amount of participants")
+		return notMatchingParticipantsErr(loadedFromPersistentStore, providedAsInput)
 	}
 	for _, id := range providedAsInput {
 		_, ok := loadedFromPersistentStore[id]
 		if !ok {
-			return fmt.Errorf("participant: %v not present in the loaded", id)
+			return fmt.Errorf("extra participant %v", id)
 		}
 	}
 	return nil
+}
+
+func notMatchingParticipantsErr[ID comparable](loadedFromPersistentStore map[ID]transaction.State, provided []ID) error {
+	persisted := make([]ID, 0, len(loadedFromPersistentStore))
+	for k := range loadedFromPersistentStore {
+		persisted = append(persisted, k)
+	}
+	return fmt.Errorf("not matching participants persisted %v provided %v",
+		persisted, provided,
+	)
 }

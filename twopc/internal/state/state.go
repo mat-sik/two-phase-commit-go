@@ -48,7 +48,7 @@ func (s State[ID]) tryNextTransitions() ([]Transition[ID], error) {
 		return s.nextCommitTransitions(), nil
 	}
 
-	panic("unreachable")
+	panic("logic should prohibit this")
 }
 
 func (s State[ID]) isInInvalidState() error {
@@ -62,7 +62,7 @@ func (s State[ID]) isInInvalidState() error {
 }
 
 func invalidStateErr[ID comparable](sets stateSets[ID]) error {
-	return fmt.Errorf("invalid state, prepared count: %d, prepareFailedCount: %d, committed count: %d, rolled back count: %d",
+	return fmt.Errorf("invalid state, prepared count: %d, prepare failed count: %d, committed count: %d, rolled back count: %d",
 		len(sets.prepared), len(sets.prepareFailed), len(sets.committed), len(sets.rolledBack))
 }
 
@@ -280,7 +280,7 @@ func CommitTransition[ID comparable](participantID ID) Transition[ID] {
 
 func RollbackTransition[ID comparable](participantID ID, sourceState transaction.State) Transition[ID] {
 	if sourceState != transaction.Prepared && sourceState != transaction.PrepareFailed {
-		panic("unreachable")
+		panic("logic should prohibit this")
 	}
 	return newTransition(participantID, sourceState, transaction.RolledBack)
 }
