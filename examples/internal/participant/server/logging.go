@@ -17,7 +17,7 @@ func contextWithAddress(ctx context.Context, addr net.Addr) context.Context {
 func addressFromContext(ctx context.Context) (net.Addr, error) {
 	addr, ok := ctx.Value(netAddrKey{}).(net.Addr)
 	if !ok {
-		return nil, errors.New("could not get net.Addr from context")
+		return nil, errors.New("no net.addr in ctx")
 	}
 	return addr, nil
 }

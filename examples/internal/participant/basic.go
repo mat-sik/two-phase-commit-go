@@ -33,85 +33,79 @@ func NewFailingBasicTransactionHandler(prepareFailUntilAttempt, commitFailUntilA
 }
 
 func (h *BasicTransactionHandler) PrepareTransaction(ctx context.Context, transactionID string, payload string) error {
-	const method = "prepareTransaction"
+	slog.DebugContext(ctx, "prepare basic", "transactionID", transactionID, "payload", payload)
 
-	slog.DebugContext(ctx, "called", "method", method, "transactionID", transactionID, "payload", payload)
-
-	if h.shouldFail(ctx, method, &h.prepareFailUntilAttempt) {
+	if h.shouldFail(ctx, &h.prepareFailUntilAttempt) {
 		return errSimulatedFailure
 	}
 
 	status, ok := h.transactionStatusMap.load(transactionID)
 	if ok && status == transactionStatusPrepared {
-		slog.DebugContext(ctx, "already prepared", "method", method, "transactionID", transactionID)
+		slog.DebugContext(ctx, "already prepared", "transactionID", transactionID)
 		return nil
 	}
 	if ok {
-		return fmt.Errorf("%s: can't prepare transaction, because its status is already %s", method, status)
+		return fmt.Errorf("preparing transaction %s: unexpected status %d", transactionID, status)
 	}
 
 	h.transactionStatusMap.add(transactionID, transactionStatusPrepared)
-	slog.DebugContext(ctx, "prepared", "method", method, "transactionID", transactionID)
+	slog.DebugContext(ctx, "prepared", "transactionID", transactionID)
 	return nil
 }
 
 func (h *BasicTransactionHandler) CommitTransaction(ctx context.Context, transactionID string) error {
-	const method = "commitTransaction"
+	slog.DebugContext(ctx, "commit basic", "transactionID", transactionID)
 
-	slog.DebugContext(ctx, "called", "method", method, "transactionID", transactionID)
-
-	if h.shouldFail(ctx, method, &h.commitFailUntilAttempt) {
+	if h.shouldFail(ctx, &h.commitFailUntilAttempt) {
 		return errSimulatedFailure
 	}
 
 	status, ok := h.transactionStatusMap.load(transactionID)
 	if !ok {
-		return fmt.Errorf("%s: transaction for '%s' not found, can't commit unprepared transaction", method, transactionID)
+		return fmt.Errorf("commiting transaction %s: not found", transactionID)
 	}
 	if status == transactionStatusCommitted {
-		slog.DebugContext(ctx, "already committed", "method", method, "transactionID", transactionID)
+		slog.DebugContext(ctx, "already committed", "transactionID", transactionID)
 		return nil
 	}
 	if status != transactionStatusPrepared {
-		return fmt.Errorf("%s: can't commit %s transaction for '%s'", method, status, transactionID)
+		return fmt.Errorf("commiting transaction %s: unexpected status: %d", transactionID, status)
 	}
 
 	h.transactionStatusMap.add(transactionID, transactionStatusCommitted)
-	slog.DebugContext(ctx, "committed", "method", method, "transactionID", transactionID)
+	slog.DebugContext(ctx, "committed", "transactionID", transactionID)
 	return nil
 }
 
 func (h *BasicTransactionHandler) RollbackTransaction(ctx context.Context, transactionID string) error {
-	const method = "rollbackTransaction"
+	slog.DebugContext(ctx, "rollback basic", "transactionID", transactionID)
 
-	slog.DebugContext(ctx, "called", "method", method, "transactionID", transactionID)
-
-	if h.shouldFail(ctx, method, &h.rollbackFailUntilAttempt) {
+	if h.shouldFail(ctx, &h.rollbackFailUntilAttempt) {
 		return errSimulatedFailure
 	}
 
 	status, ok := h.transactionStatusMap.load(transactionID)
 	if !ok || status == transactionStatusRolledBacked {
-		slog.DebugContext(ctx, "already rolled back or not found", "method", method, "transactionID", transactionID)
+		slog.DebugContext(ctx, "already rolled back or not found", "transactionID", transactionID)
 		return nil
 	}
 	if status != transactionStatusPrepared {
-		return fmt.Errorf("%s: can't rollback %s transaction for '%s'", method, status, transactionID)
+		return fmt.Errorf("rolling back transaction %s: unexpected status %d", transactionID, status)
 	}
 
 	h.transactionStatusMap.add(transactionID, transactionStatusRolledBacked)
-	slog.DebugContext(ctx, "rolled back", "method", method, "transactionID", transactionID)
+	slog.DebugContext(ctx, "rolled back", "transactionID", transactionID)
 	return nil
 }
 
-func (h *BasicTransactionHandler) shouldFail(ctx context.Context, method string, counter *atomic.Int64) bool {
+func (h *BasicTransactionHandler) shouldFail(ctx context.Context, counter *atomic.Int64) bool {
 	for {
 		current := counter.Load()
 		if current <= 0 {
 			return false
 		}
 		if counter.CompareAndSwap(current, current-1) {
-			slog.DebugContext(ctx, "synthetic fail", "method", method, "remaining fails", current-1)
+			slog.DebugContext(ctx, "simulated fail", "remaining fails", current-1)
 			return true
 		}
 	}

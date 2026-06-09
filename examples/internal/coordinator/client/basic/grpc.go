@@ -17,7 +17,7 @@ type basicGRPCClient struct {
 func NewGRPCClient(clientID string) (twopc.Client, error) {
 	conn, err := grpc.NewClient(clientID, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create client for %s: %w", clientID, err)
+		return nil, fmt.Errorf("creating gRPC conn %s: %w", clientID, err)
 	}
 	return basicGRPCClient{
 		client: pb.NewBasicServiceClient(conn),
@@ -26,18 +26,24 @@ func NewGRPCClient(clientID string) (twopc.Client, error) {
 
 func (c basicGRPCClient) PrepareTransaction(ctx context.Context, transactionID string, payload twopc.PreparePayload) error {
 	req := pb.PrepareTransactionRequest{TransactionId: transactionID, Payload: payload.(string)}
-	_, err := c.client.PrepareTransaction(ctx, &req, grpc.WaitForReady(true))
-	return err
+	if _, err := c.client.PrepareTransaction(ctx, &req, grpc.WaitForReady(true)); err != nil {
+		return fmt.Errorf("gRPC sending prepare tx %s payload %v: %w", transactionID, payload, err)
+	}
+	return nil
 }
 
 func (c basicGRPCClient) CommitTransaction(ctx context.Context, transactionID string) error {
 	req := pb.CommitTransactionRequest{TransactionId: transactionID}
-	_, err := c.client.CommitTransaction(ctx, &req, grpc.WaitForReady(true))
-	return err
+	if _, err := c.client.CommitTransaction(ctx, &req, grpc.WaitForReady(true)); err != nil {
+		return fmt.Errorf("gRPC sending commit tx %s: %w", transactionID, err)
+	}
+	return nil
 }
 
 func (c basicGRPCClient) RollbackTransaction(ctx context.Context, transactionID string) error {
 	req := pb.RollbackTransactionRequest{TransactionId: transactionID}
-	_, err := c.client.RollbackTransaction(ctx, &req, grpc.WaitForReady(true))
-	return err
+	if _, err := c.client.RollbackTransaction(ctx, &req, grpc.WaitForReady(true)); err != nil {
+		return fmt.Errorf("gRPC sending rollback tx %s: %w", transactionID, err)
+	}
+	return nil
 }

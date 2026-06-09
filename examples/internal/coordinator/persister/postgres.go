@@ -3,6 +3,7 @@ package persister
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,16 +20,15 @@ func NewPostgresTransactionStateChecker(pool *pgxpool.Pool) PostgresTransactionS
 	}
 }
 
-const fetchTransactionStatesQuery = `
-	SELECT participant_id, state
-	FROM transaction_states
-	WHERE transaction_id = $1
-`
-
 func (s PostgresTransactionStateChecker) Check(ctx context.Context, transactionID string) (map[string]twopc.TransactionState, error) {
+	const fetchTransactionStatesQuery = `
+		SELECT participant_id, state
+		FROM transaction_states
+		WHERE transaction_id = $1
+	`
 	rows, err := s.pool.Query(ctx, fetchTransactionStatesQuery, transactionID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("querying tx %s state rows: %w", transactionID, err)
 	}
 	defer rows.Close()
 
@@ -37,12 +37,12 @@ func (s PostgresTransactionStateChecker) Check(ctx context.Context, transactionI
 		var participantID string
 		var txState twopc.TransactionState
 		if err = rows.Scan(&participantID, &txState); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scanning tx %s state row: %w", transactionID, err)
 		}
 		states[participantID] = txState
 	}
 	if err = rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("iterating tx %s state rows: %w", transactionID, err)
 	}
 	return states, nil
 }
@@ -57,13 +57,6 @@ func NewPostgresTransactionStatePersister(pool *pgxpool.Pool) PostgresTransactio
 	}
 }
 
-const persistStateQuery = `
-    INSERT INTO transaction_states (transaction_id, participant_id, state)
-    VALUES ($1, $2, $3)
-    ON CONFLICT (transaction_id, participant_id) DO UPDATE
-        SET state = EXCLUDED.state
-`
-
 func (s PostgresTransactionStatePersister) PersistState(
 	ctx context.Context,
 	transactionID string,
@@ -76,15 +69,29 @@ func (s PostgresTransactionStatePersister) PersistState(
 		tx, err := s.pool.Begin(ctx)
 		if err != nil {
 			resultCh <- twopc.PersistResult{
-				Err: err,
+				Err: fmt.Errorf(
+					"beginning pgx tx for persisting tx %s state %d for participant %s: %w",
+					transactionID, transactionState, participantID, err,
+				),
 			}
 			return
 		}
-		_, err = tx.Exec(ctx, persistStateQuery, transactionID, participantID, transactionState)
-		if err != nil {
-			rollbackErr := tx.Rollback(ctx)
-			if rollbackErr != nil {
-				err = errors.Join(err, rollbackErr)
+		const persistStateQuery = `
+			INSERT INTO transaction_states (transaction_id, participant_id, state)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (transaction_id, participant_id) DO UPDATE
+				SET state = EXCLUDED.state
+		`
+		if _, err = tx.Exec(ctx, persistStateQuery, transactionID, participantID, transactionState); err != nil {
+			err = fmt.Errorf(
+				"persisting tx %s state %d for participant %s: %w",
+				transactionID, transactionState, participantID, err,
+			)
+			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+				err = errors.Join(err, fmt.Errorf(
+					"rolling back pgx tx for persisting tx %s state %d for participant %s: %w",
+					transactionID, transactionState, participantID, rollbackErr,
+				))
 			}
 			resultCh <- twopc.PersistResult{
 				Err: err,

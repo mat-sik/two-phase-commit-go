@@ -14,7 +14,7 @@ type TransferTransactionPreparer interface {
 	PrepareTransaction(ctx context.Context, transactionID string, payload participant.TransferPayload) error
 }
 
-type TransactionCommiter interface {
+type TransactionCommitter interface {
 	CommitTransaction(ctx context.Context, transactionID string) error
 }
 

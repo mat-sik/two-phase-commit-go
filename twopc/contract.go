@@ -2,6 +2,7 @@ package twopc
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/participant"
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
@@ -57,7 +58,7 @@ type internalTransactionStateCheckerAdapter[ID comparable] struct {
 func (a internalTransactionStateCheckerAdapter[ID]) Check(ctx context.Context, txID string) (map[ID]transaction.State, error) {
 	transactionStates, err := a.transactionStateChecker.Check(ctx, txID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("checking tx %s states: %w", txID, err)
 	}
 
 	mappedToInternal := make(map[ID]transaction.State, len(transactionStates))
@@ -171,7 +172,7 @@ func adaptForInternal[ID comparable](newClientFunc func(participantID ID) (Clien
 	return func(participantID ID) (participant.Client, error) {
 		client, err := newClientFunc(participantID)
 		if err != nil {
-			return internalClientAdapter{}, err
+			return internalClientAdapter{}, fmt.Errorf("adapting client for internal: %w", err)
 		}
 		return internalClientAdapter{client: client}, nil
 	}

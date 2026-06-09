@@ -29,28 +29,25 @@ func NewRegistrar[ID comparable](
 	}
 }
 
-var ErrInvalidClientConfig = fmt.Errorf("invalid coordinator client configuration")
-
 func (r *Registrar[ID]) GetClient(participantID ID) (Client, error) {
 	client, ok := r.store.load(participantID)
 	if !ok && r.newClient == nil {
-		return nil, fmt.Errorf(
-			"%w: newClientFunc is not provided and clients map doesn't contain participantID: %v",
-			ErrInvalidClientConfig,
-			participantID,
+		return nil, fmt.Errorf("newClientFunc not defined and no stored %v client: %w",
+			participantID, ErrInvalidClientConfig,
 		)
 	}
-
 	if !ok {
 		var err error
 		client, err = r.newClient(participantID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("creating new %v client: %w", participantID, err)
 		}
 		r.store.add(participantID, client)
 	}
 	return client, nil
 }
+
+var ErrInvalidClientConfig = fmt.Errorf("invalid coordinator client configuration")
 
 type registrarStore[ID comparable] struct {
 	store sync.Map

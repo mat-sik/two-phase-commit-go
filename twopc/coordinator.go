@@ -3,6 +3,7 @@ package twopc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/participant"
@@ -331,19 +332,28 @@ func (c Coordinator[ID]) runOperation(ctx context.Context, txID string, op opera
 	}
 	result := <-persistResultCh
 	if result.Err != nil {
+		resultErr := fmt.Errorf("persisting participant %v tx %s state %d failed: %w",
+			op.participantID, txID, op.targetState, result.Err,
+		)
 		if err != nil {
-			return errors.Join(err, result.Err)
+			return errors.Join(err, resultErr)
 		}
-		return result.Err
+		return resultErr
 	}
 	if err != nil {
-		rollbackErr := result.Rollback()
-		if rollbackErr != nil {
-			return errors.Join(err, rollbackErr)
+		if rollbackErr := result.Rollback(); rollbackErr != nil {
+			return errors.Join(err, fmt.Errorf("rolling back participant %v tx %s state %d failed: %w",
+				op.participantID, txID, op.targetState, rollbackErr,
+			))
 		}
 		return err
 	}
-	return result.Commit()
+	if err = result.Commit(); err != nil {
+		return fmt.Errorf("committing participant %v tx %s state %d failed: %w",
+			op.participantID, txID, op.targetState, err,
+		)
+	}
+	return nil
 }
 
 func (c Coordinator[ID]) sendOperationConcurrently(ctx context.Context, txID string, op operation[ID]) <-chan error {
@@ -362,13 +372,12 @@ func (c Coordinator[ID]) withBackoff(ctx context.Context, participantID ID, work
 	if attempt := c.participantFailureCounter.Attempt(participantID); attempt > 0 {
 		backoffWait(ctx, c.config, attempt)
 	}
-	err := workFunc()
-	if err != nil {
+	if err := workFunc(); err != nil {
 		c.participantFailureCounter.Fail(participantID)
-	} else {
-		c.participantFailureCounter.Success(participantID)
+		return fmt.Errorf("backing off participant %v: %w", participantID, err)
 	}
-	return err
+	c.participantFailureCounter.Success(participantID)
+	return nil
 }
 
 func backoffWait(ctx context.Context, cfg config, attempt int) {
@@ -382,15 +391,24 @@ func (c Coordinator[ID]) sendOperation(ctx context.Context, txID string, op oper
 
 	client, err := c.participantRegistrar.GetClient(op.participantID)
 	if err != nil {
-		return err
+		return fmt.Errorf("getting %v client: %w", op.participantID, err)
 	}
 	switch op.targetState {
 	case transaction.Prepared:
-		return client.PrepareTransaction(ctx, txID, op.payload)
+		if err = client.PrepareTransaction(ctx, txID, op.payload); err != nil {
+			return fmt.Errorf("preparing tx %s payload %v: %w", txID, op.payload, err)
+		}
+		return nil
 	case transaction.Committed:
-		return client.CommitTransaction(ctx, txID)
+		if err = client.CommitTransaction(ctx, txID); err != nil {
+			return fmt.Errorf("committing tx %s: %w", txID, err)
+		}
+		return nil
 	case transaction.RolledBack:
-		return client.RollbackTransaction(ctx, txID)
+		if err = client.RollbackTransaction(ctx, txID); err != nil {
+			return fmt.Errorf("rolling back tx %s: %w", txID, err)
+		}
+		return nil
 	default:
 		panic("unknown operation type")
 	}
@@ -421,6 +439,6 @@ func (o operation[ID]) toTransition() state.Transition[ID] {
 	case o.targetState == transaction.RolledBack:
 		return state.RollbackTransition(o.participantID, o.sourceState)
 	default:
-		panic("unreachable")
+		panic("logic should prohibit this")
 	}
 }

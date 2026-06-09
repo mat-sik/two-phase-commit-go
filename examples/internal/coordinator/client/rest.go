@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -32,29 +33,32 @@ func (c restClient) PrepareTransaction(ctx context.Context, transactionID string
 
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshaling payload %v: %w", payload, err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, prepareURL, bytes.NewReader(data))
 	if err != nil {
-		return err
+		return fmt.Errorf("creating req with ctx: %w", err)
 	}
 
 	var resp *http.Response
 	resp, err = c.client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("sending req %s: %w", prepareURL, err)
 	}
 	defer func() {
-		if closeErr := resp.Body.Close(); err != nil {
-			err = errors.Join(err, closeErr)
-		} else {
-			err = closeErr
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			closeErr = fmt.Errorf("closing resp: %w", closeErr)
+			if err != nil {
+				err = errors.Join(err, closeErr)
+			} else {
+				err = closeErr
+			}
 		}
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("failed to prepare")
+		return fmt.Errorf("preparing tx %s failed", transactionID)
 	}
 
 	return nil
@@ -76,8 +80,7 @@ func (c restClient) CommitTransaction(ctx context.Context, transactionID string)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		err = errors.New("failed to commit")
-		return err
+		return fmt.Errorf("committing tx %s failed", transactionID)
 	}
 
 	return nil
@@ -100,8 +103,7 @@ func (c restClient) RollbackTransaction(ctx context.Context, transactionID strin
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		err = errors.New("failed to rollback")
-		return err
+		return fmt.Errorf("rolling back tx %s failed", transactionID)
 	}
 
 	return nil
@@ -111,19 +113,21 @@ func (c restClient) sendNoBodyOperation(ctx context.Context, operationURL string
 	var req *http.Request
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, operationURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating req with ctx: %w", err)
 	}
 
 	resp, err = c.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("sending req %s: %w", operationURL, err)
 	}
 	defer func() {
-		closeErr := resp.Body.Close()
-		if err != nil {
-			err = errors.Join(err, closeErr)
-		} else {
-			err = closeErr
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			closeErr = fmt.Errorf("closing resp: %w", err)
+			if err != nil {
+				err = errors.Join(err, closeErr)
+			} else {
+				err = closeErr
+			}
 		}
 	}()
 
@@ -137,7 +141,7 @@ func (c restClient) rollbackURL(transactionID string) (string, error) {
 func (c restClient) operationURL(transactionID string, operation string) (string, error) {
 	base, err := url.Parse("http://" + c.host)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parsing host %s: %w", c.host, err)
 	}
 	base.Path = "/transactions/" + url.PathEscape(transactionID) + "/" + operation
 	return base.String(), nil
