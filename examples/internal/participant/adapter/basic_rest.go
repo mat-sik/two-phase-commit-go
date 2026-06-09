@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant"
@@ -29,17 +30,17 @@ type restBasicTransactionPreparer struct {
 	transactionPreparer BasicTransactionPreparer
 }
 
-// TODO: improve error handling and logging
 func (h restBasicTransactionPreparer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
 	data, err := io.ReadAll(req.Body)
 	if err != nil {
+		slog.ErrorContext(ctx, "reading request body", "err", err)
 		http.Error(w, "could not read request", http.StatusInternalServerError)
 		return
 	}
-
 	transactionID := req.PathValue("transactionID")
-	err = h.transactionPreparer.PrepareTransaction(req.Context(), transactionID, string(data))
-	if err != nil {
+	if err = h.transactionPreparer.PrepareTransaction(ctx, transactionID, string(data)); err != nil {
+		slog.ErrorContext(ctx, "preparing tx", "transactionID", transactionID, "err", err)
 		http.Error(w, "failed to prepareTransaction", http.StatusInternalServerError)
 		return
 	}

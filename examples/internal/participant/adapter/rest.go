@@ -1,6 +1,10 @@
 package adapter
 
-import "net/http"
+import (
+	"fmt"
+	"log/slog"
+	"net/http"
+)
 
 func newMux(transactionHandlers restHandler) *http.ServeMux {
 	mux := http.NewServeMux()
@@ -23,10 +27,11 @@ type restTransactionCommitter struct {
 }
 
 func (h restTransactionCommitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
 	transactionID := req.PathValue("transactionID")
-	err := h.transactionCommitter.CommitTransaction(req.Context(), transactionID)
-	if err != nil {
-		http.Error(w, "failed to commitTransaction", http.StatusInternalServerError)
+	if err := h.transactionCommitter.CommitTransaction(req.Context(), transactionID); err != nil {
+		slog.ErrorContext(ctx, "committing tx", "transactionID", transactionID, "err", err)
+		http.Error(w, fmt.Sprintf("failed to commit tx %s", transactionID), http.StatusInternalServerError)
 		return
 	}
 }
@@ -36,10 +41,11 @@ type restTransactionRollbacker struct {
 }
 
 func (h restTransactionRollbacker) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
 	transactionID := req.PathValue("transactionID")
-	err := h.transactionRollbacker.RollbackTransaction(req.Context(), transactionID)
-	if err != nil {
-		http.Error(w, "failed to rollbackTransaction", http.StatusInternalServerError)
+	if err := h.transactionRollbacker.RollbackTransaction(ctx, transactionID); err != nil {
+		slog.ErrorContext(ctx, "rolling back tx", "transactionID", transactionID, "err", err)
+		http.Error(w, fmt.Sprintf("failed to rollback tx %s", transactionID), http.StatusInternalServerError)
 		return
 	}
 }

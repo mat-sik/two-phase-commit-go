@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"log/slog"
 
 	basic "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/basic/v1"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant"
@@ -30,30 +31,34 @@ func NewFailingBasicGRPCHandler(prepareFailUntilAttempt, commitFailUntilAttempt,
 type GRPCBasicHandler struct {
 	basic.UnimplementedBasicServiceServer
 
-	transactionPreparer   BasicTransactionPreparer
+	transactionPreparer BasicTransactionPreparer
+	// todo: rename to committer
 	transactionCommiter   TransactionCommiter
 	transactionRollbacker TransactionRollbacker
 }
 
 func (h *GRPCBasicHandler) PrepareTransaction(ctx context.Context, req *basic.PrepareTransactionRequest) (*basic.PrepareTransactionResponse, error) {
-	err := h.transactionPreparer.PrepareTransaction(ctx, req.GetTransactionId(), req.GetPayload())
-	if err != nil {
+	transactionID := req.GetTransactionId()
+	if err := h.transactionPreparer.PrepareTransaction(ctx, transactionID, req.GetPayload()); err != nil {
+		slog.ErrorContext(ctx, "preparing tx", "transactionID", transactionID, "err", err)
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &basic.PrepareTransactionResponse{}, nil
 }
 
 func (h *GRPCBasicHandler) CommitTransaction(ctx context.Context, req *basic.CommitTransactionRequest) (*basic.CommitTransactionResponse, error) {
-	err := h.transactionCommiter.CommitTransaction(ctx, req.GetTransactionId())
-	if err != nil {
+	transactionID := req.GetTransactionId()
+	if err := h.transactionCommiter.CommitTransaction(ctx, transactionID); err != nil {
+		slog.ErrorContext(ctx, "committing tx", "transactionID", transactionID, "err", err)
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &basic.CommitTransactionResponse{}, nil
 }
 
 func (h *GRPCBasicHandler) RollbackTransaction(ctx context.Context, req *basic.RollbackTransactionRequest) (*basic.RollbackTransactionResponse, error) {
-	err := h.transactionRollbacker.RollbackTransaction(ctx, req.GetTransactionId())
-	if err != nil {
+	transactionID := req.GetTransactionId()
+	if err := h.transactionRollbacker.RollbackTransaction(ctx, transactionID); err != nil {
+		slog.ErrorContext(ctx, "rolling back tx", "transactionID", transactionID, "err", err)
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &basic.RollbackTransactionResponse{}, nil
