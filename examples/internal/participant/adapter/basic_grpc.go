@@ -14,7 +14,7 @@ func NewBasicGRPCHandler() *GRPCBasicHandler {
 	handler := participant.NewBasicTransactionHandler()
 	return &GRPCBasicHandler{
 		transactionPreparer:   handler,
-		transactionCommiter:   handler,
+		transactionCommitter:  handler,
 		transactionRollbacker: handler,
 	}
 }
@@ -23,7 +23,7 @@ func NewFailingBasicGRPCHandler(prepareFailUntilAttempt, commitFailUntilAttempt,
 	handler := participant.NewFailingBasicTransactionHandler(prepareFailUntilAttempt, commitFailUntilAttempt, rollbackFailUntilAttempt)
 	return &GRPCBasicHandler{
 		transactionPreparer:   handler,
-		transactionCommiter:   handler,
+		transactionCommitter:  handler,
 		transactionRollbacker: handler,
 	}
 }
@@ -31,9 +31,8 @@ func NewFailingBasicGRPCHandler(prepareFailUntilAttempt, commitFailUntilAttempt,
 type GRPCBasicHandler struct {
 	basic.UnimplementedBasicServiceServer
 
-	transactionPreparer BasicTransactionPreparer
-	// todo: rename to committer
-	transactionCommiter   TransactionCommiter
+	transactionPreparer   BasicTransactionPreparer
+	transactionCommitter  TransactionCommitter
 	transactionRollbacker TransactionRollbacker
 }
 
@@ -48,7 +47,7 @@ func (h *GRPCBasicHandler) PrepareTransaction(ctx context.Context, req *basic.Pr
 
 func (h *GRPCBasicHandler) CommitTransaction(ctx context.Context, req *basic.CommitTransactionRequest) (*basic.CommitTransactionResponse, error) {
 	transactionID := req.GetTransactionId()
-	if err := h.transactionCommiter.CommitTransaction(ctx, transactionID); err != nil {
+	if err := h.transactionCommitter.CommitTransaction(ctx, transactionID); err != nil {
 		slog.ErrorContext(ctx, "committing tx", "transactionID", transactionID, "err", err)
 		return nil, status.Error(codes.Internal, err.Error())
 	}

@@ -15,7 +15,7 @@ func NewTransferGRPCHandler(pool *pgxpool.Pool) *GRPCTransferHandler {
 	handler := participant.NewTransferTransactionHandler(pool)
 	return &GRPCTransferHandler{
 		transactionPreparer:   handler,
-		transactionCommiter:   handler,
+		transactionCommitter:  handler,
 		transactionRollbacker: handler,
 	}
 }
@@ -24,7 +24,7 @@ type GRPCTransferHandler struct {
 	pb.UnimplementedTransferServiceServer
 
 	transactionPreparer   TransferTransactionPreparer
-	transactionCommiter   TransactionCommiter
+	transactionCommitter  TransactionCommitter
 	transactionRollbacker TransactionRollbacker
 }
 
@@ -45,7 +45,7 @@ func (h *GRPCTransferHandler) PrepareTransaction(ctx context.Context, req *pb.Pr
 
 func (h *GRPCTransferHandler) CommitTransaction(ctx context.Context, req *pb.CommitTransactionRequest) (*pb.CommitTransactionResponse, error) {
 	transactionID := req.GetTransactionId()
-	if err := h.transactionCommiter.CommitTransaction(ctx, transactionID); err != nil {
+	if err := h.transactionCommitter.CommitTransaction(ctx, transactionID); err != nil {
 		slog.ErrorContext(ctx, "committing tx", "transactionID", transactionID, "err", err)
 		return nil, status.Error(codes.Internal, err.Error())
 	}

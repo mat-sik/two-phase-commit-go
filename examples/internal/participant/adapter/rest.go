@@ -23,7 +23,7 @@ type restHandler struct {
 }
 
 type restTransactionCommitter struct {
-	transactionCommitter TransactionCommiter
+	transactionCommitter TransactionCommitter
 }
 
 func (h restTransactionCommitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
