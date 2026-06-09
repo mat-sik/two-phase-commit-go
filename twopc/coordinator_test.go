@@ -3,6 +3,7 @@ package twopc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -367,6 +368,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			wantErrs:    []error{errCommit, errPersist},
 			wantOutcome: OutcomeInconsistent,
 		},
+		// todo: if call succeeded, should not try call again for efficiency
 		{
 			name: "persist commit fails after client commit call → returns persist commit error",
 			fields: fields{
@@ -457,6 +459,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			)
 			result := coordinator.Execute(tt.args.ctxFunc(), tt.args.distributedTransaction)
 
+			fmt.Printf("err: %s", result.Err())
 			for _, err := range tt.wantErrs {
 				if !errors.Is(result.Err(), err) {
 					t.Errorf("Execute() error = %v, wantErr %v", result.Err(), tt.wantErrs)
