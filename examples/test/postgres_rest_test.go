@@ -25,9 +25,10 @@ func Test_postgres_basic_rest_integration(t *testing.T) {
 				adapter.NewBasicMux(),
 				adapter.NewBasicMux(),
 			},
-			handlersMapper: restServerRequests,
-			txCoordinatorProvider: func(pool *pgxpool.Pool) *twopc.Coordinator[string] {
-				return coordinator.NewPostgresBasicRESTCoordinator(pool)
+			handlersMapper:                       restServerRequests,
+			coordinatorPersistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
+			coordinatorClientConfig: coordinatorClientConfig{
+				clientConfigProvider: newClientConfig(coordinator.NewRestClient()),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-basic-REST-1",
@@ -80,9 +81,10 @@ func Test_postgres_transfer_rest_integration(t *testing.T) {
 				transferProvider,
 				transferProvider,
 			},
-			handlersMapper: restServerRequests,
-			txCoordinatorProvider: func(pool *pgxpool.Pool) *twopc.Coordinator[string] {
-				return coordinator.NewPostgresTransferRESTCoordinator(pool)
+			handlersMapper:                       restServerRequests,
+			coordinatorPersistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
+			coordinatorClientConfig: coordinatorClientConfig{
+				clientConfigProvider: newClientConfig(coordinator.NewRestClient()),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-transfer-rest-1",
