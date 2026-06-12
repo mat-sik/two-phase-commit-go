@@ -11,14 +11,18 @@ import (
 )
 
 type testCase struct {
-	name                         string
-	runServerRequests            []runServerRequest
-	coordinatorPersistenceConfig twopc.PersistenceConfig[string]
-	coordinatorClientConfig      coordinatorClientConfig
-	coordinatorOpts              []twopc.Option
-	distributedTransaction       distributedTransaction
-	wantErr                      bool
-	wantedOutcome                twopc.Outcome
+	name                   string
+	runServerRequests      []runServerRequest
+	coordinatorConfig      coordinatorConfig
+	distributedTransaction distributedTransaction
+	wantErr                bool
+	wantedOutcome          twopc.Outcome
+}
+
+type coordinatorConfig struct {
+	persistenceConfig twopc.PersistenceConfig[string]
+	clientConfig      coordinatorClientConfig
+	opts              []twopc.Option
 }
 
 type coordinatorClientConfig struct {
@@ -99,7 +103,10 @@ func runTest(t *testing.T, tt testCase) {
 
 	addresses := srvBundle.addresses()
 
-	txCoordinator := newCoordinator(tt.coordinatorPersistenceConfig, tt.coordinatorClientConfig, addresses, tt.coordinatorOpts...)
+	persistenceConfig := tt.coordinatorConfig.persistenceConfig
+	clientConfig := tt.coordinatorConfig.clientConfig
+	coordinatorOpts := tt.coordinatorConfig.opts
+	txCoordinator := newCoordinator(persistenceConfig, clientConfig, addresses, coordinatorOpts...)
 
 	outcome := txCoordinator.Execute(ctx, tt.distributedTransaction.toTwopc(addresses))
 
