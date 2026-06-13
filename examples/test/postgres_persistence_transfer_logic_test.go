@@ -5,57 +5,61 @@ package test
 import (
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator/client/basic"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-func Test_postgres_basic_rest_integration(t *testing.T) {
+func Test_postgres_persistence_transfer_logic_gRPC(t *testing.T) {
 	t.Parallel()
-	tests := []testContainersTestCase[*http.ServeMux]{
+	var transferProvider = func(pool *pgxpool.Pool) *adapter.GRPCTransferHandler {
+		return adapter.NewTransferGRPCHandler(pool)
+	}
+	tests := []testContainersTestCase[*adapter.GRPCTransferHandler]{
 		{
-			name: "postgres basic REST happy path",
-			handlersConfig: handlersConfig[*http.ServeMux]{
-				handlers: []*http.ServeMux{
-					adapter.NewBasicMux(),
-					adapter.NewBasicMux(),
-					adapter.NewBasicMux(),
+			name: "happy path",
+			handlersConfig: handlersConfig[*adapter.GRPCTransferHandler]{
+				providers: []handlerProvider[*adapter.GRPCTransferHandler]{
+					transferProvider,
+					transferProvider,
+					transferProvider,
 				},
-				mapper: restServerRequests,
+				mapper: transferGRPCServerRequests,
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
 				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newClientConfig(coordinator.NewRestClient()),
+					clientConfigProvider: newClientConfig(coordinator.NewTransferGRPCClient()),
 				},
 			},
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-postgres-basic-REST-1",
+				transactionID: "tx-postgres-transfer-grpc-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
-						payload: basic.PreparePayload{
-							Payload:   "one",
-							CreatedAt: time.Now(),
+						payload: participant.TransferPayload{
+							SenderID:   "Alice",
+							ReceiverID: "Bob",
+							Amount:     100.5,
 						},
 					},
 					{
 						participantNumber: 1,
-						payload: basic.PreparePayload{
-							Payload:   "two",
-							CreatedAt: time.Now(),
+						payload: participant.TransferPayload{
+							SenderID:   "Bob",
+							ReceiverID: "Cecile",
+							Amount:     100.5,
 						},
 					},
 					{
 						participantNumber: 2,
-						payload: basic.PreparePayload{
-							Payload:   "three",
-							CreatedAt: time.Now(),
+						payload: participant.TransferPayload{
+							SenderID:   "Cecile",
+							ReceiverID: "Alice",
+							Amount:     100.5,
 						},
 					},
 				},
@@ -72,7 +76,7 @@ func Test_postgres_basic_rest_integration(t *testing.T) {
 	}
 }
 
-func Test_postgres_transfer_rest_integration(t *testing.T) {
+func Test_postgres_persistence_transfer_logic_REST(t *testing.T) {
 	t.Parallel()
 	var transferProvider = func(pool *pgxpool.Pool) *http.ServeMux {
 		return adapter.NewTransferMux(pool)

@@ -4,21 +4,21 @@ package test
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator/client/basic"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-func Test_postgres_basic_grpc_integration(t *testing.T) {
+func Test_postgres_persistence_basic_logic_gRPC(t *testing.T) {
 	t.Parallel()
 	tests := []testContainersTestCase[*adapter.GRPCBasicHandler]{
 		{
-			name: "postgres basic gRPC happy path",
+			name: "happy path",
 			handlersConfig: handlersConfig[*adapter.GRPCBasicHandler]{
 				handlers: []*adapter.GRPCBasicHandler{
 					adapter.NewBasicGRPCHandler(),
@@ -62,53 +62,47 @@ func Test_postgres_basic_grpc_integration(t *testing.T) {
 	}
 }
 
-func Test_postgres_transfer_grpc_integration(t *testing.T) {
+func Test_postgres_persistence_basic_logic_REST(t *testing.T) {
 	t.Parallel()
-	var transferProvider = func(pool *pgxpool.Pool) *adapter.GRPCTransferHandler {
-		return adapter.NewTransferGRPCHandler(pool)
-	}
-	tests := []testContainersTestCase[*adapter.GRPCTransferHandler]{
+	tests := []testContainersTestCase[*http.ServeMux]{
 		{
-			name: "postgres transfer gRPC happy path",
-			handlersConfig: handlersConfig[*adapter.GRPCTransferHandler]{
-				providers: []handlerProvider[*adapter.GRPCTransferHandler]{
-					transferProvider,
-					transferProvider,
-					transferProvider,
+			name: "happy path",
+			handlersConfig: handlersConfig[*http.ServeMux]{
+				handlers: []*http.ServeMux{
+					adapter.NewBasicMux(),
+					adapter.NewBasicMux(),
+					adapter.NewBasicMux(),
 				},
-				mapper: transferGRPCServerRequests,
+				mapper: restServerRequests,
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
 				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newClientConfig(coordinator.NewTransferGRPCClient()),
+					clientConfigProvider: newClientConfig(coordinator.NewRestClient()),
 				},
 			},
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-postgres-transfer-grpc-1",
+				transactionID: "tx-postgres-basic-REST-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
-						payload: participant.TransferPayload{
-							SenderID:   "Alice",
-							ReceiverID: "Bob",
-							Amount:     100.5,
+						payload: basic.PreparePayload{
+							Payload:   "one",
+							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 1,
-						payload: participant.TransferPayload{
-							SenderID:   "Bob",
-							ReceiverID: "Cecile",
-							Amount:     100.5,
+						payload: basic.PreparePayload{
+							Payload:   "two",
+							CreatedAt: time.Now(),
 						},
 					},
 					{
 						participantNumber: 2,
-						payload: participant.TransferPayload{
-							SenderID:   "Cecile",
-							ReceiverID: "Alice",
-							Amount:     100.5,
+						payload: basic.PreparePayload{
+							Payload:   "three",
+							CreatedAt: time.Now(),
 						},
 					},
 				},
@@ -125,7 +119,7 @@ func Test_postgres_transfer_grpc_integration(t *testing.T) {
 	}
 }
 
-func Test_postgres_basic_grpc_eventual_consistency(t *testing.T) {
+func Test_postgres_persistence_basic_logic_gRPC_eventual_consistency(t *testing.T) {
 	t.Parallel()
 
 	coordinatorPool, coordinatorPostgresTerminator, err := runPostgresForCoordinatorPool(t.Context())
