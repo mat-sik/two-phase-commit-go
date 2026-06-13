@@ -19,12 +19,14 @@ func Test_postgres_basic_grpc_integration(t *testing.T) {
 	tests := []testContainersTestCase[*adapter.GRPCBasicHandler]{
 		{
 			name: "postgres basic gRPC happy path",
-			handlers: []*adapter.GRPCBasicHandler{
-				adapter.NewBasicGRPCHandler(),
-				adapter.NewBasicGRPCHandler(),
-				adapter.NewBasicGRPCHandler(),
+			handlersConfig: handlersConfig[*adapter.GRPCBasicHandler]{
+				handlers: []*adapter.GRPCBasicHandler{
+					adapter.NewBasicGRPCHandler(),
+					adapter.NewBasicGRPCHandler(),
+					adapter.NewBasicGRPCHandler(),
+				},
+				mapper: basicGRPCServerRequests,
 			},
-			handlersMapper: basicGRPCServerRequests,
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
 				clientConfig: coordinatorClientConfig{
@@ -68,12 +70,14 @@ func Test_postgres_transfer_grpc_integration(t *testing.T) {
 	tests := []testContainersTestCase[*adapter.GRPCTransferHandler]{
 		{
 			name: "postgres transfer gRPC happy path",
-			handlersProviders: []handlerProvider[*adapter.GRPCTransferHandler]{
-				transferProvider,
-				transferProvider,
-				transferProvider,
+			handlersConfig: handlersConfig[*adapter.GRPCTransferHandler]{
+				providers: []handlerProvider[*adapter.GRPCTransferHandler]{
+					transferProvider,
+					transferProvider,
+					transferProvider,
+				},
+				mapper: transferGRPCServerRequests,
 			},
-			handlersMapper: transferGRPCServerRequests,
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
 				clientConfig: coordinatorClientConfig{

@@ -20,12 +20,14 @@ func Test_postgres_basic_rest_integration(t *testing.T) {
 	tests := []testContainersTestCase[*http.ServeMux]{
 		{
 			name: "postgres basic REST happy path",
-			handlers: []*http.ServeMux{
-				adapter.NewBasicMux(),
-				adapter.NewBasicMux(),
-				adapter.NewBasicMux(),
+			handlersConfig: handlersConfig[*http.ServeMux]{
+				handlers: []*http.ServeMux{
+					adapter.NewBasicMux(),
+					adapter.NewBasicMux(),
+					adapter.NewBasicMux(),
+				},
+				mapper: restServerRequests,
 			},
-			handlersMapper: restServerRequests,
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
 				clientConfig: coordinatorClientConfig{
@@ -78,12 +80,14 @@ func Test_postgres_transfer_rest_integration(t *testing.T) {
 	tests := []testContainersTestCase[*http.ServeMux]{
 		{
 			name: "postgres transfer REST happy path",
-			handlersProviders: []handlerProvider[*http.ServeMux]{
-				transferProvider,
-				transferProvider,
-				transferProvider,
+			handlersConfig: handlersConfig[*http.ServeMux]{
+				providers: []handlerProvider[*http.ServeMux]{
+					transferProvider,
+					transferProvider,
+					transferProvider,
+				},
+				mapper: restServerRequests,
 			},
-			handlersMapper: restServerRequests,
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
 				clientConfig: coordinatorClientConfig{

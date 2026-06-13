@@ -19,13 +19,28 @@ import (
 
 type testContainersTestCase[T any] struct {
 	name                   string
-	handlers               []T
-	handlersProviders      []handlerProvider[T]
-	handlersMapper         func([]T) []runServerRequest
+	handlersConfig         handlersConfig[T]
 	coordinatorConfig      testContainersCoordinatorConfig
 	distributedTransaction distributedTransaction
 	wantErr                bool
 	wantedOutcome          twopc.Outcome
+}
+
+type handlersConfig[T any] struct {
+	handlers  []T
+	providers []handlerProvider[T]
+	mapper    func([]T) []runServerRequest
+}
+
+func (c handlersConfig[T]) getHandlers(participantPools []*pgxpool.Pool) []T {
+	if c.handlers != nil {
+		return c.handlers
+	}
+	handlers := make([]T, 0, len(c.providers))
+	for i, provider := range c.providers {
+		handlers = append(handlers, provider(participantPools[i]))
+	}
+	return handlers
 }
 
 type testContainersCoordinatorConfig struct {
@@ -41,11 +56,11 @@ type handlerProvider[T any] func(pool *pgxpool.Pool) T
 func runTestContainersTest[T any](t *testing.T, tt testContainersTestCase[T]) {
 	t.Helper()
 
-	coordinatorPool, participantPools := runPostgresForPools(t, len(tt.handlersProviders))
+	coordinatorPool, participantPools := runPostgresForPools(t, len(tt.handlersConfig.providers))
 
-	handlers := getHandlers(tt, participantPools)
+	handlers := tt.handlersConfig.getHandlers(participantPools)
 
-	srvBundle, err := runServers(tt.handlersMapper(handlers))
+	srvBundle, err := runServers(tt.handlersConfig.mapper(handlers))
 	if err != nil {
 		t.Fatalf("failed to start servers: %v", err)
 	}
@@ -197,16 +212,4 @@ func newPostgresTerminator(pool *pgxpool.Pool, container *postgres.PostgresConta
 			panic(fmt.Sprintf("terminating psql container: %s", err))
 		}
 	}
-}
-
-func getHandlers[T any](tt testContainersTestCase[T], participantPools []*pgxpool.Pool) []T {
-	if tt.handlers != nil {
-		return tt.handlers
-	}
-
-	handlers := make([]T, 0, len(tt.handlersProviders))
-	for i, provider := range tt.handlersProviders {
-		handlers = append(handlers, provider(participantPools[i]))
-	}
-	return handlers
 }
