@@ -32,6 +32,10 @@ type handlersConfig[T any] struct {
 	mapper    func([]T) []runServerRequest
 }
 
+func (c handlersConfig[T]) getRunServerRequests(participantPools []*pgxpool.Pool) []runServerRequest {
+	return c.mapper(c.getHandlers(participantPools))
+}
+
 func (c handlersConfig[T]) getHandlers(participantPools []*pgxpool.Pool) []T {
 	if c.handlers != nil {
 		return c.handlers
@@ -58,9 +62,7 @@ func runTestContainersTest[T any](t *testing.T, tt testContainersTestCase[T]) {
 
 	coordinatorPool, participantPools := runPostgresForPools(t, len(tt.handlersConfig.providers))
 
-	handlers := tt.handlersConfig.getHandlers(participantPools)
-
-	srvBundle, err := runServers(tt.handlersConfig.mapper(handlers))
+	srvBundle, err := runServers(tt.handlersConfig.getRunServerRequests(participantPools))
 	if err != nil {
 		t.Fatalf("failed to start servers: %v", err)
 	}
