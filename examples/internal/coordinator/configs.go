@@ -9,54 +9,6 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-func NewMockBasicRESTCoordinator(opts ...twopc.Option) *twopc.Coordinator[string] {
-	return twopc.NewCoordinator(
-		NewMockPersistenceConfig(),
-		NewRestClient(),
-		opts...,
-	)
-}
-
-func NewMockBasicGRPCCoordinator(opts ...twopc.Option) *twopc.Coordinator[string] {
-	return twopc.NewCoordinator(
-		NewMockPersistenceConfig(),
-		NewBasicGRPCClient(),
-		opts...,
-	)
-}
-
-func NewPostgresBasicRESTCoordinator(pool *pgxpool.Pool, opts ...twopc.Option) *twopc.Coordinator[string] {
-	return twopc.NewCoordinator(
-		NewPostgresPersistenceConfig(pool),
-		NewRestClient(),
-		opts...,
-	)
-}
-
-func NewPostgresBasicGRPCCoordinator(pool *pgxpool.Pool, opts ...twopc.Option) *twopc.Coordinator[string] {
-	return twopc.NewCoordinator(
-		NewPostgresPersistenceConfig(pool),
-		NewBasicGRPCClient(),
-		opts...,
-	)
-}
-
-func NewPostgresTransferGRPCCoordinator(pool *pgxpool.Pool, opts ...twopc.Option) *twopc.Coordinator[string] {
-	return twopc.NewCoordinator(
-		NewPostgresPersistenceConfig(pool),
-		NewTransferGRPCClient(),
-		opts...,
-	)
-}
-
-func NewPostgresTransferRESTCoordinator(pool *pgxpool.Pool, opts ...twopc.Option) *twopc.Coordinator[string] {
-	return twopc.NewCoordinator(
-		NewPostgresPersistenceConfig(pool),
-		NewRestClient(),
-		opts...,
-	)
-}
-
 func NewMockPersistenceConfig() twopc.PersistenceConfig[string] {
 	return twopc.PersistenceConfig[string]{
 		TransactionStateChecker:   persister.MockTransactionStateChecker{},

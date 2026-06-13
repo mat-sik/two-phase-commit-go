@@ -16,7 +16,7 @@ import (
 
 func Test_postgres_persistence(t *testing.T) {
 	t.Parallel()
-	tests := []testContainersTestCase[*adapter.GRPCBasicHandler]{
+	tests := []testContainersTestCase{
 		{
 			name: "gRPC client basic logic happy path",
 			serverRunners: []serverRunnable{
@@ -280,8 +280,9 @@ func Test_postgres_persistence_basic_logic_gRPC_eventual_consistency(t *testing.
 	}
 	t.Cleanup(coordinatorPostgresTerminator)
 
-	txCoordinator := coordinator.NewPostgresBasicGRPCCoordinator(
-		coordinatorPool,
+	txCoordinator := twopc.NewCoordinator(
+		coordinator.NewPostgresPersistenceConfig(coordinatorPool),
+		coordinator.NewBasicGRPCClient(),
 		twopc.WithBackoffMax(200*time.Millisecond),
 	)
 	tx := distributedTransaction{

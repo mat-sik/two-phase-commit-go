@@ -19,7 +19,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-type testContainersTestCase[T any] struct {
+type testContainersTestCase struct {
 	name                   string
 	serverRunners          []serverRunnable
 	coordinatorConfig      testContainersCoordinatorConfig
@@ -140,7 +140,7 @@ type testContainersCoordinatorConfig struct {
 
 type persistenceConfigProvider func(pool *pgxpool.Pool) twopc.PersistenceConfig[string]
 
-func runTestContainersTest[T any](t *testing.T, tt testContainersTestCase[T]) {
+func runTestContainersTest(t *testing.T, tt testContainersTestCase) {
 	t.Helper()
 
 	var poolNeedingParticipants []int

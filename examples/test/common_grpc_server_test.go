@@ -23,10 +23,6 @@ func mapFromGRPCBasicHandler(handler *adapter.GRPCBasicHandler) runServerRequest
 	return newRunServerRequest(registerer)
 }
 
-func transferGRPCServerRequests(handlers []*adapter.GRPCTransferHandler) []runServerRequest {
-	return mapToRunServerRequests(handlers, mapFromGRPCTransferHandler)
-}
-
 func mapFromGRPCTransferHandler(handler *adapter.GRPCTransferHandler) runServerRequest {
 	registerer := func(server *grpc.Server) {
 		transfer.RegisterTransferServiceServer(server, handler)
