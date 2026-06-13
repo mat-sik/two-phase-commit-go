@@ -7,6 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator/client"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator/client/basic"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator/client/transfer"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
@@ -26,14 +29,14 @@ type coordinatorConfig struct {
 }
 
 type coordinatorClientConfig struct {
-	clientConfigProvider   clientConfigProvider
-	gRPCParticipantNumbers []int
+	clientConfigProvider  clientConfigProvider
+	participantTransports map[int]transportType
 }
 
-type clientConfigProvider func(gRPCAddresses map[string]struct{}) twopc.ClientConfig[string]
+type clientConfigProvider func(transportTypeByParticipantID map[string]transportType) twopc.ClientConfig[string]
 
 func newClientConfig(clientConfig twopc.ClientConfig[string]) clientConfigProvider {
-	return constant[map[string]struct{}, twopc.ClientConfig[string]](clientConfig)
+	return constant[map[string]transportType, twopc.ClientConfig[string]](clientConfig)
 }
 
 func constant[In, Out any](output Out) func(In) Out {
@@ -42,17 +45,12 @@ func constant[In, Out any](output Out) func(In) Out {
 	}
 }
 
-func newMixedClientConfig(
-	gRPCNewClientFunc func(participantID string) (twopc.Client, error),
-	restNewClientFunc func(participantID string) (twopc.Client, error),
-) clientConfigProvider {
-	return func(gRPCAddresses map[string]struct{}) twopc.ClientConfig[string] {
+func newMixedClientConfig() clientConfigProvider {
+	return func(transportTypeByParticipantID map[string]transportType) twopc.ClientConfig[string] {
 		return twopc.ClientConfig[string]{
 			NewClientFunc: func(participantID string) (twopc.Client, error) {
-				if _, ok := gRPCAddresses[participantID]; ok {
-					return gRPCNewClientFunc(participantID)
-				}
-				return restNewClientFunc(participantID)
+				participantTransportType := transportTypeByParticipantID[participantID]
+				return clientFor(participantTransportType)(participantID)
 			},
 		}
 	}
@@ -123,12 +121,12 @@ func newCoordinator(
 	addresses []string,
 	opts ...twopc.Option,
 ) *twopc.Coordinator[string] {
-	grpcAddresses := make(map[string]struct{}, len(clientConfig.gRPCParticipantNumbers))
-	for _, number := range clientConfig.gRPCParticipantNumbers {
-		grpcAddresses[addresses[number]] = struct{}{}
+	transportTypeByParticipantId := make(map[string]transportType, len(clientConfig.participantTransports))
+	for participantNumber, participantTransportType := range clientConfig.participantTransports {
+		transportTypeByParticipantId[addresses[participantNumber]] = participantTransportType
 	}
 
-	txCoordinatorClientConfig := clientConfig.clientConfigProvider(grpcAddresses)
+	txCoordinatorClientConfig := clientConfig.clientConfigProvider(transportTypeByParticipantId)
 	return twopc.NewCoordinator(
 		persistenceConfig,
 		txCoordinatorClientConfig,
@@ -146,5 +144,26 @@ func assertOutcome(t *testing.T, wantErr bool, wantedOutcome twopc.Outcome, resu
 	}
 	if wantedOutcome != result.Outcome() {
 		t.Fatalf("expected outcome %v, got %v", wantedOutcome, result.Outcome())
+	}
+}
+
+type transportType int
+
+const (
+	transportTypeREST         transportType = iota
+	transportTypeBasicGRPC    transportType = iota
+	transportTypeTransferGRPC transportType = iota
+)
+
+func clientFor(transportType transportType) func(participantID string) (twopc.Client, error) {
+	switch transportType {
+	case transportTypeREST:
+		return client.NewRESTClient
+	case transportTypeBasicGRPC:
+		return basic.NewGRPCClient
+	case transportTypeTransferGRPC:
+		return transfer.NewGRPCClient
+	default:
+		panic(fmt.Sprintf("unsupported transport type: %d", transportType))
 	}
 }

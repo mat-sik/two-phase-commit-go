@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator/client"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator/client/basic"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
@@ -100,15 +99,16 @@ func Test_mock_persistence_basic_logic(t *testing.T) {
 			coordinatorConfig: coordinatorConfig{
 				persistenceConfig: coordinator.NewMockPersistenceConfig(),
 				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newMixedClientConfig(
-						basic.NewGRPCClient,
-						client.NewRESTClient,
-					),
-					gRPCParticipantNumbers: []int{0, 1},
+					clientConfigProvider: newMixedClientConfig(),
+					participantTransports: map[int]transportType{
+						0: transportTypeBasicGRPC,
+						1: transportTypeBasicGRPC,
+						2: transportTypeREST,
+					},
 				},
 			},
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-mock-basic-grpc-rest-1",
+				transactionID: "tx-mock-basic-mixed-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,

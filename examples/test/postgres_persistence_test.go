@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
-	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator/client"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator/client/basic"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
@@ -193,15 +192,16 @@ func Test_postgres_persistence(t *testing.T) {
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
 				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newMixedClientConfig(
-						basic.NewGRPCClient,
-						client.NewRESTClient,
-					),
-					gRPCParticipantNumbers: []int{0, 1},
+					clientConfigProvider: newMixedClientConfig(),
+					participantTransports: map[int]transportType{
+						0: transportTypeBasicGRPC,
+						1: transportTypeBasicGRPC,
+						2: transportTypeREST,
+					},
 				},
 			},
 			distributedTransaction: distributedTransaction{
-				transactionID: "tx-postgres-basic-grpc-1",
+				transactionID: "tx-postgres-basic-mixed-1",
 				transactions: []transaction{
 					{
 						participantNumber: 0,
@@ -210,6 +210,48 @@ func Test_postgres_persistence(t *testing.T) {
 					{
 						participantNumber: 1,
 						payload:           "two",
+					},
+					{
+						participantNumber: 2,
+						payload:           "three",
+					},
+				},
+			},
+			wantErr:       false,
+			wantedOutcome: twopc.OutcomeCommitted,
+		},
+		{
+			name: "mixed client mixed logic happy path",
+			serverRunners: []serverRunnable{
+				newGRPCBasicLogicServerRunnable(),
+				newGRPCBasicLogicServerRunnable(),
+				newRESTHandlerServerRunnable(),
+			},
+			coordinatorConfig: testContainersCoordinatorConfig{
+				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
+				clientConfig: coordinatorClientConfig{
+					clientConfigProvider: newMixedClientConfig(),
+					participantTransports: map[int]transportType{
+						0: transportTypeBasicGRPC,
+						1: transportTypeTransferGRPC,
+						2: transportTypeREST,
+					},
+				},
+			},
+			distributedTransaction: distributedTransaction{
+				transactionID: "tx-postgres-mixed-mixed-1",
+				transactions: []transaction{
+					{
+						participantNumber: 0,
+						payload:           "one",
+					},
+					{
+						participantNumber: 1,
+						payload: participant.TransferPayload{
+							SenderID:   "Bob",
+							ReceiverID: "Cecile",
+							Amount:     100.5,
+						},
 					},
 					{
 						participantNumber: 2,
