@@ -143,8 +143,6 @@ func runPostgresForCoordinatorPool(ctx context.Context) (*pgxpool.Pool, postgres
 }
 
 func runPostgresForPool(ctx context.Context, scripts ...string) (*pgxpool.Pool, postgresTerminator, error) {
-	const function = "runPostgresAndGetNewPool"
-
 	container, err := runPostgres(ctx, scripts...)
 	if err != nil {
 		return nil, nil, err
@@ -152,13 +150,13 @@ func runPostgresForPool(ctx context.Context, scripts ...string) (*pgxpool.Pool, 
 
 	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
-		return nil, nil, fmt.Errorf("%s: failed to get connection string: %v", function, err)
+		return nil, nil, fmt.Errorf("obtaining psql conn str: %w", err)
 	}
 
 	var pool *pgxpool.Pool
 	pool, err = pgxpool.New(ctx, connStr)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%s: failed to create new pgxpool: %v", function, err)
+		return nil, nil, fmt.Errorf("creating new pool: %w", err)
 	}
 
 	terminator := newPostgresTerminator(pool, container)
@@ -167,8 +165,6 @@ func runPostgresForPool(ctx context.Context, scripts ...string) (*pgxpool.Pool, 
 }
 
 func runPostgres(ctx context.Context, scripts ...string) (*postgres.PostgresContainer, error) {
-	const function = "runPostgres"
-
 	container, err := postgres.Run(ctx,
 		"postgres:17",
 		postgres.WithInitScripts(scripts...),
@@ -185,7 +181,7 @@ func runPostgres(ctx context.Context, scripts ...string) (*postgres.PostgresCont
 		}),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("%s: failed to run container: %v", function, err)
+		return nil, fmt.Errorf("running psql container: %w", err)
 	}
 
 	return container, nil
@@ -194,13 +190,11 @@ func runPostgres(ctx context.Context, scripts ...string) (*postgres.PostgresCont
 type postgresTerminator func()
 
 func newPostgresTerminator(pool *pgxpool.Pool, container *postgres.PostgresContainer) postgresTerminator {
-	const function = "newPostgresTerminator"
-
 	return func() {
 		pool.Close()
 
 		if err := container.Terminate(context.Background()); err != nil {
-			panic(fmt.Sprintf("%s: failed to terminate container: %v", function, err))
+			panic(fmt.Sprintf("terminating psql container: %s", err))
 		}
 	}
 }
