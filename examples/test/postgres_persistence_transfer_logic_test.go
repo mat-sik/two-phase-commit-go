@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
@@ -15,19 +14,13 @@ import (
 
 func Test_postgres_persistence_transfer_logic_gRPC(t *testing.T) {
 	t.Parallel()
-	var transferProvider = func(pool *pgxpool.Pool) *adapter.GRPCTransferHandler {
-		return adapter.NewTransferGRPCHandler(pool)
-	}
 	tests := []testContainersTestCase[*adapter.GRPCTransferHandler]{
 		{
 			name: "happy path",
-			handlersConfig: handlersConfig[*adapter.GRPCTransferHandler]{
-				providers: []handlerProvider[*adapter.GRPCTransferHandler]{
-					transferProvider,
-					transferProvider,
-					transferProvider,
-				},
-				mapper: transferGRPCServerRequests,
+			serverRunners: []serverRunnable{
+				newGRPCTransferLogicServerRunnable(),
+				newGRPCTransferLogicServerRunnable(),
+				newGRPCTransferLogicServerRunnable(),
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
@@ -78,19 +71,13 @@ func Test_postgres_persistence_transfer_logic_gRPC(t *testing.T) {
 
 func Test_postgres_persistence_transfer_logic_REST(t *testing.T) {
 	t.Parallel()
-	var transferProvider = func(pool *pgxpool.Pool) *http.ServeMux {
-		return adapter.NewTransferMux(pool)
-	}
 	tests := []testContainersTestCase[*http.ServeMux]{
 		{
 			name: "postgres transfer REST happy path",
-			handlersConfig: handlersConfig[*http.ServeMux]{
-				providers: []handlerProvider[*http.ServeMux]{
-					transferProvider,
-					transferProvider,
-					transferProvider,
-				},
-				mapper: restServerRequests,
+			serverRunners: []serverRunnable{
+				newRESTProviderServerRunnable(),
+				newRESTProviderServerRunnable(),
+				newRESTProviderServerRunnable(),
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,

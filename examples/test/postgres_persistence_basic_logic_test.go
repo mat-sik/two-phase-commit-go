@@ -19,13 +19,10 @@ func Test_postgres_persistence_basic_logic_gRPC(t *testing.T) {
 	tests := []testContainersTestCase[*adapter.GRPCBasicHandler]{
 		{
 			name: "happy path",
-			handlersConfig: handlersConfig[*adapter.GRPCBasicHandler]{
-				handlers: []*adapter.GRPCBasicHandler{
-					adapter.NewBasicGRPCHandler(),
-					adapter.NewBasicGRPCHandler(),
-					adapter.NewBasicGRPCHandler(),
-				},
-				mapper: basicGRPCServerRequests,
+			serverRunners: []serverRunnable{
+				newGRPCBasicLogicServerRunnable(),
+				newGRPCBasicLogicServerRunnable(),
+				newGRPCBasicLogicServerRunnable(),
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
@@ -67,13 +64,10 @@ func Test_postgres_persistence_basic_logic_REST(t *testing.T) {
 	tests := []testContainersTestCase[*http.ServeMux]{
 		{
 			name: "happy path",
-			handlersConfig: handlersConfig[*http.ServeMux]{
-				handlers: []*http.ServeMux{
-					adapter.NewBasicMux(),
-					adapter.NewBasicMux(),
-					adapter.NewBasicMux(),
-				},
-				mapper: restServerRequests,
+			serverRunners: []serverRunnable{
+				newRESTHandlerServerRunnable(),
+				newRESTHandlerServerRunnable(),
+				newRESTHandlerServerRunnable(),
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
