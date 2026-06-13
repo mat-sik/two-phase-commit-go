@@ -4,21 +4,21 @@ package test
 
 import (
 	"context"
-	"net/http"
 	"testing"
 	"time"
 
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator/client/basic"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 )
 
-func Test_postgres_persistence_basic_logic_gRPC(t *testing.T) {
+func Test_postgres_persistence(t *testing.T) {
 	t.Parallel()
 	tests := []testContainersTestCase[*adapter.GRPCBasicHandler]{
 		{
-			name: "happy path",
+			name: "gRPC client basic logic happy path",
 			serverRunners: []serverRunnable{
 				newGRPCBasicLogicServerRunnable(),
 				newGRPCBasicLogicServerRunnable(),
@@ -50,20 +50,8 @@ func Test_postgres_persistence_basic_logic_gRPC(t *testing.T) {
 			wantErr:       false,
 			wantedOutcome: twopc.OutcomeCommitted,
 		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			runTestContainersTest(t, tt)
-		})
-	}
-}
-
-func Test_postgres_persistence_basic_logic_REST(t *testing.T) {
-	t.Parallel()
-	tests := []testContainersTestCase[*http.ServeMux]{
 		{
-			name: "happy path",
+			name: "REST client basic logic happy path",
 			serverRunners: []serverRunnable{
 				newRESTHandlerServerRunnable(),
 				newRESTHandlerServerRunnable(),
@@ -97,6 +85,96 @@ func Test_postgres_persistence_basic_logic_REST(t *testing.T) {
 						payload: basic.PreparePayload{
 							Payload:   "three",
 							CreatedAt: time.Now(),
+						},
+					},
+				},
+			},
+			wantErr:       false,
+			wantedOutcome: twopc.OutcomeCommitted,
+		},
+		{
+			name: "gRPC client transfer logic happy path",
+			serverRunners: []serverRunnable{
+				newGRPCTransferLogicServerRunnable(),
+				newGRPCTransferLogicServerRunnable(),
+				newGRPCTransferLogicServerRunnable(),
+			},
+			coordinatorConfig: testContainersCoordinatorConfig{
+				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
+				clientConfig: coordinatorClientConfig{
+					clientConfigProvider: newClientConfig(coordinator.NewTransferGRPCClient()),
+				},
+			},
+			distributedTransaction: distributedTransaction{
+				transactionID: "tx-postgres-transfer-grpc-1",
+				transactions: []transaction{
+					{
+						participantNumber: 0,
+						payload: participant.TransferPayload{
+							SenderID:   "Alice",
+							ReceiverID: "Bob",
+							Amount:     100.5,
+						},
+					},
+					{
+						participantNumber: 1,
+						payload: participant.TransferPayload{
+							SenderID:   "Bob",
+							ReceiverID: "Cecile",
+							Amount:     100.5,
+						},
+					},
+					{
+						participantNumber: 2,
+						payload: participant.TransferPayload{
+							SenderID:   "Cecile",
+							ReceiverID: "Alice",
+							Amount:     100.5,
+						},
+					},
+				},
+			},
+			wantErr:       false,
+			wantedOutcome: twopc.OutcomeCommitted,
+		},
+		{
+			name: "REST client transfer logic happy path",
+			serverRunners: []serverRunnable{
+				newRESTProviderServerRunnable(),
+				newRESTProviderServerRunnable(),
+				newRESTProviderServerRunnable(),
+			},
+			coordinatorConfig: testContainersCoordinatorConfig{
+				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
+				clientConfig: coordinatorClientConfig{
+					clientConfigProvider: newClientConfig(coordinator.NewRestClient()),
+				},
+			},
+			distributedTransaction: distributedTransaction{
+				transactionID: "tx-postgres-transfer-rest-1",
+				transactions: []transaction{
+					{
+						participantNumber: 0,
+						payload: participant.TransferPayload{
+							SenderID:   "Alice",
+							ReceiverID: "Bob",
+							Amount:     100.5,
+						},
+					},
+					{
+						participantNumber: 1,
+						payload: participant.TransferPayload{
+							SenderID:   "Bob",
+							ReceiverID: "Cecile",
+							Amount:     100.5,
+						},
+					},
+					{
+						participantNumber: 2,
+						payload: participant.TransferPayload{
+							SenderID:   "Cecile",
+							ReceiverID: "Alice",
+							Amount:     100.5,
 						},
 					},
 				},
