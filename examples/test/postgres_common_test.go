@@ -18,23 +18,23 @@ import (
 )
 
 type testContainersTestCase[T any] struct {
-	name                                 string
-	handlers                             []T
-	handlersProviders                    []handlerProvider[T]
-	handlersMapper                       func([]T) []runServerRequest
-	coordinatorPersistenceConfigProvider persistenceConfigProvider
-	coordinatorClientConfig              coordinatorClientConfig
-	coordinatorOpts                      []twopc.Option
-	distributedTransaction               distributedTransaction
-	wantErr                              bool
-	wantedOutcome                        twopc.Outcome
+	name                   string
+	handlers               []T
+	handlersProviders      []handlerProvider[T]
+	handlersMapper         func([]T) []runServerRequest
+	coordinatorConfig      testContainersCoordinatorConfig
+	distributedTransaction distributedTransaction
+	wantErr                bool
+	wantedOutcome          twopc.Outcome
+}
+
+type testContainersCoordinatorConfig struct {
+	persistenceConfigProvider persistenceConfigProvider
+	clientConfig              coordinatorClientConfig
+	opts                      []twopc.Option
 }
 
 type persistenceConfigProvider func(pool *pgxpool.Pool) twopc.PersistenceConfig[string]
-
-func newPersistenceConfig(persistenceConfig twopc.PersistenceConfig[string]) persistenceConfigProvider {
-	return constant[*pgxpool.Pool, twopc.PersistenceConfig[string]](persistenceConfig)
-}
 
 type handlerProvider[T any] func(pool *pgxpool.Pool) T
 
@@ -53,9 +53,12 @@ func runTestContainersTest[T any](t *testing.T, tt testContainersTestCase[T]) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	persistenceConfig := tt.coordinatorPersistenceConfigProvider(coordinatorPool)
+	persistenceConfig := tt.coordinatorConfig.persistenceConfigProvider(coordinatorPool)
+	clientConfig := tt.coordinatorConfig.clientConfig
+	coordinatorOpts := tt.coordinatorConfig.opts
+
 	addresses := srvBundle.addresses()
-	txCoordinator := newCoordinator(persistenceConfig, tt.coordinatorClientConfig, addresses, tt.coordinatorOpts...)
+	txCoordinator := newCoordinator(persistenceConfig, clientConfig, addresses, coordinatorOpts...)
 	outcome := txCoordinator.Execute(ctx, tt.distributedTransaction.toTwopc(addresses))
 
 	assertOutcome(t, tt.wantErr, tt.wantedOutcome, outcome)

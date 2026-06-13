@@ -24,10 +24,12 @@ func Test_postgres_basic_grpc_integration(t *testing.T) {
 				adapter.NewBasicGRPCHandler(),
 				adapter.NewBasicGRPCHandler(),
 			},
-			handlersMapper:                       basicGRPCServerRequests,
-			coordinatorPersistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
-			coordinatorClientConfig: coordinatorClientConfig{
-				clientConfigProvider: newClientConfig(coordinator.NewBasicGRPCClient()),
+			handlersMapper: basicGRPCServerRequests,
+			coordinatorConfig: testContainersCoordinatorConfig{
+				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
+				clientConfig: coordinatorClientConfig{
+					clientConfigProvider: newClientConfig(coordinator.NewBasicGRPCClient()),
+				},
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-basic-grpc-1",
@@ -71,10 +73,12 @@ func Test_postgres_transfer_grpc_integration(t *testing.T) {
 				transferProvider,
 				transferProvider,
 			},
-			handlersMapper:                       transferGRPCServerRequests,
-			coordinatorPersistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
-			coordinatorClientConfig: coordinatorClientConfig{
-				clientConfigProvider: newClientConfig(coordinator.NewTransferGRPCClient()),
+			handlersMapper: transferGRPCServerRequests,
+			coordinatorConfig: testContainersCoordinatorConfig{
+				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
+				clientConfig: coordinatorClientConfig{
+					clientConfigProvider: newClientConfig(coordinator.NewTransferGRPCClient()),
+				},
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-transfer-grpc-1",
