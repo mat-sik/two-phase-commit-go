@@ -10,10 +10,10 @@ import (
 )
 
 func restServerRequests(muxes []*http.ServeMux) []runServerRequest {
-	return mapToRunServerRequests(muxes, runRESTServerRequest)
+	return mapToRunServerRequests(muxes, mapFromMux)
 }
 
-func runRESTServerRequest(mux *http.ServeMux) runServerRequest {
+func mapFromMux(mux *http.ServeMux) runServerRequest {
 	srv := server.NewRESTServer(mux)
 	return runServerRequest{
 		serverRunner:  newRESTServerRunner(srv),

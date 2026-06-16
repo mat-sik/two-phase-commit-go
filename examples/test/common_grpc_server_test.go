@@ -13,21 +13,17 @@ import (
 )
 
 func basicGRPCServerRequests(handlers []*adapter.GRPCBasicHandler) []runServerRequest {
-	return mapToRunServerRequests(handlers, mapFromBasicHandler)
+	return mapToRunServerRequests(handlers, mapFromGRPCBasicHandler)
 }
 
-func mapFromBasicHandler(handler *adapter.GRPCBasicHandler) runServerRequest {
+func mapFromGRPCBasicHandler(handler *adapter.GRPCBasicHandler) runServerRequest {
 	registerer := func(server *grpc.Server) {
 		basic.RegisterBasicServiceServer(server, handler)
 	}
 	return newRunServerRequest(registerer)
 }
 
-func transferGRPCServerRequests(handlers []*adapter.GRPCTransferHandler) []runServerRequest {
-	return mapToRunServerRequests(handlers, mapFromTransferHandler)
-}
-
-func mapFromTransferHandler(handler *adapter.GRPCTransferHandler) runServerRequest {
+func mapFromGRPCTransferHandler(handler *adapter.GRPCTransferHandler) runServerRequest {
 	registerer := func(server *grpc.Server) {
 		transfer.RegisterTransferServiceServer(server, handler)
 	}

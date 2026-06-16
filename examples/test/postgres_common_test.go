@@ -6,40 +6,160 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-type testContainersTestCase[T any] struct {
+type testContainersTestCase struct {
 	name                   string
-	handlers               []T
-	handlersProviders      []handlerProvider[T]
-	handlersMapper         func([]T) []runServerRequest
-	txCoordinatorProvider  txCoordinatorProvider
+	serverRunners          []serverRunnable
+	coordinatorConfig      testContainersCoordinatorConfig
 	distributedTransaction distributedTransaction
 	wantErr                bool
 	wantedOutcome          twopc.Outcome
 }
 
-type txCoordinatorProvider func(pool *pgxpool.Pool) *twopc.Coordinator[string]
+type serverRunnableWithPool interface {
+	serverRunnable
+	needsPool() bool
+	injectPool(pool *pgxpool.Pool)
+}
 
-type handlerProvider[T any] func(pool *pgxpool.Pool) T
+type serverRunnable interface {
+	toRunServerRequest() runServerRequest
+}
 
-func runTestContainersTest[T any](t *testing.T, tt testContainersTestCase[T]) {
+type restServerRunnable struct {
+	handler  *http.ServeMux
+	provider func(pool *pgxpool.Pool) *http.ServeMux
+	mapper   func(mux *http.ServeMux) runServerRequest
+	pool     *pgxpool.Pool
+}
+
+func newRESTHandlerServerRunnable() *restServerRunnable {
+	return &restServerRunnable{
+		handler: adapter.NewBasicMux(),
+		mapper:  mapFromMux,
+	}
+}
+
+func newRESTProviderServerRunnable() *restServerRunnable {
+	return &restServerRunnable{
+		provider: func(pool *pgxpool.Pool) *http.ServeMux {
+			return adapter.NewTransferMux(pool)
+		},
+		mapper: mapFromMux,
+	}
+}
+
+func (r *restServerRunnable) toRunServerRequest() runServerRequest {
+	return genericToRunServerRequest(r.pool, r.handler, r.provider, r.mapper)
+}
+
+func (r *restServerRunnable) needsPool() bool {
+	return r.provider != nil
+}
+
+func (r *restServerRunnable) injectPool(pool *pgxpool.Pool) {
+	r.pool = pool
+}
+
+type gRPCBasicLogicServerRunnable struct {
+	handler *adapter.GRPCBasicHandler
+	mapper  func(mux *adapter.GRPCBasicHandler) runServerRequest
+}
+
+func newGRPCBasicLogicServerRunnable() gRPCBasicLogicServerRunnable {
+	return gRPCBasicLogicServerRunnable{
+		handler: adapter.NewBasicGRPCHandler(),
+		mapper:  mapFromGRPCBasicHandler,
+	}
+}
+
+func (r gRPCBasicLogicServerRunnable) toRunServerRequest() runServerRequest {
+	return genericToRunServerRequest(nil, r.handler, nil, r.mapper)
+}
+
+type gRPCTransferLogicServerRunnable struct {
+	provider func(pool *pgxpool.Pool) *adapter.GRPCTransferHandler
+	mapper   func(mux *adapter.GRPCTransferHandler) runServerRequest
+	pool     *pgxpool.Pool
+}
+
+func newGRPCTransferLogicServerRunnable() *gRPCTransferLogicServerRunnable {
+	return &gRPCTransferLogicServerRunnable{
+		provider: func(pool *pgxpool.Pool) *adapter.GRPCTransferHandler {
+			return adapter.NewTransferGRPCHandler(pool)
+		},
+		mapper: mapFromGRPCTransferHandler,
+	}
+}
+
+func (r *gRPCTransferLogicServerRunnable) toRunServerRequest() runServerRequest {
+	return genericToRunServerRequest(r.pool, nil, r.provider, r.mapper)
+}
+
+func (r *gRPCTransferLogicServerRunnable) needsPool() bool {
+	return true
+}
+
+func (r *gRPCTransferLogicServerRunnable) injectPool(pool *pgxpool.Pool) {
+	r.pool = pool
+}
+
+func genericToRunServerRequest[T comparable](
+	pool *pgxpool.Pool,
+	handler T,
+	provider func(*pgxpool.Pool) T,
+	mapper func(T) runServerRequest,
+) runServerRequest {
+	var zero T
+	if handler == zero && provider == nil {
+		panic("server runnable handler and provider cannot be both nil")
+	}
+	if handler == zero {
+		handler = provider(pool)
+	}
+	return mapper(handler)
+}
+
+type testContainersCoordinatorConfig struct {
+	persistenceConfigProvider persistenceConfigProvider
+	clientConfig              coordinatorClientConfig
+	opts                      []twopc.Option
+}
+
+type persistenceConfigProvider func(pool *pgxpool.Pool) twopc.PersistenceConfig[string]
+
+func runTestContainersTest(t *testing.T, tt testContainersTestCase) {
 	t.Helper()
 
-	coordinatorPool, participantPools := runPostgresForPools(t, len(tt.handlersProviders))
+	var poolNeedingParticipants []int
+	for i, runnable := range tt.serverRunners {
+		if r, ok := runnable.(serverRunnableWithPool); ok && r.needsPool() {
+			poolNeedingParticipants = append(poolNeedingParticipants, i)
+		}
+	}
 
-	handlers := getHandlers(tt, participantPools)
+	coordinatorPool, participantPools := runPostgresForPools(t, len(poolNeedingParticipants))
 
-	srvBundle, err := runServers(tt.handlersMapper(handlers))
+	if len(poolNeedingParticipants) != len(participantPools) {
+		panic("not enough participant pools")
+	}
+	for i, idx := range poolNeedingParticipants {
+		tt.serverRunners[idx].(serverRunnableWithPool).injectPool(participantPools[i])
+	}
+
+	srvBundle, err := runServers(toRunServerRequests(tt.serverRunners))
 	if err != nil {
 		t.Fatalf("failed to start servers: %v", err)
 	}
@@ -47,8 +167,12 @@ func runTestContainersTest[T any](t *testing.T, tt testContainersTestCase[T]) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	persistenceConfig := tt.coordinatorConfig.persistenceConfigProvider(coordinatorPool)
+	clientConfig := tt.coordinatorConfig.clientConfig
+	coordinatorOpts := tt.coordinatorConfig.opts
+
 	addresses := srvBundle.addresses()
-	txCoordinator := tt.txCoordinatorProvider(coordinatorPool)
+	txCoordinator := newCoordinator(persistenceConfig, clientConfig, addresses, coordinatorOpts...)
 	outcome := txCoordinator.Execute(ctx, tt.distributedTransaction.toTwopc(addresses))
 
 	assertOutcome(t, tt.wantErr, tt.wantedOutcome, outcome)
@@ -57,6 +181,14 @@ func runTestContainersTest[T any](t *testing.T, tt testContainersTestCase[T]) {
 	if len(errs) > 0 {
 		t.Errorf("got %d server errors: %v", len(errs), errs)
 	}
+}
+
+func toRunServerRequests(runnables []serverRunnable) []runServerRequest {
+	requests := make([]runServerRequest, 0, len(runnables))
+	for _, runnable := range runnables {
+		requests = append(requests, runnable.toRunServerRequest())
+	}
+	return requests
 }
 
 func runPostgresForPools(t *testing.T, participantAmount int) (*pgxpool.Pool, []*pgxpool.Pool) {
@@ -133,8 +265,6 @@ func runPostgresForCoordinatorPool(ctx context.Context) (*pgxpool.Pool, postgres
 }
 
 func runPostgresForPool(ctx context.Context, scripts ...string) (*pgxpool.Pool, postgresTerminator, error) {
-	const function = "runPostgresAndGetNewPool"
-
 	container, err := runPostgres(ctx, scripts...)
 	if err != nil {
 		return nil, nil, err
@@ -142,13 +272,13 @@ func runPostgresForPool(ctx context.Context, scripts ...string) (*pgxpool.Pool, 
 
 	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
-		return nil, nil, fmt.Errorf("%s: failed to get connection string: %v", function, err)
+		return nil, nil, fmt.Errorf("obtaining psql conn str: %w", err)
 	}
 
 	var pool *pgxpool.Pool
 	pool, err = pgxpool.New(ctx, connStr)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%s: failed to create new pgxpool: %v", function, err)
+		return nil, nil, fmt.Errorf("creating new pool: %w", err)
 	}
 
 	terminator := newPostgresTerminator(pool, container)
@@ -157,8 +287,6 @@ func runPostgresForPool(ctx context.Context, scripts ...string) (*pgxpool.Pool, 
 }
 
 func runPostgres(ctx context.Context, scripts ...string) (*postgres.PostgresContainer, error) {
-	const function = "runPostgres"
-
 	container, err := postgres.Run(ctx,
 		"postgres:17",
 		postgres.WithInitScripts(scripts...),
@@ -175,7 +303,7 @@ func runPostgres(ctx context.Context, scripts ...string) (*postgres.PostgresCont
 		}),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("%s: failed to run container: %v", function, err)
+		return nil, fmt.Errorf("running psql container: %w", err)
 	}
 
 	return container, nil
@@ -184,25 +312,11 @@ func runPostgres(ctx context.Context, scripts ...string) (*postgres.PostgresCont
 type postgresTerminator func()
 
 func newPostgresTerminator(pool *pgxpool.Pool, container *postgres.PostgresContainer) postgresTerminator {
-	const function = "newPostgresTerminator"
-
 	return func() {
 		pool.Close()
 
 		if err := container.Terminate(context.Background()); err != nil {
-			panic(fmt.Sprintf("%s: failed to terminate container: %v", function, err))
+			panic(fmt.Sprintf("terminating psql container: %s", err))
 		}
 	}
-}
-
-func getHandlers[T any](tt testContainersTestCase[T], participantPools []*pgxpool.Pool) []T {
-	if tt.handlers != nil {
-		return tt.handlers
-	}
-
-	handlers := make([]T, 0, len(tt.handlersProviders))
-	for i, provider := range tt.handlersProviders {
-		handlers = append(handlers, provider(participantPools[i]))
-	}
-	return handlers
 }
