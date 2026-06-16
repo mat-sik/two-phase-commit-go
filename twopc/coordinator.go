@@ -272,9 +272,11 @@ func (c Coordinator[ID]) executeRound(
 
 	var errs []error
 	for result := range resultCh {
-		if result.operationErr != nil {
+		if result.err != nil {
+			errs = append(errs, result.err)
+		}
+		if result.isFailed() {
 			failed = append(failed, result.operation)
-			errs = append(errs, result.operationErr)
 		} else {
 			successful = append(successful, result.operation)
 		}
@@ -301,7 +303,7 @@ func (c Coordinator[ID]) runOperationsConcurrently(
 		go func() {
 			defer wg.Done()
 			err := c.runOperation(ctx, txID, op)
-			resultCh <- operationResult[ID]{operationErr: err, operation: op}
+			resultCh <- operationResult[ID]{err: err, operation: op}
 		}()
 	}
 
@@ -312,49 +314,78 @@ func (c Coordinator[ID]) runOperationsConcurrently(
 }
 
 type operationResult[ID comparable] struct {
-	operationErr error
-	operation    operation[ID]
+	err       error
+	operation operation[ID]
+}
+
+func (r operationResult[ID]) isFailed() bool {
+	return errors.Is(r.err, errSendingOperation)
 }
 
 func (c Coordinator[ID]) runOperation(ctx context.Context, txID string, op operation[ID]) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	operationDoneCh := c.sendOperationConcurrently(ctx, txID, op)
+	operationSentCh := c.sendOperationConcurrently(ctx, txID, op)
 
-	ctx, persistCancel := context.WithTimeout(ctx, c.config.persistStateTimeout)
+	persistCtx, persistCancel := context.WithTimeout(ctx, c.config.persistStateTimeout)
 	defer persistCancel()
-	persistResultCh := c.transactionStatePersister.PersistState(ctx, txID, op.participantID, op.targetState)
+	persistResultCh := c.transactionStatePersister.PersistState(persistCtx, txID, op.participantID, op.targetState)
 
-	err := <-operationDoneCh
-	if err != nil {
+	err := <-operationSentCh
+
+	operationSendingFailed := err != nil
+	if operationSendingFailed {
+		err = errors.Join(err, errSendingOperation)
 		cancel()
 	}
-	result := <-persistResultCh
-	if result.Err != nil {
-		resultErr := fmt.Errorf("persisting participant %v tx %s state %d failed: %w",
-			op.participantID, txID, op.targetState, result.Err,
-		)
+
+	persistResult := <-persistResultCh
+
+	persistErr := c.finaliseStatePersisting(persistResult, txID, op.participantID, op.targetState, operationSendingFailed)
+
+	return errors.Join(err, persistErr)
+}
+
+var errSendingOperation = errors.New("failed sending operation")
+
+func (c Coordinator[ID]) finaliseStatePersisting(
+	result PersistResult,
+	txID string,
+	participantID ID,
+	targetState transaction.State,
+	operationFailed bool,
+) (err error) {
+	defer func() {
 		if err != nil {
-			return errors.Join(err, resultErr)
+			err = errors.Join(err, errPersistingState)
 		}
-		return resultErr
+	}()
+
+	if result.Err != nil {
+		return fmt.Errorf("persisting participant %v tx %s state %d failed: %w",
+			participantID, txID, targetState, result.Err,
+		)
 	}
-	if err != nil {
+
+	if operationFailed {
 		if rollbackErr := result.Rollback(); rollbackErr != nil {
-			return errors.Join(err, fmt.Errorf("rolling back participant %v tx %s state %d failed: %w",
-				op.participantID, txID, op.targetState, rollbackErr,
-			))
+			return fmt.Errorf("rolling back participant %v tx %s state %d failed: %w",
+				participantID, txID, targetState, rollbackErr,
+			)
 		}
-		return err
+		return nil
 	}
-	if err = result.Commit(); err != nil {
+
+	if commitErr := result.Commit(); commitErr != nil {
 		return fmt.Errorf("committing participant %v tx %s state %d failed: %w",
-			op.participantID, txID, op.targetState, err,
+			participantID, txID, targetState, commitErr,
 		)
 	}
 	return nil
 }
+
+var errPersistingState = errors.New("failed persisting state")
 
 func (c Coordinator[ID]) sendOperationConcurrently(ctx context.Context, txID string, op operation[ID]) <-chan error {
 	operationDoneCh := make(chan error)
@@ -393,6 +424,7 @@ func (c Coordinator[ID]) sendOperation(ctx context.Context, txID string, op oper
 	if err != nil {
 		return fmt.Errorf("getting %v client: %w", op.participantID, err)
 	}
+
 	switch op.targetState {
 	case transaction.Prepared:
 		if err = client.PrepareTransaction(ctx, txID, op.payload); err != nil {
