@@ -272,9 +272,11 @@ func (c Coordinator[ID]) executeRound(
 
 	var errs []error
 	for result := range resultCh {
-		if result.operationErr != nil {
+		if result.err != nil {
+			errs = append(errs, result.err)
+		}
+		if result.isFailed() {
 			failed = append(failed, result.operation)
-			errs = append(errs, result.operationErr)
 		} else {
 			successful = append(successful, result.operation)
 		}
@@ -301,7 +303,7 @@ func (c Coordinator[ID]) runOperationsConcurrently(
 		go func() {
 			defer wg.Done()
 			err := c.runOperation(ctx, txID, op)
-			resultCh <- operationResult[ID]{operationErr: err, operation: op}
+			resultCh <- operationResult[ID]{err: err, operation: op}
 		}()
 	}
 
@@ -312,8 +314,12 @@ func (c Coordinator[ID]) runOperationsConcurrently(
 }
 
 type operationResult[ID comparable] struct {
-	operationErr error
-	operation    operation[ID]
+	err       error
+	operation operation[ID]
+}
+
+func (r operationResult[ID]) isFailed() bool {
+	return errors.Is(r.err, errOperation)
 }
 
 func (c Coordinator[ID]) runOperation(ctx context.Context, txID string, op operation[ID]) error {
@@ -327,34 +333,55 @@ func (c Coordinator[ID]) runOperation(ctx context.Context, txID string, op opera
 	persistResultCh := c.transactionStatePersister.PersistState(ctx, txID, op.participantID, op.targetState)
 
 	err := <-operationDoneCh
-	if err != nil {
+	operationFailed := err != nil
+	if operationFailed {
+		err = errors.Join(err, errOperation)
 		cancel()
 	}
-	result := <-persistResultCh
-	if result.Err != nil {
-		resultErr := fmt.Errorf("persisting participant %v tx %s state %d failed: %w",
-			op.participantID, txID, op.targetState, result.Err,
-		)
+	persistResult := <-persistResultCh
+	persistErr := c.handlePersistResult(persistResult, txID, op.participantID, op.targetState, operationFailed)
+	return errors.Join(err, persistErr)
+}
+
+var errOperation = errors.New("failed operation")
+
+func (c Coordinator[ID]) handlePersistResult(
+	result PersistResult,
+	txID string,
+	participantID ID,
+	targetState transaction.State,
+	operationFailed bool,
+) (err error) {
+	defer func() {
 		if err != nil {
-			return errors.Join(err, resultErr)
+			err = errors.Join(err, errPersistence)
 		}
-		return resultErr
+	}()
+
+	if result.Err != nil {
+		return fmt.Errorf("persisting participant %v tx %s state %d failed: %w",
+			participantID, txID, targetState, result.Err,
+		)
 	}
-	if err != nil {
+
+	if operationFailed {
 		if rollbackErr := result.Rollback(); rollbackErr != nil {
-			return errors.Join(err, fmt.Errorf("rolling back participant %v tx %s state %d failed: %w",
-				op.participantID, txID, op.targetState, rollbackErr,
-			))
+			return fmt.Errorf("rolling back participant %v tx %s state %d failed: %w",
+				participantID, txID, targetState, rollbackErr,
+			)
 		}
-		return err
+		return nil
 	}
-	if err = result.Commit(); err != nil {
+
+	if commitErr := result.Commit(); commitErr != nil {
 		return fmt.Errorf("committing participant %v tx %s state %d failed: %w",
-			op.participantID, txID, op.targetState, err,
+			participantID, txID, targetState, commitErr,
 		)
 	}
 	return nil
 }
+
+var errPersistence = errors.New("failed to persist state after successful operation")
 
 func (c Coordinator[ID]) sendOperationConcurrently(ctx context.Context, txID string, op operation[ID]) <-chan error {
 	operationDoneCh := make(chan error)

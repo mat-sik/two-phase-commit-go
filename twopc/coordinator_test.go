@@ -286,7 +286,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			wantOutcome: OutcomeRolledBack,
 		},
 		{
-			name: "persist fails during prepare → returns error",
+			name: "persist fails during prepare → returns error, finished 2pc",
 			fields: fields{
 				persistenceConfig: PersistenceConfig[string]{
 					TransactionStateChecker:   allNotStartedChecker(),
@@ -308,10 +308,10 @@ func TestCoordinator_Execute(t *testing.T) {
 				},
 			},
 			wantErrs:    []error{errPersist},
-			wantOutcome: OutcomeInconsistent,
+			wantOutcome: OutcomeCommitted,
 		},
 		{
-			name: "persist rollback fails after client rollback call fails → returns joined errors",
+			name: "persist rollback fails after client rollback call fails → returns joined errors, didn't finish 2pc",
 			fields: fields{
 				persistenceConfig: PersistenceConfig[string]{
 					TransactionStateChecker: mockTransactionStateChecker{
@@ -336,11 +336,11 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErrs:    []error{errRollback, errPersistRollback},
+			wantErrs:    []error{errRollback},
 			wantOutcome: OutcomeInconsistent,
 		},
 		{
-			name: "persist fails after client commit call fails → returns joined errors",
+			name: "persist fails after client commit call fails → returns joined errors, didn't finish 2pc",
 			fields: fields{
 				persistenceConfig: PersistenceConfig[string]{
 					TransactionStateChecker: mockTransactionStateChecker{
@@ -368,9 +368,8 @@ func TestCoordinator_Execute(t *testing.T) {
 			wantErrs:    []error{errCommit, errPersist},
 			wantOutcome: OutcomeInconsistent,
 		},
-		// todo: if call succeeded, should not try call again for efficiency
 		{
-			name: "persist commit fails after client commit call → returns persist commit error",
+			name: "persist commit fails after client commit call → returns persist commit error, finished 2pc",
 			fields: fields{
 				persistenceConfig: PersistenceConfig[string]{
 					TransactionStateChecker: mockTransactionStateChecker{
@@ -396,7 +395,7 @@ func TestCoordinator_Execute(t *testing.T) {
 				},
 			},
 			wantErrs:    []error{errPersistCommit},
-			wantOutcome: OutcomeInconsistent,
+			wantOutcome: OutcomeCommitted,
 		},
 		{
 			name: "client not registered for host → getClient error → returns error",
