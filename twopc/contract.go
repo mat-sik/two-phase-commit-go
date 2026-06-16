@@ -81,6 +81,7 @@ func (a internalTransactionStateCheckerAdapter[ID]) Check(ctx context.Context, t
 // PersistState must not block; it should start the work asynchronously and
 // return the channel immediately.
 type TransactionStatePersister[ID comparable] interface {
+	// PersistState TODO: simplify this interface to be synchronous, no need to complicate the life for the user
 	PersistState(ctx context.Context, transactionID string, participantID ID, transactionState TransactionState) <-chan PersistResult
 }
 
