@@ -319,33 +319,37 @@ type operationResult[ID comparable] struct {
 }
 
 func (r operationResult[ID]) isFailed() bool {
-	return errors.Is(r.err, errOperation)
+	return errors.Is(r.err, errSendingOperation)
 }
 
 func (c Coordinator[ID]) runOperation(ctx context.Context, txID string, op operation[ID]) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	operationDoneCh := c.sendOperationConcurrently(ctx, txID, op)
+	operationSentCh := c.sendOperationConcurrently(ctx, txID, op)
 
-	ctx, persistCancel := context.WithTimeout(ctx, c.config.persistStateTimeout)
+	persistCtx, persistCancel := context.WithTimeout(ctx, c.config.persistStateTimeout)
 	defer persistCancel()
-	persistResultCh := c.transactionStatePersister.PersistState(ctx, txID, op.participantID, op.targetState)
+	persistResultCh := c.transactionStatePersister.PersistState(persistCtx, txID, op.participantID, op.targetState)
 
-	err := <-operationDoneCh
-	operationFailed := err != nil
-	if operationFailed {
-		err = errors.Join(err, errOperation)
+	err := <-operationSentCh
+
+	operationSendingFailed := err != nil
+	if operationSendingFailed {
+		err = errors.Join(err, errSendingOperation)
 		cancel()
 	}
+
 	persistResult := <-persistResultCh
-	persistErr := c.handlePersistResult(persistResult, txID, op.participantID, op.targetState, operationFailed)
+
+	persistErr := c.finaliseStatePersisting(persistResult, txID, op.participantID, op.targetState, operationSendingFailed)
+
 	return errors.Join(err, persistErr)
 }
 
-var errOperation = errors.New("failed operation")
+var errSendingOperation = errors.New("failed sending operation")
 
-func (c Coordinator[ID]) handlePersistResult(
+func (c Coordinator[ID]) finaliseStatePersisting(
 	result PersistResult,
 	txID string,
 	participantID ID,
@@ -354,7 +358,7 @@ func (c Coordinator[ID]) handlePersistResult(
 ) (err error) {
 	defer func() {
 		if err != nil {
-			err = errors.Join(err, errPersistence)
+			err = errors.Join(err, errPersistingState)
 		}
 	}()
 
@@ -381,7 +385,7 @@ func (c Coordinator[ID]) handlePersistResult(
 	return nil
 }
 
-var errPersistence = errors.New("failed to persist state after successful operation")
+var errPersistingState = errors.New("failed persisting state")
 
 func (c Coordinator[ID]) sendOperationConcurrently(ctx context.Context, txID string, op operation[ID]) <-chan error {
 	operationDoneCh := make(chan error)
@@ -420,6 +424,7 @@ func (c Coordinator[ID]) sendOperation(ctx context.Context, txID string, op oper
 	if err != nil {
 		return fmt.Errorf("getting %v client: %w", op.participantID, err)
 	}
+
 	switch op.targetState {
 	case transaction.Prepared:
 		if err = client.PrepareTransaction(ctx, txID, op.payload); err != nil {
