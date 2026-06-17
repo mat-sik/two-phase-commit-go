@@ -44,10 +44,10 @@ type ClientConfig[ID comparable] struct {
 // transactionStateChecker is used on startup to recover the current state of
 // an in-flight transaction (e.g. after a coordinator crash).
 //
-// transactionStatePersister is called after each phase transition to durably record the
-// new state before the result is considered final. It returns a channel that
-// delivers a PersistResult, which must be committed or rolled back depending
-// on whether the operation to the participant succeeded.
+// transactionStatePersister is called after each phase transition to durably
+// record the new state before the result is considered final. It returns a
+// PersistResult, which the coordinator commits or rolls back depending on
+// whether the operation to the participant succeeded.
 //
 // newClientFunc is called once per participant ID to construct the gRPC (or
 // other transport) client used to send Prepare, Commit, and Rollback calls.
@@ -330,7 +330,7 @@ func (c Coordinator[ID]) runOperation(ctx context.Context, txID string, op opera
 
 	persistCtx, persistCancel := context.WithTimeout(ctx, c.config.persistStateTimeout)
 	defer persistCancel()
-	persistResultCh := c.transactionStatePersister.PersistState(persistCtx, txID, op.participantID, op.targetState)
+	persistResultCh := c.persistStateConcurrently(persistCtx, txID, op.participantID, op.targetState)
 
 	err := <-operationSentCh
 
@@ -348,44 +348,6 @@ func (c Coordinator[ID]) runOperation(ctx context.Context, txID string, op opera
 }
 
 var errSendingOperation = errors.New("failed sending operation")
-
-func (c Coordinator[ID]) finaliseStatePersisting(
-	result PersistResult,
-	txID string,
-	participantID ID,
-	targetState transaction.State,
-	operationFailed bool,
-) (err error) {
-	defer func() {
-		if err != nil {
-			err = errors.Join(err, errPersistingState)
-		}
-	}()
-
-	if result.Err != nil {
-		return fmt.Errorf("persisting participant %v tx %s state %d failed: %w",
-			participantID, txID, targetState, result.Err,
-		)
-	}
-
-	if operationFailed {
-		if rollbackErr := result.Rollback(); rollbackErr != nil {
-			return fmt.Errorf("rolling back participant %v tx %s state %d failed: %w",
-				participantID, txID, targetState, rollbackErr,
-			)
-		}
-		return nil
-	}
-
-	if commitErr := result.Commit(); commitErr != nil {
-		return fmt.Errorf("committing participant %v tx %s state %d failed: %w",
-			participantID, txID, targetState, commitErr,
-		)
-	}
-	return nil
-}
-
-var errPersistingState = errors.New("failed persisting state")
 
 func (c Coordinator[ID]) sendOperationConcurrently(ctx context.Context, txID string, op operation[ID]) <-chan error {
 	operationDoneCh := make(chan error)
@@ -445,6 +407,59 @@ func (c Coordinator[ID]) sendOperation(ctx context.Context, txID string, op oper
 		panic("unknown operation type")
 	}
 }
+
+func (c Coordinator[ID]) persistStateConcurrently(
+	ctx context.Context,
+	transactionID string,
+	participantID ID,
+	transactionState transaction.State,
+) <-chan PersistResult {
+	persistResultCh := make(chan PersistResult)
+
+	go func() {
+		persistResultCh <- c.transactionStatePersister.PersistState(ctx, transactionID, participantID, transactionState)
+	}()
+
+	return persistResultCh
+}
+
+func (c Coordinator[ID]) finaliseStatePersisting(
+	result PersistResult,
+	txID string,
+	participantID ID,
+	targetState transaction.State,
+	operationFailed bool,
+) (err error) {
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, errPersistingState)
+		}
+	}()
+
+	if result.Err != nil {
+		return fmt.Errorf("persisting participant %v tx %s state %d failed: %w",
+			participantID, txID, targetState, result.Err,
+		)
+	}
+
+	if operationFailed {
+		if rollbackErr := result.Rollback(); rollbackErr != nil {
+			return fmt.Errorf("rolling back participant %v tx %s state %d failed: %w",
+				participantID, txID, targetState, rollbackErr,
+			)
+		}
+		return nil
+	}
+
+	if commitErr := result.Commit(); commitErr != nil {
+		return fmt.Errorf("committing participant %v tx %s state %d failed: %w",
+			participantID, txID, targetState, commitErr,
+		)
+	}
+	return nil
+}
+
+var errPersistingState = errors.New("failed persisting state")
 
 type operation[ID comparable] struct {
 	participantID ID
