@@ -62,46 +62,38 @@ func (s PostgresTransactionStatePersister) PersistState(
 	transactionID string,
 	participantID string,
 	transactionState twopc.TransactionState,
-) <-chan twopc.PersistResult {
-	resultCh := make(chan twopc.PersistResult, 1)
-
-	go func() {
-		tx, err := s.pool.Begin(ctx)
-		if err != nil {
-			resultCh <- twopc.PersistResult{
-				Err: fmt.Errorf(
-					"beginning pgx tx for persisting tx %s state %d for participant %s: %w",
-					transactionID, transactionState, participantID, err,
-				),
-			}
-			return
+) twopc.PersistResult {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return twopc.PersistResult{
+			Err: fmt.Errorf(
+				"beginning pgx tx for persisting tx %s state %d for participant %s: %w",
+				transactionID, transactionState, participantID, err,
+			),
 		}
-		const persistStateQuery = `
+	}
+	const persistStateQuery = `
 			INSERT INTO transaction_states (transaction_id, participant_id, state)
 			VALUES ($1, $2, $3)
 			ON CONFLICT (transaction_id, participant_id) DO UPDATE
 				SET state = EXCLUDED.state
-		`
-		if _, err = tx.Exec(ctx, persistStateQuery, transactionID, participantID, transactionState); err != nil {
-			err = fmt.Errorf(
-				"persisting tx %s state %d for participant %s: %w",
-				transactionID, transactionState, participantID, err,
-			)
-			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-				err = errors.Join(err, fmt.Errorf(
-					"rolling back pgx tx for persisting tx %s state %d for participant %s: %w",
-					transactionID, transactionState, participantID, rollbackErr,
-				))
-			}
-			resultCh <- twopc.PersistResult{
-				Err: err,
-			}
-			return
+	`
+	if _, err = tx.Exec(ctx, persistStateQuery, transactionID, participantID, transactionState); err != nil {
+		err = fmt.Errorf(
+			"persisting tx %s state %d for participant %s: %w",
+			transactionID, transactionState, participantID, err,
+		)
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+			err = errors.Join(err, fmt.Errorf(
+				"rolling back pgx tx for persisting tx %s state %d for participant %s: %w",
+				transactionID, transactionState, participantID, rollbackErr,
+			))
 		}
-		resultCh <- successfulPersistResult(ctx, tx)
-	}()
-
-	return resultCh
+		return twopc.PersistResult{
+			Err: err,
+		}
+	}
+	return successfulPersistResult(ctx, tx)
 }
 
 func successfulPersistResult(ctx context.Context, tx pgx.Tx) twopc.PersistResult {
