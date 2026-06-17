@@ -12,17 +12,14 @@ type MockTransactionStatePersister struct {
 	ErrRollback error
 }
 
-func (m MockTransactionStatePersister) PersistState(_ context.Context, _ string, _ string, _ twopc.TransactionState) <-chan twopc.PersistResult {
-	ch := make(chan twopc.PersistResult, 1)
+func (m MockTransactionStatePersister) PersistState(_ context.Context, _ string, _ string, _ twopc.TransactionState) twopc.PersistResult {
 	if m.Err != nil {
-		ch <- twopc.PersistResult{Err: m.Err}
-	} else {
-		ch <- twopc.PersistResult{
-			Commit:   func() error { return m.ErrCommit },
-			Rollback: func() error { return m.ErrRollback },
-		}
+		return twopc.PersistResult{Err: m.Err}
 	}
-	return ch
+	return twopc.PersistResult{
+		Commit:   func() error { return m.ErrCommit },
+		Rollback: func() error { return m.ErrRollback },
+	}
 }
 
 type MockTransactionStateChecker struct {
