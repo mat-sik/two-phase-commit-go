@@ -69,31 +69,43 @@ func (a internalTransactionStateCheckerAdapter[ID]) Check(ctx context.Context, t
 	return mappedToInternal, nil
 }
 
-// TransactionStatePersister durably records a participant's state transition before the
-// coordinator considers the transition final.
+// TransactionStatePersister durably records a participant's state transition
+// before the coordinator considers the transition final.
 //
 // Implementations should write the state change to a durable store (e.g. a
-// database) and return a PersistResult over the channel. The coordinator will
-// call Commit on the result if the network operation to the participant also
-// succeeded, or Rollback if it did not — allowing the persisted record to
-// stay consistent with what was actually sent.
+// database) and return a PersistResult. The coordinator calls Commit on the
+// result if the network operation to the participant also succeeded. It
+// calls Rollback if it did not. This keeps the persisted record consistent
+// with what was actually sent.
 //
-// PersistState must not block; it should start the work asynchronously and
-// return the channel immediately.
+// PersistState may block. The coordinator runs it concurrently with the
+// participant operation. The coordinator is responsible for any
+// cancellation via ctx.
+//
+// Persistence can fail even when the network operation succeeds. This happens
+// when PersistResult.Err is non-nil, or the subsequent Commit/Rollback call
+// returns an error. In that case the coordinator proceeds with the
+// transaction anyway. It does not retry persistence of that one operation state
+// indefinitely or abort 2PC. The participant's actual state takes priority
+// over the durability of the coordinator's record of it.
+//
+// Participant operations must be idempotent. So a missing or inaccurate
+// persisted state is not a correctness problem, even if the coordinator
+// dies mid-2PC. A later recovery run will just re-send the operation, and
+// the participant can safely accept it again.
 type TransactionStatePersister[ID comparable] interface {
-	// PersistState TODO: simplify this interface to be synchronous, no need to complicate the life for the user
-	PersistState(ctx context.Context, transactionID string, participantID ID, transactionState TransactionState) <-chan PersistResult
+	PersistState(ctx context.Context, transactionID string, participantID ID, transactionState TransactionState) PersistResult
 }
 
 type transactionStatePersister[ID comparable] interface {
-	PersistState(ctx context.Context, transactionID string, participantID ID, transactionState transaction.State) <-chan PersistResult
+	PersistState(ctx context.Context, transactionID string, participantID ID, transactionState transaction.State) PersistResult
 }
 
 type internalStatePersisterAdapter[ID comparable] struct {
 	transactionStatePersister TransactionStatePersister[ID]
 }
 
-func (a internalStatePersisterAdapter[ID]) PersistState(ctx context.Context, txID string, participantID ID, txState transaction.State) <-chan PersistResult {
+func (a internalStatePersisterAdapter[ID]) PersistState(ctx context.Context, txID string, participantID ID, txState transaction.State) PersistResult {
 	return a.transactionStatePersister.PersistState(ctx, txID, participantID, toExposed(txState))
 }
 
@@ -114,7 +126,7 @@ func toExposed(txState transaction.State) TransactionState {
 	}
 }
 
-// PersistResult is returned by TransactionStatePersister.PersistState over a channel.
+// PersistResult is returned by TransactionStatePersister.PersistState.
 // The coordinator calls either Commit or Rollback exactly once, depending on
 // whether the corresponding network operation to the participant succeeded.
 //

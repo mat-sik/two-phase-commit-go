@@ -492,17 +492,14 @@ type mockStatePersister[ID comparable] struct {
 	rollbackErr error
 }
 
-func (m mockStatePersister[ID]) PersistState(_ context.Context, _ string, _ ID, _ TransactionState) <-chan PersistResult {
-	ch := make(chan PersistResult, 1)
+func (m mockStatePersister[ID]) PersistState(context.Context, string, ID, TransactionState) PersistResult {
 	if m.err != nil {
-		ch <- PersistResult{Err: m.err}
-	} else {
-		ch <- PersistResult{
-			Commit:   func() error { return m.commitErr },
-			Rollback: func() error { return m.rollbackErr },
-		}
+		return PersistResult{Err: m.err}
 	}
-	return ch
+	return PersistResult{
+		Commit:   func() error { return m.commitErr },
+		Rollback: func() error { return m.rollbackErr },
+	}
 }
 
 type mockClient struct {
