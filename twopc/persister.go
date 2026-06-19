@@ -32,11 +32,11 @@ func (p *persister[ID]) enqueuePersistState(ctx context.Context, txID string, pa
 	if p.rootCtx.Err() != nil {
 		return
 	}
+	p.wg.Add(1)
 	go p.persistState(ctx, txID, participantID, state)
 }
 
 func (p *persister[ID]) persistState(ctx context.Context, txID string, participantID ID, state transaction.State) {
-	p.wg.Add(1)
 	defer p.wg.Done()
 
 	ctx, cancel := context.WithCancel(ctx)
