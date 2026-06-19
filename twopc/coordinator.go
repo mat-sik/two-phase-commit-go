@@ -39,17 +39,6 @@ type ClientConfig[ID comparable] struct {
 }
 
 // NewCoordinator creates a new Coordinator with the provided dependencies.
-//
-// transactionStateChecker is used on startup to recover the current state of
-// an in-flight transaction (e.g. after a coordinator crash).
-//
-// transactionStatePersister is called after each phase transition to durably
-// record the new state before the result is considered final. It returns a
-// PersistResult, which the coordinator commits or rolls back depending on
-// whether the operation to the participant succeeded.
-//
-// newClientFunc is called once per participant ID to construct the gRPC (or
-// other transport) client used to send Prepare, Commit, and Rollback calls.
 func NewCoordinator[ID comparable](
 	persistenceConfig PersistenceConfig[ID],
 	clientConfig ClientConfig[ID],
@@ -87,11 +76,15 @@ func (c Coordinator[ID]) newExecutor(ctx context.Context, initialState state.Sta
 // Execute runs the two-phase commit protocol for the given distributed transaction.
 //
 // It drives all participant transactions through the Prepare → Commit (or Rollback)
-// state machine concurrently. If the context is canceled between phases, the method
-// returns immediately with a joined error that includes the cancellation cause.
+// state machine concurrently. If the context is canceled during execution, the method
+// returns immediately with an error that includes the cancellation cause.
 //
-// Errors from individual participants are accumulated and returned as a single joined
-// error. A nil return means all participants reached a terminal committed state successfully.
+// Errors from participant operations and transaction-state persistence are accumulated
+// and returned as a single joined error. Persistence failures do not affect protocol
+// execution and may be returned even when the transaction reaches a terminal state.
+//
+// Callers should inspect the returned Result.Outcome() to determine the final
+// transaction state and Result.Err() for any errors encountered while executing it.
 func (c Coordinator[ID]) Execute(ctx context.Context, distributedTransaction DistributedTransaction[ID]) Result {
 	c.assertCorrectConfiguration(participantIDs(distributedTransaction.Transactions))
 
