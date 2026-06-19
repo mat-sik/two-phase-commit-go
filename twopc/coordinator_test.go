@@ -22,8 +22,6 @@ func TestCoordinator_Execute(t *testing.T) {
 	errCommit := errors.New("commit failed")
 	errRollback := errors.New("rollback failed")
 	errPersist := errors.New("persist failed")
-	errPersistCommit := errors.New("persist commit failed")
-	errPersistRollback := errors.New("persist rollback failed")
 	errNewClient := errors.New("create new client failed")
 	errStateLoad := errors.New("state load failed")
 
@@ -319,7 +317,7 @@ func TestCoordinator_Execute(t *testing.T) {
 							"host-a": TransactionPrepareFailed,
 						},
 					},
-					TransactionStatePersister: mockStatePersister[string]{rollbackErr: errPersistRollback},
+					TransactionStatePersister: mockStatePersister[string]{err: errPersist},
 				},
 				clientConfig: ClientConfig[string]{
 					NewClientFunc: newMockNewClientFunc(map[string]Client{
@@ -365,7 +363,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErrs:    []error{errCommit, errPersist},
+			wantErrs:    []error{errCommit},
 			wantOutcome: OutcomeInconsistent,
 		},
 		{
@@ -377,7 +375,7 @@ func TestCoordinator_Execute(t *testing.T) {
 							"host-a": TransactionPrepared,
 						},
 					},
-					TransactionStatePersister: mockStatePersister[string]{commitErr: errPersistCommit},
+					TransactionStatePersister: mockStatePersister[string]{err: errPersist},
 				},
 				clientConfig: ClientConfig[string]{
 					NewClientFunc: newMockNewClientFunc(map[string]Client{
@@ -394,7 +392,7 @@ func TestCoordinator_Execute(t *testing.T) {
 					},
 				},
 			},
-			wantErrs:    []error{errPersistCommit},
+			wantErrs:    []error{errPersist},
 			wantOutcome: OutcomeCommitted,
 		},
 		{
@@ -487,19 +485,11 @@ func ctxWithTimeout(ctx context.Context, timeout time.Duration) func() context.C
 }
 
 type mockStatePersister[ID comparable] struct {
-	err         error
-	commitErr   error
-	rollbackErr error
+	err error
 }
 
-func (m mockStatePersister[ID]) PersistState(context.Context, string, ID, TransactionState) PersistResult {
-	if m.err != nil {
-		return PersistResult{Err: m.err}
-	}
-	return PersistResult{
-		Commit:   func() error { return m.commitErr },
-		Rollback: func() error { return m.rollbackErr },
-	}
+func (m mockStatePersister[ID]) PersistState(context.Context, string, ID, TransactionState) error {
+	return m.err
 }
 
 type mockClient struct {

@@ -94,18 +94,18 @@ func (a internalTransactionStateCheckerAdapter[ID]) Check(ctx context.Context, t
 // dies mid-2PC. A later recovery run will just re-send the operation, and
 // the participant can safely accept it again.
 type TransactionStatePersister[ID comparable] interface {
-	PersistState(ctx context.Context, transactionID string, participantID ID, transactionState TransactionState) PersistResult
+	PersistState(ctx context.Context, transactionID string, participantID ID, transactionState TransactionState) error
 }
 
 type transactionStatePersister[ID comparable] interface {
-	PersistState(ctx context.Context, transactionID string, participantID ID, transactionState transaction.State) PersistResult
+	PersistState(ctx context.Context, transactionID string, participantID ID, transactionState transaction.State) error
 }
 
 type internalStatePersisterAdapter[ID comparable] struct {
 	transactionStatePersister TransactionStatePersister[ID]
 }
 
-func (a internalStatePersisterAdapter[ID]) PersistState(ctx context.Context, txID string, participantID ID, txState transaction.State) PersistResult {
+func (a internalStatePersisterAdapter[ID]) PersistState(ctx context.Context, txID string, participantID ID, txState transaction.State) error {
 	return a.transactionStatePersister.PersistState(ctx, txID, participantID, toExposed(txState))
 }
 
@@ -124,25 +124,6 @@ func toExposed(txState transaction.State) TransactionState {
 	default:
 		panic("unsupported transaction.State")
 	}
-}
-
-// PersistResult is returned by TransactionStatePersister.PersistState.
-// The coordinator calls either Commit or Rollback exactly once, depending on
-// whether the corresponding network operation to the participant succeeded.
-//
-// Err, if non-nil, indicates that the persist attempt itself failed before
-// Commit or Rollback can be called. In that case, Commit and Rollback must
-// not be called.
-type PersistResult struct {
-	// Commit finalizes the persisted state change. Called when the operation
-	// to the participant succeeded.
-	Commit func() error
-	// Rollback undoes the persisted state change. Called when the operation
-	// to the participant failed.
-	Rollback func() error
-	// Err is set when the persistence operation itself failed. When non-nil,
-	// neither Commit nor Rollback should be called.
-	Err error
 }
 
 // PreparePayload is the opaque data sent to a participant during the Prepare

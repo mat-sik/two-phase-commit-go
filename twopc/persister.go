@@ -2,6 +2,7 @@ package twopc
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
@@ -11,7 +12,8 @@ type persister[ID comparable] struct {
 	rootCtx                   context.Context
 	rootCancel                context.CancelFunc
 	wg                        sync.WaitGroup
-	persisterHandlerStore     *persisterHandlerStore[ID]
+	handlerStore              *persisterHandlerStore[ID]
+	errorsStore               *persisterErrorStore
 	transactionStatePersister transactionStatePersister[ID]
 }
 
@@ -20,7 +22,8 @@ func newPersister[ID comparable](ctx context.Context, transactionStatePersister 
 	return &persister[ID]{
 		rootCtx:                   ctx,
 		rootCancel:                cancel,
-		persisterHandlerStore:     &persisterHandlerStore[ID]{},
+		handlerStore:              &persisterHandlerStore[ID]{},
+		errorsStore:               &persisterErrorStore{},
 		transactionStatePersister: transactionStatePersister,
 	}
 }
@@ -29,7 +32,10 @@ func (p *persister[ID]) enqueuePersistState(ctx context.Context, txID string, pa
 	if p.rootCtx.Err() != nil {
 		return
 	}
+	go p.persistState(ctx, txID, participantID, state)
+}
 
+func (p *persister[ID]) persistState(ctx context.Context, txID string, participantID ID, state transaction.State) {
 	p.wg.Add(1)
 	defer p.wg.Done()
 
@@ -50,11 +56,10 @@ func (p *persister[ID]) enqueuePersistState(ctx context.Context, txID string, pa
 	defer func() {
 		cancel()
 		close(done)
-		p.persisterHandlerStore.compareAndDelete(key, handle)
+		p.handlerStore.compareAndDelete(key, handle)
 	}()
 
-	prev, ok := p.persisterHandlerStore.swap(key, handle)
-	if ok {
+	if prev, ok := p.handlerStore.swap(key, handle); ok {
 		select {
 		case <-ctx.Done():
 		case <-prev.done:
@@ -62,13 +67,15 @@ func (p *persister[ID]) enqueuePersistState(ctx context.Context, txID string, pa
 	}
 
 	if ctx.Err() == nil {
-		p.transactionStatePersister.PersistState(ctx, txID, participantID, state)
+		err := p.transactionStatePersister.PersistState(ctx, txID, participantID, state)
+		p.errorsStore.add(err)
 	}
 }
 
-func (p *persister[ID]) stop() {
+func (p *persister[ID]) stop() error {
 	p.rootCancel()
 	p.wg.Wait()
+	return p.errorsStore.errorsJoin()
 }
 
 type persisterHandlerStore[ID comparable] struct {
@@ -85,6 +92,23 @@ func (s *persisterHandlerStore[ID]) swap(key persisterHandlerKey[ID], value *per
 
 func (s *persisterHandlerStore[ID]) compareAndDelete(key persisterHandlerKey[ID], value *persisterHandle[ID]) bool {
 	return s.store.CompareAndDelete(key, value)
+}
+
+type persisterErrorStore struct {
+	mu     sync.Mutex
+	errors []error
+}
+
+func (es *persisterErrorStore) add(err error) {
+	es.mu.Lock()
+	defer es.mu.Unlock()
+	es.errors = append(es.errors, err)
+}
+
+func (es *persisterErrorStore) errorsJoin() error {
+	es.mu.Lock()
+	defer es.mu.Unlock()
+	return errors.Join(es.errors...)
 }
 
 type persisterHandlerKey[ID comparable] struct {

@@ -22,7 +22,6 @@ type Coordinator[ID comparable] struct {
 	stateLoader               state.Loader[ID]
 	transactionStatePersister transactionStatePersister[ID]
 	participantRegistrar      participant.Registrar[ID]
-	participantFailureCounter *participant.AttemptCounter[ID]
 }
 
 // PersistenceConfig aggregates required interfaces for transaction state persistence.
@@ -63,7 +62,6 @@ func NewCoordinator[ID comparable](
 		stateLoader:               state.NewLoader(stateChecker),
 		transactionStatePersister: statePersister,
 		participantRegistrar:      newParticipantRegistrar(clientConfig),
-		participantFailureCounter: participant.NewFailureCounter[ID](),
 	}
 }
 
@@ -74,6 +72,16 @@ func newParticipantRegistrar[ID comparable](clientConfig ClientConfig[ID]) parti
 		clients[participantID] = internalClientAdapter{client: client}
 	}
 	return participant.NewRegistrar(newClientFunc, clients)
+}
+
+func (c Coordinator[ID]) newExecutor(ctx context.Context, initialState state.State[ID]) executor[ID] {
+	return executor[ID]{
+		config:                    c.config,
+		state:                     initialState,
+		participantFailureCounter: participant.NewFailureCounter[ID](),
+		participantRegistrar:      c.participantRegistrar,
+		persister:                 newPersister(ctx, c.transactionStatePersister),
+	}
 }
 
 // Execute runs the two-phase commit protocol for the given distributed transaction.
@@ -97,7 +105,9 @@ func (c Coordinator[ID]) Execute(ctx context.Context, distributedTransaction Dis
 
 	initialOperations := toInitialOperations(distributedTransaction.Transactions)
 
-	return c.runTransactionLoop(ctx, distributedTransaction.TransactionID, initialState, initialOperations)
+	exec := c.newExecutor(ctx, initialState)
+
+	return exec.runTransactionLoop(ctx, distributedTransaction.TransactionID, initialOperations)
 }
 
 func (c Coordinator[ID]) assertCorrectConfiguration(participantIDs []ID) {
@@ -125,44 +135,54 @@ func toInitialOperations[ID comparable](txs []Transaction[ID]) []operation[ID] {
 	return ops
 }
 
-func (c Coordinator[ID]) runTransactionLoop(
-	ctx context.Context,
-	txID string,
-	state state.State[ID],
-	ops []operation[ID],
-) Result {
-	var successful, failed []operation[ID]
-	var allErrs []error
+type executor[ID comparable] struct {
+	config                    config
+	state                     state.State[ID]
+	participantFailureCounter *participant.AttemptCounter[ID]
+	participantRegistrar      participant.Registrar[ID]
+	persister                 *persister[ID]
+}
 
-	for !state.IsTerminal() {
+func (e executor[ID]) runTransactionLoop(ctx context.Context, txID string, ops []operation[ID]) (result Result) {
+	defer func() {
+		if err := e.persister.stop(); err != nil {
+			result.err = errors.Join(result.err, err)
+		}
+	}()
+
+	var successful, failed []operation[ID]
+	var errs []error
+
+	for !e.state.IsTerminal() {
 		if err := ctx.Err(); err != nil {
+			errs = append(errs, err)
 			return Result{
-				err:     errors.Join(append(allErrs, err)...),
-				outcome: outcome(state),
+				err:     errors.Join(errs...),
+				outcome: outcome(e.state),
 			}
 		}
 
-		ops = nextOperations(state, ops)
+		ops = e.nextOperations(ops)
 
 		var err error
-		successful, failed, err = c.executeRound(ctx, txID, ops, successful[:0], failed[:0])
+		successful, failed, err = e.executeRound(ctx, txID, ops, successful[:0], failed[:0])
 
 		if err != nil {
-			allErrs = append(allErrs, err)
+			errs = append(errs, err)
 		}
 
-		nextState(state, successful, failed)
+		e.nextState(successful, failed)
 	}
 
 	return Result{
-		err:     errors.Join(allErrs...),
-		outcome: outcome(state),
+		err:     errors.Join(errs...),
+		outcome: outcome(e.state),
 	}
 }
 
-func nextOperations[ID comparable](s state.State[ID], ops []operation[ID]) []operation[ID] {
+func (e executor[ID]) nextOperations(ops []operation[ID]) []operation[ID] {
 	payloadByParticipantID := toPayloadByParticipantID(ops)
-	nextTrs := s.NextTransitions()
+	nextTrs := e.state.NextTransitions()
 	return toOperations(nextTrs, payloadByParticipantID)
 }
 
@@ -191,8 +211,8 @@ func toOperations[ID comparable](
 	return nextOps
 }
 
-func nextState[ID comparable](s state.State[ID], successful, failed []operation[ID]) {
-	s.NextState(toTransitions(successful), toTransitions(failed))
+func (e executor[ID]) nextState(successful, failed []operation[ID]) {
+	e.state.NextState(toTransitions(successful), toTransitions(failed))
 }
 
 func toTransitions[ID comparable](ops []operation[ID]) []state.Transition[ID] {
@@ -262,20 +282,20 @@ const (
 	OutcomeRolledBack
 )
 
-func (c Coordinator[ID]) executeRound(
+func (e executor[ID]) executeRound(
 	ctx context.Context,
 	txID string,
 	ops, successful, failed []operation[ID],
 ) ([]operation[ID], []operation[ID], error) {
 	resultCh := make(chan operationResult[ID], len(ops))
-	c.runOperationsConcurrently(ctx, resultCh, txID, ops)
+	e.sendOperationsConcurrently(ctx, resultCh, txID, ops)
 
 	var errs []error
 	for result := range resultCh {
 		if result.err != nil {
 			errs = append(errs, result.err)
 		}
-		if result.isFailed() {
+		if result.err != nil {
 			failed = append(failed, result.operation)
 		} else {
 			successful = append(successful, result.operation)
@@ -290,7 +310,7 @@ func (c Coordinator[ID]) executeRound(
 	return successful, failed, err
 }
 
-func (c Coordinator[ID]) runOperationsConcurrently(
+func (e executor[ID]) sendOperationsConcurrently(
 	ctx context.Context,
 	resultCh chan<- operationResult[ID],
 	txID string,
@@ -302,7 +322,12 @@ func (c Coordinator[ID]) runOperationsConcurrently(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := c.runOperation(ctx, txID, op)
+			err := e.withBackoff(ctx, op.participantID, func() error {
+				return e.sendOperation(ctx, txID, op)
+			})
+			if err == nil {
+				e.persister.enqueuePersistState(ctx, txID, op.participantID, op.targetState)
+			}
 			resultCh <- operationResult[ID]{err: err, operation: op}
 		}()
 	}
@@ -318,58 +343,15 @@ type operationResult[ID comparable] struct {
 	operation operation[ID]
 }
 
-func (r operationResult[ID]) isFailed() bool {
-	return errors.Is(r.err, errSendingOperation)
-}
-
-func (c Coordinator[ID]) runOperation(ctx context.Context, txID string, op operation[ID]) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	operationSentCh := c.sendOperationConcurrently(ctx, txID, op)
-
-	persistCtx, persistCancel := context.WithTimeout(ctx, c.config.persistStateTimeout)
-	defer persistCancel()
-	persistResultCh := c.persistStateConcurrently(persistCtx, txID, op.participantID, op.targetState)
-
-	err := <-operationSentCh
-
-	operationSendingFailed := err != nil
-	if operationSendingFailed {
-		err = errors.Join(err, errSendingOperation)
-		cancel()
-	}
-
-	persistResult := <-persistResultCh
-
-	persistErr := c.finaliseStatePersisting(persistResult, txID, op.participantID, op.targetState, operationSendingFailed)
-
-	return errors.Join(err, persistErr)
-}
-
-var errSendingOperation = errors.New("failed sending operation")
-
-func (c Coordinator[ID]) sendOperationConcurrently(ctx context.Context, txID string, op operation[ID]) <-chan error {
-	operationDoneCh := make(chan error)
-
-	go func() {
-		operationDoneCh <- c.withBackoff(ctx, op.participantID, func() error {
-			return c.sendOperation(ctx, txID, op)
-		})
-	}()
-
-	return operationDoneCh
-}
-
-func (c Coordinator[ID]) withBackoff(ctx context.Context, participantID ID, workFunc func() error) error {
-	if attempt := c.participantFailureCounter.Attempt(participantID); attempt > 0 {
-		backoffWait(ctx, c.config, attempt)
+func (e executor[ID]) withBackoff(ctx context.Context, participantID ID, workFunc func() error) error {
+	if attempt := e.participantFailureCounter.Attempt(participantID); attempt > 0 {
+		backoffWait(ctx, e.config, attempt)
 	}
 	if err := workFunc(); err != nil {
-		c.participantFailureCounter.Fail(participantID)
+		e.participantFailureCounter.Fail(participantID)
 		return fmt.Errorf("backing off participant %v: %w", participantID, err)
 	}
-	c.participantFailureCounter.Success(participantID)
+	e.participantFailureCounter.Success(participantID)
 	return nil
 }
 
@@ -378,11 +360,11 @@ func backoffWait(ctx context.Context, cfg config, attempt int) {
 	backoff.Wait(ctx, attempt)
 }
 
-func (c Coordinator[ID]) sendOperation(ctx context.Context, txID string, op operation[ID]) error {
-	ctx, cancel := context.WithTimeout(ctx, c.config.sendOperationTimeout)
+func (e executor[ID]) sendOperation(ctx context.Context, txID string, op operation[ID]) error {
+	ctx, cancel := context.WithTimeout(ctx, e.config.sendOperationTimeout)
 	defer cancel()
 
-	client, err := c.participantRegistrar.GetClient(op.participantID)
+	client, err := e.participantRegistrar.GetClient(op.participantID)
 	if err != nil {
 		return fmt.Errorf("getting %v client: %w", op.participantID, err)
 	}
@@ -407,59 +389,6 @@ func (c Coordinator[ID]) sendOperation(ctx context.Context, txID string, op oper
 		panic("unknown operation type")
 	}
 }
-
-func (c Coordinator[ID]) persistStateConcurrently(
-	ctx context.Context,
-	transactionID string,
-	participantID ID,
-	transactionState transaction.State,
-) <-chan PersistResult {
-	persistResultCh := make(chan PersistResult)
-
-	go func() {
-		persistResultCh <- c.transactionStatePersister.PersistState(ctx, transactionID, participantID, transactionState)
-	}()
-
-	return persistResultCh
-}
-
-func (c Coordinator[ID]) finaliseStatePersisting(
-	result PersistResult,
-	txID string,
-	participantID ID,
-	targetState transaction.State,
-	operationFailed bool,
-) (err error) {
-	defer func() {
-		if err != nil {
-			err = errors.Join(err, errPersistingState)
-		}
-	}()
-
-	if result.Err != nil {
-		return fmt.Errorf("persisting participant %v tx %s state %d failed: %w",
-			participantID, txID, targetState, result.Err,
-		)
-	}
-
-	if operationFailed {
-		if rollbackErr := result.Rollback(); rollbackErr != nil {
-			return fmt.Errorf("rolling back participant %v tx %s state %d failed: %w",
-				participantID, txID, targetState, rollbackErr,
-			)
-		}
-		return nil
-	}
-
-	if commitErr := result.Commit(); commitErr != nil {
-		return fmt.Errorf("committing participant %v tx %s state %d failed: %w",
-			participantID, txID, targetState, commitErr,
-		)
-	}
-	return nil
-}
-
-var errPersistingState = errors.New("failed persisting state")
 
 type operation[ID comparable] struct {
 	participantID ID
