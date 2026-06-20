@@ -9,1188 +9,1263 @@ import (
 )
 
 func TestCoordinator_Execute(t *testing.T) {
-	type fields struct {
-		persistenceConfig PersistenceConfig[string]
-		clientConfig      ClientConfig[string]
-	}
-	type args struct {
-		ctxFunc                func() context.Context
-		distributedTransaction DistributedTransaction[string]
-	}
-
-	errPrepare := errors.New("prepare failed")
-	errCommit := errors.New("commit failed")
-	errRollback := errors.New("rollback failed")
-	errPersist := errors.New("persist failed")
-	errNewClient := errors.New("create new client failed")
-	errStateLoad := errors.New("state load failed")
-
-	tests := []struct {
-		name        string
-		fields      fields
-		args        args
-		wantErrs    []error
-		wantOutcome Outcome
-	}{
+	tests := []compactedTestCase{
 		// no coordinator failures
 		{
-			name: "host-a: not started -> prepared -> committed",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker:   allNotStartedChecker(),
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-					},
-				},
-			},
-			wantErrs:    nil,
+			name:        "host-a: not started -> prepared -> committed",
 			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+			},
 		},
 		{
-			name: "(host-a: not started -> prepared -> committed, host-b: not started -> prepared -> committed) = committed, host-a needs init",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker:   allNotStartedChecker(),
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-b": &stubClient{},
-					},
-					NewClientFunc: newStubClientFunc(map[string]Client{
-						"host-a": &stubClient{},
-					}, errNewClient),
+			name:        "host-a: not started -> prepare failed -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failPrepare(),
 				},
 			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    nil,
+		},
+		{
+			name:        "host-a: not started -> prepared -> committed, host-b: not started -> prepared -> committed",
 			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionNotStarted,
+				},
+			},
 		},
 		{
-			name: "(host-a: not started -> prepared -> rolled back, host-b: not-started -> prepare failed -> rolled back) = rolled back",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker:   allNotStartedChecker(),
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-						"host-b": &stubClient{prepareErr: errPrepare},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    []error{errPrepare},
+			name:        "host-a: not started -> prepare failed -> rolled back, host-b: not started -> prepare failed -> rolled back",
 			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failPrepare(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionNotStarted,
+					client: failPrepare(),
+				},
+			},
 		},
 		{
-			name: "(host-a: not started -> prepare failed -> rolled back, host-b: not-started -> prepare failed -> rolled back) = rolled back",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker:   allNotStartedChecker(),
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{prepareErr: errPrepare},
-						"host-b": &stubClient{prepareErr: errPrepare},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    []error{errPrepare},
+			name:        "host-a: not started -> prepared -> rolled back, host-b: not-started -> prepare failed -> rolled back",
 			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:     "host-b",
+					state:  TransactionNotStarted,
+					client: failPrepare(),
+				},
+			},
 		},
-		// retry from coordinator second phase failure
+		// retry from coordinator failure - not started present, because persistence failed
 		{
-			name: "(host-a: committed -> committed) -> committed",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionCommitted,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-					},
-				},
-			},
-			wantErrs:    nil,
+			name:        "host-a: not started -> prepared -> committed, host-b: prepared -> committed",
 			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepared,
+				},
+			},
 		},
 		{
-			name: "(host-a: prepared -> committed, host-b: prepared -> committed) -> committed",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepared,
-							"host-b": TransactionPrepared,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-						"host-b": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    nil,
+			name:        "host-a: not started -> prepared -> committed, host-b: committed -> committed",
 			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionCommitted,
+				},
+			},
 		},
 		{
-			name: "(host-a: prepared -> committed, host-b: committed -> committed) -> committed",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepared,
-							"host-b": TransactionCommitted,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
+			name:        "host-a: not started -> not started, host-b: prepare failed -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
 				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-						"host-b": &stubClient{},
-					},
+				{
+					id:    "host-b",
+					state: TransactionPrepareFailed,
 				},
 			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
+		},
+		{
+			name:        "host-a: not started -> not started, host-b: rolled back -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionRolledBack,
 				},
 			},
-			wantErrs:    nil,
+		},
+		{
+			name:        "host-a: not started -> prepared -> committed, host-b: not started -> prepared -> committed, host-c: not started -> prepared -> committed",
 			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-c",
+					state: TransactionNotStarted,
+				},
+			},
 		},
 		{
-			name: "(host-a: prepare failed -> rolled back, host-b: prepare failed -> rolled back) -> rolled back",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepareFailed,
-							"host-b": TransactionPrepareFailed,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-						"host-b": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    nil,
-			wantOutcome: OutcomeRolledBack,
-		},
-		{
-			name: "(host-a: prepared -> rolled back, host-b: prepare failed -> rolled back) -> rolled back",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepared,
-							"host-b": TransactionPrepareFailed,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-						"host-b": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    nil,
-			wantOutcome: OutcomeRolledBack,
-		},
-		{
-			name: "(host-a: prepared -> rolled back, host-b: rolled back -> rolled back) -> rolled back",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepared,
-							"host-b": TransactionRolledBack,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-						"host-b": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    nil,
-			wantOutcome: OutcomeRolledBack,
-		},
-		{
-			name: "(host-a: prepare failed -> rolled back, host-b: rolled back -> rolled back) -> rolled back",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepareFailed,
-							"host-b": TransactionRolledBack,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-						"host-b": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    nil,
-			wantOutcome: OutcomeRolledBack,
-		},
-		{
-			name: "(host-a: prepared -> rolled back, host-b: prepare failed -> rolled back, host-c: rolled back -> rolled back) -> rolled back",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepared,
-							"host-b": TransactionPrepareFailed,
-							"host-c": TransactionRolledBack,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-						"host-b": &stubClient{},
-						"host-c": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-						{ParticipantID: "host-c", Payload: "p3"},
-					},
-				},
-			},
-			wantErrs:    nil,
-			wantOutcome: OutcomeRolledBack,
-		},
-		{
-			name: "host-a: rolled back -> rolled back",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionRolledBack,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-					},
-				},
-			},
-			wantErrs:    nil,
-			wantOutcome: OutcomeRolledBack,
-		},
-		// second phase failures
-		{
-			name: "(host-a: prepared -> prepared) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepared,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{commitErr: errCommit},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-					},
-				},
-			},
-			wantErrs:    []error{errCommit},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: prepared -> prepared, host-b: prepared -> prepared) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepared,
-							"host-b": TransactionPrepared,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{commitErr: errCommit},
-						"host-b": &stubClient{commitErr: errCommit},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    []error{errCommit},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: prepared -> prepared, host-b: prepared -> committed) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepared,
-							"host-b": TransactionPrepared,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{commitErr: errCommit},
-						"host-b": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    []error{errCommit},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: prepared -> prepared, host-b: prepared -> committed, host-c: committed -> committed) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepared,
-							"host-b": TransactionPrepared,
-							"host-c": TransactionCommitted,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{commitErr: errCommit},
-						"host-b": &stubClient{},
-						"host-c": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-						{ParticipantID: "host-c", Payload: "p3"},
-					},
-				},
-			},
-			wantErrs:    []error{errCommit},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: prepare failed -> prepare failed) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepareFailed,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{rollbackErr: errRollback},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-					},
-				},
-			},
-			wantErrs:    []error{errRollback},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: prepare failed -> prepare failed, host-b: prepare failed -> prepare failed) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepareFailed,
-							"host-b": TransactionPrepareFailed,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{rollbackErr: errRollback},
-						"host-b": &stubClient{rollbackErr: errRollback},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    []error{errRollback},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: prepare failed -> prepare failed, host-b: prepare failed -> rolled back) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepareFailed,
-							"host-b": TransactionPrepareFailed,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{rollbackErr: errRollback},
-						"host-b": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    []error{errRollback},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: prepare failed -> prepare failed, host-b: prepare failed -> rolled back, host-c: rolled back -> rolled back) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepareFailed,
-							"host-b": TransactionPrepareFailed,
-							"host-c": TransactionRolledBack,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{rollbackErr: errRollback},
-						"host-b": &stubClient{},
-						"host-c": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-						{ParticipantID: "host-c", Payload: "p3"},
-					},
-				},
-			},
-			wantErrs:    []error{errRollback},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: prepare failed -> prepare failed, host-b: prepare -> rolled back) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepareFailed,
-							"host-b": TransactionPrepared,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{rollbackErr: errRollback},
-						"host-b": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    []error{errRollback},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: prepare failed -> prepare failed, host-b: prepare -> rolled back, host-c: rolled back -> rolled back) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepareFailed,
-							"host-b": TransactionPrepared,
-							"host-c": TransactionRolledBack,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{rollbackErr: errRollback},
-						"host-b": &stubClient{},
-						"host-c": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-						{ParticipantID: "host-c", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    []error{errRollback},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: prepare failed -> prepare failed, host-b: prepared -> rolled back, host-c: prepare failed -> rolled back, host-d: rolled back -> rolled back) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepareFailed,
-							"host-b": TransactionPrepared,
-							"host-c": TransactionPrepareFailed,
-							"host-d": TransactionRolledBack,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{rollbackErr: errRollback},
-						"host-b": &stubClient{},
-						"host-c": &stubClient{},
-						"host-d": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-						{ParticipantID: "host-c", Payload: "p3"},
-						{ParticipantID: "host-d", Payload: "p4"},
-					},
-				},
-			},
-			wantErrs:    []error{errRollback},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: prepare failed -> prepare failed, host-b: prepare -> prepare failed) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepareFailed,
-							"host-b": TransactionPrepared,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{rollbackErr: errRollback},
-						"host-b": &stubClient{rollbackErr: errRollback},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    []error{errRollback},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: prepare failed -> prepare failed, host-b: prepare -> prepare failed, host-c: prepare failed -> rolled back) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepareFailed,
-							"host-b": TransactionPrepared,
-							"host-c": TransactionPrepareFailed,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{rollbackErr: errRollback},
-						"host-b": &stubClient{rollbackErr: errRollback},
-						"host-c": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-						{ParticipantID: "host-c", Payload: "p3"},
-					},
-				},
-			},
-			wantErrs:    []error{errRollback},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: prepare failed -> prepare failed, host-b: prepare -> prepare failed, host-c: prepare failed -> rolled back, host-d: rolled back -> rolled back) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-a": TransactionPrepareFailed,
-							"host-b": TransactionPrepared,
-							"host-c": TransactionPrepareFailed,
-							"host-d": TransactionRolledBack,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{rollbackErr: errRollback},
-						"host-b": &stubClient{rollbackErr: errRollback},
-						"host-c": &stubClient{},
-						"host-d": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-						{ParticipantID: "host-c", Payload: "p3"},
-						{ParticipantID: "host-d", Payload: "p4"},
-					},
-				},
-			},
-			wantErrs:    []error{errRollback},
-			wantOutcome: OutcomeInconsistent,
-		},
-		// reaching second phase failures
-		{
-			name: "(host-a: not started -> prepared) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{commitErr: errCommit},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-					},
-				},
-			},
-			wantErrs:    []error{errCommit},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: not started -> prepared, host-b: not started -> prepared) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{commitErr: errCommit},
-						"host-b": &stubClient{commitErr: errCommit},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    []error{errCommit},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: not started -> prepare failed) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{rollbackErr: errRollback},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-					},
-				},
-			},
-			wantErrs:    []error{errRollback},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: not started -> prepare failed, host-b: not started -> prepare failed) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{rollbackErr: errRollback},
-						"host-b": &stubClient{rollbackErr: errRollback},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    []error{errRollback},
-			wantOutcome: OutcomeInconsistent,
-		},
-		{
-			name: "(host-a: not started -> prepared, host-b: not started -> prepare failed) -> inconsistent",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-						"host-b": &stubClient{prepareErr: errPrepare},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    []error{errPrepare},
-			wantOutcome: OutcomeInconsistent,
-		},
-		// retry from coordinator first phase failure
-		{
-			name: "(host-a: not started -> committed) -> committed",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker:   stubTransactionStateChecker{},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-					},
-				},
-			},
-			wantErrs:    nil,
+			name:        "host-a: not started -> prepared -> committed, host-b: not started -> prepared -> committed, host-c: prepared -> committed",
 			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-c",
+					state: TransactionPrepared,
+				},
+			},
 		},
 		{
-			name: "(host-a: not started -> committed, host-b: not started -> committed) -> committed",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker:   stubTransactionStateChecker{},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-						"host-b": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
-				},
-			},
-			wantErrs:    nil,
+			name:        "host-a: not started -> prepared -> committed, host-b: not started -> prepared -> committed, host-c: committed -> committed",
 			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-c",
+					state: TransactionCommitted,
+				},
+			},
 		},
 		{
-			name: "(host-a: not started -> committed, host-b: prepared -> committed) -> committed",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-b": TransactionPrepared,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
+			name:        "host-a: not started -> not started, host-b: not started -> not started, host-c: prepare failed -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
 				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-						"host-b": &stubClient{},
-					},
+				{
+					id:    "host-b",
+					state: TransactionNotStarted,
 				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-					},
+				{
+					id:    "host-c",
+					state: TransactionPrepareFailed,
 				},
 			},
-			wantErrs:    nil,
+		},
+		{
+			name:        "host-a: not started -> not started, host-b: not started -> not started, host-c: rolled back -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-c",
+					state: TransactionRolledBack,
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepared -> committed, host-b: prepared -> committed, host-c: prepared -> committed",
 			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-c",
+					state: TransactionPrepared,
+				},
+			},
 		},
 		{
-			name: "(host-a: not started -> rolled back, host-b: prepare failed -> rolled back) -> rolled back",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-b": TransactionPrepareFailed,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
+			name:        "host-a: not started -> prepared -> committed, host-b: prepared -> committed, host-c: committed -> committed",
+			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
 				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-						"host-b": &stubClient{},
-					},
+				{
+					id:    "host-b",
+					state: TransactionPrepared,
 				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p1"},
-					},
+				{
+					id:    "host-c",
+					state: TransactionCommitted,
 				},
 			},
-			wantErrs:    nil,
-			wantOutcome: OutcomeRolledBack,
 		},
 		{
-			name: "(host-a: not started -> rolled back, host-b: prepared -> rolled back, host-c: prepare failed -> rolled back) -> rolled back",
-			fields: fields{
-				persistenceConfig: PersistenceConfig[string]{
-					TransactionStateChecker: stubTransactionStateChecker{
-						stateByParticipantID: map[string]TransactionState{
-							"host-b": TransactionPrepared,
-							"host-c": TransactionPrepareFailed,
-						},
-					},
-					TransactionStatePersister: stubStatePersister[string]{},
-				},
-				clientConfig: ClientConfig[string]{
-					Clients: map[string]Client{
-						"host-a": &stubClient{},
-						"host-b": &stubClient{},
-						"host-c": &stubClient{},
-					},
-				},
-			},
-			args: args{
-				ctxFunc: ctxBackground(),
-				distributedTransaction: DistributedTransaction[string]{
-					TransactionID: "tx",
-					Transactions: []Transaction[string]{
-						{ParticipantID: "host-a", Payload: "p1"},
-						{ParticipantID: "host-b", Payload: "p2"},
-						{ParticipantID: "host-c", Payload: "p3"},
-					},
-				},
-			},
-			wantErrs:    nil,
+			name:        "host-a: not started -> not started, host-b: prepared -> rolled back, host-c: prepare failed -> rolled back",
 			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-c",
+					state: TransactionPrepareFailed,
+				},
+			},
 		},
-		// TODO: both phase spanning retires - if persistence failed
+		{
+			name:        "host-a: not started -> not started, host-b: prepared -> rolled back, host-c: rolled back -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-c",
+					state: TransactionRolledBack,
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> not started, host-b: committed -> committed, host-c: committed -> committed",
+			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionCommitted,
+				},
+				{
+					id:    "host-c",
+					state: TransactionCommitted,
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> not started, host-b: prepare failed -> rolled back, host-c: prepare failed -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepareFailed,
+				},
+				{
+					id:    "host-c",
+					state: TransactionPrepareFailed,
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> not started, host-b: prepare failed -> rolled back, host-c: rolled back -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepareFailed,
+				},
+				{
+					id:    "host-c",
+					state: TransactionRolledBack,
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> not started, host-b: rolled back -> rolled back, host-c: rolled back -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionRolledBack,
+				},
+				{
+					id:    "host-c",
+					state: TransactionRolledBack,
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> not started, host-b: prepared -> rolled back, host-c: prepare failed -> rolled back, host-d: rolled back -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-c",
+					state: TransactionPrepareFailed,
+				},
+				{
+					id:    "host-d",
+					state: TransactionRolledBack,
+				},
+			},
+		},
+		// retry from coordinator failure - no not started
+		{
+			name:        "host-a: prepared -> committed",
+			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionPrepared,
+				},
+			},
+		},
+		{
+			name:        "host-a: committed -> committed",
+			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionCommitted,
+				},
+			},
+		},
+		{
+			name:        "host-a: prepare failed -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionPrepareFailed,
+				},
+			},
+		},
+		{
+			name:        "host-a: rolled back -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionRolledBack,
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -> committed, host-b: prepared -> committed",
+			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepared,
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -> committed, host-b: committed -> committed",
+			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-b",
+					state: TransactionCommitted,
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -> rolled back, host-b: prepare failed -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepareFailed,
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -> rolled back, host-b: rolled back -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-b",
+					state: TransactionRolledBack,
+				},
+			},
+		},
+		{
+			name:        "host-a: committed -> committed, host-b: committed -> committed",
+			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionCommitted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionCommitted,
+				},
+			},
+		},
+		{
+			name:        "host-a: prepare failed -> rolled back, host-b: prepare failed -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionPrepareFailed,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepareFailed,
+				},
+			},
+		},
+		{
+			name:        "host-a: prepare failed -> rolled back, host-b: rolled back -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionPrepareFailed,
+				},
+				{
+					id:    "host-b",
+					state: TransactionRolledBack,
+				},
+			},
+		},
+		{
+			name:        "host-a: rolled back -> rolled back, host-b: rolled back -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionRolledBack,
+				},
+				{
+					id:    "host-b",
+					state: TransactionRolledBack,
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -> committed, host-b: prepared -> committed, host-c: prepared -> committed",
+			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-c",
+					state: TransactionPrepared,
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -> committed, host-b: prepared -> committed, host-c: committed -> committed",
+			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-c",
+					state: TransactionCommitted,
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -> rolled back, host-b: prepared -> rolled back, host-c: prepare failed -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-c",
+					state: TransactionPrepareFailed,
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -> rolled back, host-b: prepared -> rolled back, host-c: rolled back -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-c",
+					state: TransactionRolledBack,
+				},
+			},
+		},
+		{
+			name:        "host-a: committed -> committed, host-b: committed -> committed, host-c: committed -> committed",
+			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionCommitted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionCommitted,
+				},
+				{
+					id:    "host-c",
+					state: TransactionCommitted,
+				},
+			},
+		},
+		{
+			name:        "host-a: committed -> committed, host-b: committed -> committed, host-c: prepared -> committed",
+			wantOutcome: OutcomeCommitted,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionCommitted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionCommitted,
+				},
+				{
+					id:    "host-c",
+					state: TransactionPrepared,
+				},
+			},
+		},
+		{
+			name:        "host-a: prepare failed -> rolled back, host-b: prepare failed -> rolled back, host-c: prepare failed -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionPrepareFailed,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepareFailed,
+				},
+				{
+					id:    "host-c",
+					state: TransactionPrepareFailed,
+				},
+			},
+		},
+		{
+			name:        "host-a: prepare failed -> rolled back, host-b: prepare failed -> rolled back, host-c: prepare -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionPrepareFailed,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepareFailed,
+				},
+				{
+					id:    "host-c",
+					state: TransactionPrepared,
+				},
+			},
+		},
+		{
+			name:        "host-a: prepare failed -> rolled back, host-b: prepare failed -> rolled back, host-c: rolled back -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionPrepareFailed,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepareFailed,
+				},
+				{
+					id:    "host-c",
+					state: TransactionRolledBack,
+				},
+			},
+		},
+		{
+			name:        "host-a: rolled back -> rolled back, host-b: rolled back -> rolled back, host-c: rolled back -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionRolledBack,
+				},
+				{
+					id:    "host-b",
+					state: TransactionRolledBack,
+				},
+				{
+					id:    "host-c",
+					state: TransactionRolledBack,
+				},
+			},
+		},
+		{
+			name:        "host-a: rolled back -> rolled back, host-b: rolled back -> rolled back, host-c: prepared -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionRolledBack,
+				},
+				{
+					id:    "host-b",
+					state: TransactionRolledBack,
+				},
+				{
+					id:    "host-c",
+					state: TransactionPrepared,
+				},
+			},
+		},
+		{
+			name:        "host-a: rolled back -> rolled back, host-b: rolled back -> rolled back, host-c: prepare failed -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionRolledBack,
+				},
+				{
+					id:    "host-b",
+					state: TransactionRolledBack,
+				},
+				{
+					id:    "host-c",
+					state: TransactionPrepareFailed,
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -> rolled back, host-b: prepare failed -> rolled back, host-c: rolled back -> rolled back",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepareFailed,
+				},
+				{
+					id:    "host-c",
+					state: TransactionRolledBack,
+				},
+			},
+		},
+		// failures with not started
+		{
+			name:        "host-a: not started -> prepared -x-> committed",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failCommit(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepare failed -x-> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failPrepareAndRollback(),
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -x-> committed",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionPrepared,
+					client: failCommit(),
+				},
+			},
+		},
+		{
+			name:        "host-a: prepare failed -x-> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionPrepareFailed,
+					client: failRollback(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepare failed -x-> rolled back, host-b: not started -> prepare failed -x-> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failPrepareAndRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionNotStarted,
+					client: failPrepareAndRollback(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepare failed -x-> rolled back, host-b: not started -> prepared -x-> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failPrepareAndRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionNotStarted,
+					client: failRollback(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepare failed -x-> rolled back, host-b: not started -> prepare failed -> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failPrepareAndRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionNotStarted,
+					client: failPrepare(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepare failed -x-> rolled back, host-b: not started -> prepared -> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failPrepareAndRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionNotStarted,
+					client: ok(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepared -x-> rolled back, host-b: not started -> prepare failed -> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionNotStarted,
+					client: failPrepare(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepared -x-> committed, host-b: not started -> prepared -x-> committed",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failCommit(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionNotStarted,
+					client: failCommit(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepared -x-> committed, host-b: not started -> prepared -> committed",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failCommit(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionNotStarted,
+					client: ok(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepare failed -x-> rolled back, host-b: prepared -x-> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failPrepareAndRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionPrepared,
+					client: failRollback(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepare failed -x-> rolled back, host-b: prepared -> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failPrepareAndRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionPrepared,
+					client: ok(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepare failed -> rolled back, host-b: prepared -x-> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failPrepare(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionPrepared,
+					client: failRollback(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepared -x-> committed, host-b: prepared -x-> committed",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failCommit(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionPrepared,
+					client: failCommit(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepared -x-> committed, host-b: committed -> committed",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failCommit(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionCommitted,
+					client: ok(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepare failed -x-> rolled back, host-b: prepare failed -x-> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failPrepareAndRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionPrepareFailed,
+					client: failRollback(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepare failed -x-> rolled back, host-b: prepare failed -> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failPrepareAndRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionPrepareFailed,
+					client: ok(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepared -x-> rolled back, host-b: prepare failed -x-> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionPrepareFailed,
+					client: failRollback(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepared -x-> rolled back, host-b: prepare failed -> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionPrepareFailed,
+					client: ok(),
+				},
+			},
+		},
+		{
+			name:        "host-a: not started -> prepared -x-> rolled back, host-b: rolled back -> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionRolledBack,
+					client: ok(),
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -x-> committed, host-b: prepared -x-> committed",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionPrepared,
+					client: failCommit(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionPrepared,
+					client: failCommit(),
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -x-> committed, host-b: prepared -> committed",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionPrepared,
+					client: failCommit(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionPrepared,
+					client: ok(),
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -x-> rolled back, host-b: prepare failed -x-> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionPrepared,
+					client: failRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionPrepareFailed,
+					client: failRollback(),
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -x-> rolled back, host-b: prepare failed -> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionPrepared,
+					client: failRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionPrepareFailed,
+					client: ok(),
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -> rolled back, host-b: prepare failed -x-> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionPrepared,
+					client: ok(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionPrepareFailed,
+					client: failRollback(),
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -x-> committed, host-b: committed -> committed",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionPrepared,
+					client: failCommit(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionCommitted,
+					client: ok(),
+				},
+			},
+		},
+		{
+			name:        "host-a: prepared -x-> rolled back, host-b: rolled back -> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionPrepared,
+					client: failRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionRolledBack,
+					client: ok(),
+				},
+			},
+		},
+		{
+			name:        "host-a: prepare failed -x-> rolled back, host-b: prepare failed -x-> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionPrepareFailed,
+					client: failRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionPrepareFailed,
+					client: failRollback(),
+				},
+			},
+		},
+		{
+			name:        "host-a: prepare failed -x-> rolled back, host-b: prepare failed -> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionPrepareFailed,
+					client: failRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionPrepareFailed,
+					client: ok(),
+				},
+			},
+		},
+		{
+			name:        "host-a: prepare failed -x-> rolled back, host-b: rolled back -> rolled back",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionPrepareFailed,
+					client: failRollback(),
+				},
+				{
+					id:     "host-b",
+					state:  TransactionRolledBack,
+					client: ok(),
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			run(t, newCase(tt))
+		})
+	}
+}
 
-		// TODO: both phase spanning retires failures - if persistence failed
-
+func TestCoordinator_Execute_dependencies_fails(t *testing.T) {
+	tests := []testCase{
 		{
-			name: "committed despite not working persistence",
+			name: "committed despite not working persistence and used mixed client construction",
 			fields: fields{
 				persistenceConfig: PersistenceConfig[string]{
 					TransactionStateChecker:   allNotStartedChecker(),
@@ -1198,9 +1273,13 @@ func TestCoordinator_Execute(t *testing.T) {
 				},
 				clientConfig: ClientConfig[string]{
 					Clients: map[string]Client{
-						"host-a": &stubClient{},
-						"host-b": &stubClient{},
+						"host-a": ok(),
 					},
+					NewClientFunc: newStubClientFunc(
+						map[string]Client{
+							"host-b": ok(),
+						}, nil,
+					),
 				},
 			},
 			args: args{
@@ -1248,7 +1327,7 @@ func TestCoordinator_Execute(t *testing.T) {
 				},
 				clientConfig: ClientConfig[string]{
 					Clients: map[string]Client{
-						"host-a": &stubClient{},
+						"host-a": ok(),
 					},
 				},
 			},
@@ -1265,28 +1344,148 @@ func TestCoordinator_Execute(t *testing.T) {
 			wantOutcome: OutcomeInconsistent,
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			coordinator := NewCoordinator(
-				tt.fields.persistenceConfig,
-				tt.fields.clientConfig,
-			)
-			result := coordinator.Execute(tt.args.ctxFunc(), tt.args.distributedTransaction)
-
-			fmt.Printf("err: %s", result.Err())
-			for _, err := range tt.wantErrs {
-				if !errors.Is(result.Err(), err) {
-					t.Errorf("Execute() error = %v, wantErr %v", result.Err(), tt.wantErrs)
-				}
-			}
-
-			if result.Outcome() != tt.wantOutcome {
-				t.Errorf("Execute() outcome = %v, wantOutcome %v", result.Outcome(), tt.wantOutcome)
-			}
+			run(t, tt)
 		})
 	}
+}
+
+func run(t *testing.T, tt testCase) {
+	coordinator := NewCoordinator(
+		tt.fields.persistenceConfig,
+		tt.fields.clientConfig,
+	)
+	result := coordinator.Execute(tt.args.ctxFunc(), tt.args.distributedTransaction)
+
+	fmt.Printf("err: %s", result.Err())
+	for _, err := range tt.wantErrs {
+		if !errors.Is(result.Err(), err) {
+			t.Errorf("Execute() error = %v, wantErr %v", result.Err(), tt.wantErrs)
+		}
+	}
+
+	if result.Outcome() != tt.wantOutcome {
+		t.Errorf("Execute() outcome = %v, wantOutcome %v", result.Outcome(), tt.wantOutcome)
+	}
+}
+
+type participantConfig struct {
+	id     string
+	state  TransactionState
+	client *stubClient
+}
+
+type testCase struct {
+	name        string
+	fields      fields
+	args        args
+	wantErrs    []error
+	wantOutcome Outcome
+}
+
+type fields struct {
+	persistenceConfig PersistenceConfig[string]
+	clientConfig      ClientConfig[string]
+}
+type args struct {
+	ctxFunc                func() context.Context
+	distributedTransaction DistributedTransaction[string]
+}
+
+type compactedTestCase struct {
+	name         string
+	ctxFunc      func() context.Context
+	wantOutcome  Outcome
+	wantErrs     []error
+	participants []participantConfig
+}
+
+func newCase(data compactedTestCase) testCase {
+	checker, clients, wantErrs, txs := scenario(data.participants...)
+
+	var tc testCase
+	tc.name = data.name
+	tc.fields.persistenceConfig = PersistenceConfig[string]{
+		TransactionStateChecker:   checker,
+		TransactionStatePersister: stubStatePersister[string]{},
+	}
+	tc.fields.clientConfig = ClientConfig[string]{Clients: clients}
+	if data.ctxFunc == nil {
+		data.ctxFunc = ctxBackground()
+	}
+	if data.wantOutcome == OutcomeInconsistent {
+		data.ctxFunc = ctxWithTimeout()
+	}
+	tc.args.ctxFunc = data.ctxFunc
+	tc.args.distributedTransaction = DistributedTransaction[string]{
+		TransactionID: "tx",
+		Transactions:  txs,
+	}
+	tc.wantErrs = append(data.wantErrs, wantErrs...)
+	tc.wantOutcome = data.wantOutcome
+	return tc
+}
+
+func scenario(participants ...participantConfig) (stubTransactionStateChecker, map[string]Client, []error, []Transaction[string]) {
+	states := map[string]TransactionState{}
+	clients := map[string]Client{}
+	var expectedClientsErrs []error
+	txs := make([]Transaction[string], 0, len(participants))
+
+	for i, p := range participants {
+		if p.state != TransactionNotStarted {
+			states[p.id] = p.state
+		}
+		if p.client == nil {
+			p.client = ok()
+		}
+
+		if p.client.prepareErr != nil {
+			expectedClientsErrs = append(expectedClientsErrs, errPrepare)
+		}
+		if p.client.commitErr != nil {
+			expectedClientsErrs = append(expectedClientsErrs, errCommit)
+		} else if p.client.rollbackErr != nil {
+			expectedClientsErrs = append(expectedClientsErrs, errRollback)
+		}
+
+		clients[p.id] = p.client
+		txs = append(txs, Transaction[string]{
+			ParticipantID: p.id,
+			Payload:       fmt.Sprintf("p%d", i+1),
+		})
+	}
+	return stubTransactionStateChecker{stateByParticipantID: states}, clients, expectedClientsErrs, txs
+}
+
+var (
+	errPrepare   = errors.New("prepare failed")
+	errCommit    = errors.New("commit failed")
+	errRollback  = errors.New("rollback failed")
+	errPersist   = errors.New("persist failed")
+	errNewClient = errors.New("create new client failed")
+	errStateLoad = errors.New("state load failed")
+)
+
+func ok() *stubClient {
+	return &stubClient{}
+}
+
+func failPrepare() *stubClient {
+	return &stubClient{prepareErr: errPrepare}
+}
+
+func failPrepareAndRollback() *stubClient {
+	return &stubClient{prepareErr: errPrepare, rollbackErr: errRollback}
+}
+
+func failCommit() *stubClient {
+	return &stubClient{commitErr: errCommit}
+}
+
+func failRollback() *stubClient {
+	return &stubClient{rollbackErr: errRollback}
 }
 
 func ctxBackground() func() context.Context {
