@@ -22,6 +22,8 @@ func NewLoader[ID comparable](transactionStateChecker TransactionStateChecker[ID
 	}
 }
 
+// TODO: What if two hosts, a prepares, saves state, b takes long time and coordiantor dies, in such case
+// only a is persisted as prepared and b is not persisted
 func (l Loader[ID]) LoadState(ctx context.Context, transactionID string, participantIDs []ID) (State[ID], error) {
 	if len(participantIDs) == 0 {
 		return State[ID]{}, errors.New("participantIDs cannot be empty")
