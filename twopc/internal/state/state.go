@@ -67,7 +67,7 @@ func invalidStateErr[ID comparable](sets stateSets[ID]) error {
 }
 
 func (s State[ID]) shouldIssueRollbacks() bool {
-	return s.stateSets.anyPreparedFailed()
+	return s.stateSets.anyPreparedFailed() || s.stateSets.anyRolledBack()
 }
 
 func (s State[ID]) shouldIssuePrepares() bool {
