@@ -35,7 +35,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 				},
 			},
 			args: args{
-				transactionID:  "tx-1",
+				transactionID:  "tx",
 				participantIDs: []string{"host-a", "host-b"},
 			},
 			want: State[string]{
@@ -62,7 +62,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 				},
 			},
 			args: args{
-				transactionID:  "tx-2",
+				transactionID:  "tx",
 				participantIDs: []string{"host-a", "host-b"},
 			},
 			want: State[string]{
@@ -90,7 +90,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 				},
 			},
 			args: args{
-				transactionID:  "tx-3",
+				transactionID:  "tx",
 				participantIDs: []string{"host-a", "host-b", "host-c"},
 			},
 			want: State[string]{
@@ -118,7 +118,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 				},
 			},
 			args: args{
-				transactionID:  "tx-4",
+				transactionID:  "tx",
 				participantIDs: []string{"host-a", "host-b"},
 			},
 			want: State[string]{
@@ -142,7 +142,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 				},
 			},
 			args: args{
-				transactionID:  "tx-5",
+				transactionID:  "tx",
 				participantIDs: []string{"host-a", "host-b"},
 			},
 			want: State[string]{
@@ -161,7 +161,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 				},
 			},
 			args: args{
-				transactionID:  "tx-5",
+				transactionID:  "tx",
 				participantIDs: nil,
 			},
 			want:    State[string]{},
@@ -178,7 +178,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 				},
 			},
 			args: args{
-				transactionID:  "tx-6",
+				transactionID:  "tx",
 				participantIDs: []string{"host-a"},
 			},
 			want:    State[string]{},
@@ -195,11 +195,94 @@ func Test_stateLoader_loadState(t *testing.T) {
 				},
 			},
 			args: args{
-				transactionID:  "tx-6",
+				transactionID:  "tx",
 				participantIDs: []string{"host-a", "host-z"},
 			},
 			want:    State[string]{},
 			wantErr: errAny,
+		},
+		{
+			name: "should use input for participants that haven't been persisted",
+			fields: fields{
+				transactionStateChecker: mockTransactionStateChecker{
+					stateByParticipantID: map[string]transaction.State{
+						"host-a": transaction.Prepared,
+					},
+				},
+			},
+			args: args{
+				transactionID:  "tx",
+				participantIDs: []string{"host-a", "host-b"},
+			},
+			want: State[string]{
+				participantIDs: map[string]struct{}{
+					"host-a": {},
+					"host-b": {},
+				},
+				stateSets: stateSets[string]{
+					prepared:      hosts("host-a"),
+					prepareFailed: emptyHosts(),
+					committed:     emptyHosts(),
+					rolledBack:    emptyHosts(),
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "should use input for participants that haven't been persisted and if committed has been persisted, the missing ones should start from prepared",
+			fields: fields{
+				transactionStateChecker: mockTransactionStateChecker{
+					stateByParticipantID: map[string]transaction.State{
+						"host-c": transaction.Committed,
+					},
+				},
+			},
+			args: args{
+				transactionID:  "tx",
+				participantIDs: []string{"host-a", "host-b", "host-c"},
+			},
+			want: State[string]{
+				participantIDs: map[string]struct{}{
+					"host-a": {},
+					"host-b": {},
+					"host-c": {},
+				},
+				stateSets: stateSets[string]{
+					prepared:      hosts("host-a", "host-b"),
+					prepareFailed: emptyHosts(),
+					committed:     hosts("host-c"),
+					rolledBack:    emptyHosts(),
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "should use input for participants that haven't been persisted and if rolled back has been persisted, the missing ones should start from prepare failed",
+			fields: fields{
+				transactionStateChecker: mockTransactionStateChecker{
+					stateByParticipantID: map[string]transaction.State{
+						"host-c": transaction.RolledBack,
+					},
+				},
+			},
+			args: args{
+				transactionID:  "tx",
+				participantIDs: []string{"host-a", "host-b", "host-c"},
+			},
+			want: State[string]{
+				participantIDs: map[string]struct{}{
+					"host-a": {},
+					"host-b": {},
+					"host-c": {},
+				},
+				stateSets: stateSets[string]{
+					prepared:      emptyHosts(),
+					prepareFailed: hosts("host-a", "host-b"),
+					committed:     emptyHosts(),
+					rolledBack:    hosts("host-c"),
+				},
+			},
+			wantErr: nil,
 		},
 		{
 			name: "checker returns err on loading state",
@@ -210,7 +293,7 @@ func Test_stateLoader_loadState(t *testing.T) {
 				},
 			},
 			args: args{
-				transactionID:  "tx-7",
+				transactionID:  "tx",
 				participantIDs: []string{"host-a"},
 			},
 			want:    State[string]{},
