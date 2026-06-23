@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// TODO: These should be updated to be in sync with conclusions from state_test and lodaer_test
 func TestCoordinator_Execute(t *testing.T) {
 	tests := []compactedTestCase{
 		// no coordinator failures

@@ -278,6 +278,7 @@ func CommitTransition[ID comparable](participantID ID) Transition[ID] {
 	return newTransition(participantID, transaction.Prepared, transaction.Committed)
 }
 
+// RollbackTransition TODO: this should always start from prepared
 func RollbackTransition[ID comparable](participantID ID, sourceState transaction.State) Transition[ID] {
 	if sourceState != transaction.Prepared && sourceState != transaction.PrepareFailed {
 		panic("logic should prohibit this")
