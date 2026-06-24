@@ -97,7 +97,7 @@ func Test_state_nextState(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			}),
 			args: args{
-				failedTransitions: trs(RollbackTransition("host-a")),
+				successfulTransitions: trs(RollbackTransition("host-a")),
 			},
 			want: newState(stateSets[string]{
 				prepared:      emptyHosts(),
@@ -326,11 +326,8 @@ func Test_state_nextState(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			}),
 			args: args{
-				successfulTransitions: trs(
-					RollbackTransition("host-a"),
-				),
 				failedTransitions: trs(
-					RollbackTransition("host-b"),
+					RollbackTransition("host-a"),
 				),
 			},
 			want: newState(stateSets[string]{
