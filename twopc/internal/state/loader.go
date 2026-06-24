@@ -54,8 +54,8 @@ func (l Loader[ID]) LoadState(ctx context.Context, transactionID string, partici
 		return State[ID]{}, err
 	}
 
-	if terminal, notPersisted, terminalFound := l.loadPersisted(sets, participantIDsSet, stateByParticipantID); terminalFound {
-		l.loadNotPersisted(sets, terminal, notPersisted)
+	if notPersisted, terminalFound := l.loadPersisted(sets, participantIDsSet, stateByParticipantID); terminalFound {
+		l.assumeNotPersistedArePrepared(sets, notPersisted)
 	}
 
 	return State[ID]{
@@ -68,28 +68,23 @@ func (l Loader[ID]) loadPersisted(
 	sets stateSets[ID],
 	participantIDs map[ID]struct{},
 	stateByParticipantID map[ID]transaction.State,
-) (terminal transaction.State, notPersisted []ID, terminalFound bool) {
+) (notPersisted []ID, terminalFound bool) {
 	for participantID := range participantIDs {
 		if state, ok := stateByParticipantID[participantID]; ok {
 			sets.addValueToSet(state, participantID)
-			if state == transaction.Committed || state == transaction.RolledBack {
-				terminal = state
+			if state == transaction.PrepareFailed || state == transaction.Committed || state == transaction.RolledBack {
 				terminalFound = true
 			}
 		} else {
 			notPersisted = append(notPersisted, participantID)
 		}
 	}
-	return terminal, notPersisted, terminalFound
+	return notPersisted, terminalFound
 }
 
-func (l Loader[ID]) loadNotPersisted(sets stateSets[ID], terminal transaction.State, notPersisted []ID) {
+func (l Loader[ID]) assumeNotPersistedArePrepared(sets stateSets[ID], notPersisted []ID) {
 	for _, participantID := range notPersisted {
-		if terminal == transaction.Committed {
-			sets.addValueToSet(transaction.Prepared, participantID)
-		} else {
-			sets.addValueToSet(transaction.PrepareFailed, participantID)
-		}
+		sets.addValueToSet(transaction.Prepared, participantID)
 	}
 }
 
