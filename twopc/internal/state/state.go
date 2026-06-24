@@ -98,6 +98,10 @@ func (s State[ID]) nextCommitTransitions() []Transition[ID] {
 	return s.nextTransitions(s.stateSets.committed, CommitTransition)
 }
 
+func (s State[ID]) nextRollbackTransitions() []Transition[ID] {
+	return s.nextTransitions(s.stateSets.rolledBack, RollbackTransition)
+}
+
 func (s State[ID]) nextTransitions(skipSet stateSet[ID],
 	newTransitionFunc func(participantID ID) Transition[ID],
 ) []Transition[ID] {
@@ -105,17 +109,6 @@ func (s State[ID]) nextTransitions(skipSet stateSet[ID],
 	for participantID := range s.participantIDs {
 		if !skipSet.has(participantID) {
 			newTransitions = append(newTransitions, newTransitionFunc(participantID))
-		}
-	}
-	return newTransitions
-}
-
-func (s State[ID]) nextRollbackTransitions() []Transition[ID] {
-	newTransitions := make([]Transition[ID], 0, len(s.participantIDs)-s.stateSets.rolledBackCount())
-	for participantID := range s.participantIDs {
-		if !s.stateSets.rolledBack.has(participantID) {
-			sourceState := s.stateSets.transactionState(participantID)
-			newTransitions = append(newTransitions, RollbackTransition(participantID, sourceState))
 		}
 	}
 	return newTransitions
@@ -185,7 +178,7 @@ func stateAfterFailure(targetState transaction.State) transaction.State {
 	case transaction.Committed:
 		return transaction.Prepared
 	case transaction.RolledBack:
-		return transaction.PrepareFailed
+		return transaction.Prepared
 	default:
 		panic("unsupported target state")
 	}
@@ -278,12 +271,8 @@ func CommitTransition[ID comparable](participantID ID) Transition[ID] {
 	return newTransition(participantID, transaction.Prepared, transaction.Committed)
 }
 
-// RollbackTransition TODO: this should always start from prepared
-func RollbackTransition[ID comparable](participantID ID, sourceState transaction.State) Transition[ID] {
-	if sourceState != transaction.Prepared && sourceState != transaction.PrepareFailed {
-		panic("logic should prohibit this")
-	}
-	return newTransition(participantID, sourceState, transaction.RolledBack)
+func RollbackTransition[ID comparable](participantID ID) Transition[ID] {
+	return newTransition(participantID, transaction.Prepared, transaction.RolledBack)
 }
 
 func newTransition[ID comparable](participantID ID, sourceState transaction.State, targetState transaction.State) Transition[ID] {

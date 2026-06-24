@@ -405,8 +405,8 @@ func (o operation[ID]) toTransition() state.Transition[ID] {
 		return state.PrepareTransition(o.participantID)
 	case o.sourceState == transaction.Prepared && o.targetState == transaction.Committed:
 		return state.CommitTransition(o.participantID)
-	case o.targetState == transaction.RolledBack:
-		return state.RollbackTransition(o.participantID, o.sourceState)
+	case o.sourceState == transaction.Prepared && o.targetState == transaction.RolledBack:
+		return state.RollbackTransition(o.participantID)
 	default:
 		panic("logic should prohibit this")
 	}

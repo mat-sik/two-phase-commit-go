@@ -4,8 +4,6 @@ import (
 	"reflect"
 	"sort"
 	"testing"
-
-	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
 )
 
 func Test_state_nextState(t *testing.T) {
@@ -99,7 +97,7 @@ func Test_state_nextState(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			}),
 			args: args{
-				failedTransitions: trs(RollbackTransition("host-a", transaction.PrepareFailed)),
+				failedTransitions: trs(RollbackTransition("host-a")),
 			},
 			want: newState(stateSets[string]{
 				prepared:      emptyHosts(),
@@ -117,7 +115,7 @@ func Test_state_nextState(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			}),
 			args: args{
-				failedTransitions: trs(RollbackTransition("host-a", transaction.PrepareFailed)),
+				failedTransitions: trs(RollbackTransition("host-a")),
 			},
 			want: newState(stateSets[string]{
 				prepared:      hosts("host-a"),
@@ -309,7 +307,7 @@ func Test_state_nextState(t *testing.T) {
 			}),
 			args: args{
 				successfulTransitions: trs(
-					RollbackTransition("host-a", transaction.Prepared),
+					RollbackTransition("host-a"),
 				),
 			},
 			want: newState(stateSets[string]{
@@ -329,10 +327,10 @@ func Test_state_nextState(t *testing.T) {
 			}),
 			args: args{
 				successfulTransitions: trs(
-					RollbackTransition("host-a", transaction.Prepared),
+					RollbackTransition("host-a"),
 				),
 				failedTransitions: trs(
-					RollbackTransition("host-b", transaction.PrepareFailed),
+					RollbackTransition("host-b"),
 				),
 			},
 			want: newState(stateSets[string]{
@@ -398,7 +396,7 @@ func Test_state_nextState(t *testing.T) {
 			}),
 			args: args{
 				successfulTransitions: trs(
-					RollbackTransition("host-a", transaction.Prepared),
+					RollbackTransition("host-a"),
 				),
 			},
 			want: newState(stateSets[string]{
@@ -418,7 +416,7 @@ func Test_state_nextState(t *testing.T) {
 			}),
 			args: args{
 				failedTransitions: trs(
-					RollbackTransition("host-a", transaction.Prepared),
+					RollbackTransition("host-a"),
 				),
 			},
 			want: newState(stateSets[string]{
@@ -517,7 +515,7 @@ func Test_state_nextStateTransitions(t *testing.T) {
 				rolledBack:    emptyHosts(),
 			}),
 			want: trs(
-				RollbackTransition("host-a", transaction.Prepared),
+				RollbackTransition("host-a"),
 			),
 		},
 		{
@@ -542,7 +540,7 @@ func Test_state_nextStateTransitions(t *testing.T) {
 				rolledBack:    hosts("host-b"),
 			}),
 			want: trs(
-				RollbackTransition("host-a", transaction.Prepared),
+				RollbackTransition("host-a"),
 			),
 		},
 		// ═════════════════════════════════════════════════════════════════════════════
