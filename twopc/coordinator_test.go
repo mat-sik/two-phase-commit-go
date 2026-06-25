@@ -8,14 +8,13 @@ import (
 	"time"
 )
 
-// TODO: These should be updated to be in sync with conclusions from state_test and lodaer_test
 func TestCoordinator_Execute(t *testing.T) {
 	tests := []compactedTestCase{
 		// ═════════════════════════════════════════════════════════════════════════════
 		// GROUP 0 - no coordinator failures
 		// ═════════════════════════════════════════════════════════════════════════════
 		{
-			name:        "a: NS -> P -> C",
+			name:        "NS -> P -> C",
 			wantOutcome: OutcomeCommitted,
 			participants: []participantConfig{
 				{
@@ -25,7 +24,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name: "a: NS -> PF",
+			name: "NS -> PF",
 			// TODO: Maybe this outcome should be renamed so that we can distinguish these two terminal states
 			wantOutcome: OutcomeRolledBack,
 			participants: []participantConfig{
@@ -85,7 +84,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		// GROUP 1 - retry from coordinator failure
 		// ═════════════════════════════════════════════════════════════════════════════
 		{
-			name:        "host-a: not started -> prepared -> committed, host-b: prepared -> committed",
+			name:        "a: P(NS) -> C, b: P -> C",
 			wantOutcome: OutcomeCommitted,
 			participants: []participantConfig{
 				{
@@ -99,7 +98,21 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: not started -> prepared -> committed, host-b: committed -> committed",
+			name:        "(NS,PF)",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepareFailed,
+				},
+			},
+		},
+		{
+			name:        "a: P(NS) -> C, b: C",
 			wantOutcome: OutcomeCommitted,
 			participants: []participantConfig{
 				{
@@ -113,21 +126,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: not started -> not started, host-b: prepare failed -> rolled back",
-			wantOutcome: OutcomeRolledBack,
-			participants: []participantConfig{
-				{
-					id:    "host-a",
-					state: TransactionNotStarted,
-				},
-				{
-					id:    "host-b",
-					state: TransactionPrepareFailed,
-				},
-			},
-		},
-		{
-			name:        "host-a: not started -> not started, host-b: rolled back -> rolled back",
+			name:        "a: P(NS) -> R, b: R",
 			wantOutcome: OutcomeRolledBack,
 			participants: []participantConfig{
 				{
@@ -141,7 +140,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: not started -> prepared -> committed, host-b: not started -> prepared -> committed, host-c: not started -> prepared -> committed",
+			name:        "a: P(NS) -> C, b: P(NS) -> C, c: P(NS) -> C",
 			wantOutcome: OutcomeCommitted,
 			participants: []participantConfig{
 				{
@@ -159,7 +158,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: not started -> prepared -> committed, host-b: not started -> prepared -> committed, host-c: prepared -> committed",
+			name:        "a: P(NS) -> C, b: P(NS) -> C, c: P -> C",
 			wantOutcome: OutcomeCommitted,
 			participants: []participantConfig{
 				{
@@ -177,7 +176,25 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: not started -> prepared -> committed, host-b: not started -> prepared -> committed, host-c: committed -> committed",
+			name:        "(NS,NS,PF)",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-c",
+					state: TransactionPrepareFailed,
+				},
+			},
+		},
+		{
+			name:        "a: P(NS) -> C, b: P(NS) -> C, c: C",
 			wantOutcome: OutcomeCommitted,
 			participants: []participantConfig{
 				{
@@ -195,25 +212,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: not started -> not started, host-b: not started -> not started, host-c: prepare failed -> rolled back",
-			wantOutcome: OutcomeRolledBack,
-			participants: []participantConfig{
-				{
-					id:    "host-a",
-					state: TransactionNotStarted,
-				},
-				{
-					id:    "host-b",
-					state: TransactionNotStarted,
-				},
-				{
-					id:    "host-c",
-					state: TransactionPrepareFailed,
-				},
-			},
-		},
-		{
-			name:        "host-a: not started -> not started, host-b: not started -> not started, host-c: rolled back -> rolled back",
+			name:        "(NS,NS,R)",
 			wantOutcome: OutcomeRolledBack,
 			participants: []participantConfig{
 				{
@@ -231,7 +230,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: not started -> prepared -> committed, host-b: prepared -> committed, host-c: prepared -> committed",
+			name:        "a: P(NS) -> C, host-b: P -> C, host-c: P -> C",
 			wantOutcome: OutcomeCommitted,
 			participants: []participantConfig{
 				{
@@ -249,7 +248,25 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: not started -> prepared -> committed, host-b: prepared -> committed, host-c: committed -> committed",
+			name:        "a: NS, b: P -> R, c: PF -> R",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepared,
+				},
+				{
+					id:    "host-c",
+					state: TransactionPrepareFailed,
+				},
+			},
+		},
+		{
+			name:        "a: P(NS) -> C, b: P -> C, c: C",
 			wantOutcome: OutcomeCommitted,
 			participants: []participantConfig{
 				{
@@ -267,25 +284,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: not started -> not started, host-b: prepared -> rolled back, host-c: prepare failed -> rolled back",
-			wantOutcome: OutcomeRolledBack,
-			participants: []participantConfig{
-				{
-					id:    "host-a",
-					state: TransactionNotStarted,
-				},
-				{
-					id:    "host-b",
-					state: TransactionPrepared,
-				},
-				{
-					id:    "host-c",
-					state: TransactionPrepareFailed,
-				},
-			},
-		},
-		{
-			name:        "host-a: not started -> not started, host-b: prepared -> rolled back, host-c: rolled back -> rolled back",
+			name:        "a: NS, b: P -> R, c: R",
 			wantOutcome: OutcomeRolledBack,
 			participants: []participantConfig{
 				{
@@ -303,7 +302,43 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: not started -> not started, host-b: committed -> committed, host-c: committed -> committed",
+			name:        "(NS,PF,PF)",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepareFailed,
+				},
+				{
+					id:    "host-c",
+					state: TransactionPrepareFailed,
+				},
+			},
+		},
+		{
+			name:        "(NS,PF,R)",
+			wantOutcome: OutcomeRolledBack,
+			participants: []participantConfig{
+				{
+					id:    "host-a",
+					state: TransactionNotStarted,
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepareFailed,
+				},
+				{
+					id:    "host-c",
+					state: TransactionRolledBack,
+				},
+			},
+		},
+		{
+			name:        "(NS,C,C)",
 			wantOutcome: OutcomeCommitted,
 			participants: []participantConfig{
 				{
@@ -321,43 +356,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: not started -> not started, host-b: prepare failed -> rolled back, host-c: prepare failed -> rolled back",
-			wantOutcome: OutcomeRolledBack,
-			participants: []participantConfig{
-				{
-					id:    "host-a",
-					state: TransactionNotStarted,
-				},
-				{
-					id:    "host-b",
-					state: TransactionPrepareFailed,
-				},
-				{
-					id:    "host-c",
-					state: TransactionPrepareFailed,
-				},
-			},
-		},
-		{
-			name:        "host-a: not started -> not started, host-b: prepare failed -> rolled back, host-c: rolled back -> rolled back",
-			wantOutcome: OutcomeRolledBack,
-			participants: []participantConfig{
-				{
-					id:    "host-a",
-					state: TransactionNotStarted,
-				},
-				{
-					id:    "host-b",
-					state: TransactionPrepareFailed,
-				},
-				{
-					id:    "host-c",
-					state: TransactionRolledBack,
-				},
-			},
-		},
-		{
-			name:        "host-a: not started -> not started, host-b: rolled back -> rolled back, host-c: rolled back -> rolled back",
+			name:        "(NS,R,R)",
 			wantOutcome: OutcomeRolledBack,
 			participants: []participantConfig{
 				{
@@ -375,7 +374,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: not started -> not started, host-b: prepared -> rolled back, host-c: prepare failed -> rolled back, host-d: rolled back -> rolled back",
+			name:        "a: P(NS) -> R, b: P -> R, c: PF, d: R",
 			wantOutcome: OutcomeRolledBack,
 			participants: []participantConfig{
 				{
@@ -400,7 +399,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		// GROUP 2 - coordinator failures
 		// ═════════════════════════════════════════════════════════════════════════════
 		{
-			name:        "host-a: not started -> prepared -x-> committed",
+			name:        "NS -> P -x-> C",
 			wantOutcome: OutcomeInconsistent,
 			participants: []participantConfig{
 				{
@@ -411,18 +410,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: not started -> prepare failed -x-> rolled back",
-			wantOutcome: OutcomeInconsistent,
-			participants: []participantConfig{
-				{
-					id:     "host-a",
-					state:  TransactionNotStarted,
-					client: failPrepareAndRollback(),
-				},
-			},
-		},
-		{
-			name:        "host-a: prepared -x-> committed",
+			name:        "P -x-> C",
 			wantOutcome: OutcomeInconsistent,
 			participants: []participantConfig{
 				{
@@ -433,82 +421,38 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: prepare failed -x-> rolled back",
-			wantOutcome: OutcomeInconsistent,
-			participants: []participantConfig{
-				{
-					id:     "host-a",
-					state:  TransactionPrepareFailed,
-					client: failRollback(),
-				},
-			},
-		},
-		{
-			name:        "host-a: not started -> prepare failed -x-> rolled back, host-b: not started -> prepare failed -x-> rolled back",
+			name:        "a: NS -> P -x-> C, b: NS -> P -x-> C",
 			wantOutcome: OutcomeInconsistent,
 			participants: []participantConfig{
 				{
 					id:     "host-a",
 					state:  TransactionNotStarted,
-					client: failPrepareAndRollback(),
+					client: failCommit(),
 				},
 				{
 					id:     "host-b",
 					state:  TransactionNotStarted,
-					client: failPrepareAndRollback(),
+					client: failCommit(),
 				},
 			},
 		},
 		{
-			name:        "host-a: not started -> prepare failed -x-> rolled back, host-b: not started -> prepared -x-> rolled back",
+			name:        "a: NS -> P -x-> C, b: NS -> P -> C",
 			wantOutcome: OutcomeInconsistent,
 			participants: []participantConfig{
 				{
 					id:     "host-a",
 					state:  TransactionNotStarted,
-					client: failPrepareAndRollback(),
+					client: failCommit(),
 				},
 				{
-					id:     "host-b",
-					state:  TransactionNotStarted,
-					client: failRollback(),
+					id:    "host-b",
+					state: TransactionNotStarted,
 				},
 			},
 		},
 		{
-			name:        "host-a: not started -> prepare failed -x-> rolled back, host-b: not started -> prepare failed -> rolled back",
-			wantOutcome: OutcomeInconsistent,
-			participants: []participantConfig{
-				{
-					id:     "host-a",
-					state:  TransactionNotStarted,
-					client: failPrepareAndRollback(),
-				},
-				{
-					id:     "host-b",
-					state:  TransactionNotStarted,
-					client: failPrepare(),
-				},
-			},
-		},
-		{
-			name:        "host-a: not started -> prepare failed -x-> rolled back, host-b: not started -> prepared -> rolled back",
-			wantOutcome: OutcomeInconsistent,
-			participants: []participantConfig{
-				{
-					id:     "host-a",
-					state:  TransactionNotStarted,
-					client: failPrepareAndRollback(),
-				},
-				{
-					id:     "host-b",
-					state:  TransactionNotStarted,
-					client: ok(),
-				},
-			},
-		},
-		{
-			name:        "host-a: not started -> prepared -x-> rolled back, host-b: not started -> prepare failed -> rolled back",
+			name:        "a: NS -> P -x-> R, b: NS -> PF",
 			wantOutcome: OutcomeInconsistent,
 			participants: []participantConfig{
 				{
@@ -524,71 +468,38 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: not started -> prepared -x-> committed, host-b: not started -> prepared -x-> committed",
+			name:        "a: NS -> P -x-> C, b: P -x-> C",
 			wantOutcome: OutcomeInconsistent,
 			participants: []participantConfig{
 				{
 					id:     "host-a",
 					state:  TransactionNotStarted,
 					client: failCommit(),
-				},
-				{
-					id:     "host-b",
-					state:  TransactionNotStarted,
-					client: failCommit(),
-				},
-			},
-		},
-		{
-			name:        "host-a: not started -> prepared -x-> committed, host-b: not started -> prepared -> committed",
-			wantOutcome: OutcomeInconsistent,
-			participants: []participantConfig{
-				{
-					id:     "host-a",
-					state:  TransactionNotStarted,
-					client: failCommit(),
-				},
-				{
-					id:     "host-b",
-					state:  TransactionNotStarted,
-					client: ok(),
-				},
-			},
-		},
-		{
-			name:        "host-a: not started -> prepare failed -x-> rolled back, host-b: prepared -x-> rolled back",
-			wantOutcome: OutcomeInconsistent,
-			participants: []participantConfig{
-				{
-					id:     "host-a",
-					state:  TransactionNotStarted,
-					client: failPrepareAndRollback(),
 				},
 				{
 					id:     "host-b",
 					state:  TransactionPrepared,
-					client: failRollback(),
+					client: failCommit(),
 				},
 			},
 		},
 		{
-			name:        "host-a: not started -> prepare failed -x-> rolled back, host-b: prepared -> rolled back",
+			name:        "a: NS -> P -x-> C, b: P -> C",
 			wantOutcome: OutcomeInconsistent,
 			participants: []participantConfig{
 				{
 					id:     "host-a",
 					state:  TransactionNotStarted,
-					client: failPrepareAndRollback(),
+					client: failCommit(),
 				},
 				{
-					id:     "host-b",
-					state:  TransactionPrepared,
-					client: ok(),
+					id:    "host-b",
+					state: TransactionPrepared,
 				},
 			},
 		},
 		{
-			name:        "host-a: not started -> prepare failed -> rolled back, host-b: prepared -x-> rolled back",
+			name:        "a: NS -> PF, b: P -x-> R",
 			wantOutcome: OutcomeInconsistent,
 			participants: []participantConfig{
 				{
@@ -604,7 +515,22 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: not started -> prepared -x-> committed, host-b: prepared -x-> committed",
+			name:        "a: NS -> P -x-> R, b: PF",
+			wantOutcome: OutcomeInconsistent,
+			participants: []participantConfig{
+				{
+					id:     "host-a",
+					state:  TransactionNotStarted,
+					client: failRollback(),
+				},
+				{
+					id:    "host-b",
+					state: TransactionPrepareFailed,
+				},
+			},
+		},
+		{
+			name:        "a: P(NS) -x-> C, b: C",
 			wantOutcome: OutcomeInconsistent,
 			participants: []participantConfig{
 				{
@@ -613,62 +539,13 @@ func TestCoordinator_Execute(t *testing.T) {
 					client: failCommit(),
 				},
 				{
-					id:     "host-b",
-					state:  TransactionPrepared,
-					client: failCommit(),
+					id:    "host-b",
+					state: TransactionCommitted,
 				},
 			},
 		},
 		{
-			name:        "host-a: not started -> prepared -x-> committed, host-b: committed -> committed",
-			wantOutcome: OutcomeInconsistent,
-			participants: []participantConfig{
-				{
-					id:     "host-a",
-					state:  TransactionNotStarted,
-					client: failCommit(),
-				},
-				{
-					id:     "host-b",
-					state:  TransactionCommitted,
-					client: ok(),
-				},
-			},
-		},
-		{
-			name:        "host-a: not started -> prepare failed -x-> rolled back, host-b: prepare failed -x-> rolled back",
-			wantOutcome: OutcomeInconsistent,
-			participants: []participantConfig{
-				{
-					id:     "host-a",
-					state:  TransactionNotStarted,
-					client: failPrepareAndRollback(),
-				},
-				{
-					id:     "host-b",
-					state:  TransactionPrepareFailed,
-					client: failRollback(),
-				},
-			},
-		},
-		{
-			name:        "host-a: not started -> prepare failed -x-> rolled back, host-b: prepare failed -> rolled back",
-			wantOutcome: OutcomeInconsistent,
-			participants: []participantConfig{
-				{
-					id:     "host-a",
-					state:  TransactionNotStarted,
-					client: failPrepareAndRollback(),
-				},
-				{
-					id:     "host-b",
-					state:  TransactionPrepareFailed,
-					client: ok(),
-				},
-			},
-		},
-		{
-			name:        "host-a: not started -> prepared -x-> rolled back, host-b: prepare failed -x-> rolled back",
+			name:        "a: P(NS) -x-> R, b: R",
 			wantOutcome: OutcomeInconsistent,
 			participants: []participantConfig{
 				{
@@ -677,46 +554,13 @@ func TestCoordinator_Execute(t *testing.T) {
 					client: failRollback(),
 				},
 				{
-					id:     "host-b",
-					state:  TransactionPrepareFailed,
-					client: failRollback(),
+					id:    "host-b",
+					state: TransactionRolledBack,
 				},
 			},
 		},
 		{
-			name:        "host-a: not started -> prepared -x-> rolled back, host-b: prepare failed -> rolled back",
-			wantOutcome: OutcomeInconsistent,
-			participants: []participantConfig{
-				{
-					id:     "host-a",
-					state:  TransactionNotStarted,
-					client: failRollback(),
-				},
-				{
-					id:     "host-b",
-					state:  TransactionPrepareFailed,
-					client: ok(),
-				},
-			},
-		},
-		{
-			name:        "host-a: not started -> prepared -x-> rolled back, host-b: rolled back -> rolled back",
-			wantOutcome: OutcomeInconsistent,
-			participants: []participantConfig{
-				{
-					id:     "host-a",
-					state:  TransactionNotStarted,
-					client: failRollback(),
-				},
-				{
-					id:     "host-b",
-					state:  TransactionRolledBack,
-					client: ok(),
-				},
-			},
-		},
-		{
-			name:        "host-a: prepared -x-> committed, host-b: prepared -x-> committed",
+			name:        "a: P -x-> C, b: P -x-> C",
 			wantOutcome: OutcomeInconsistent,
 			participants: []participantConfig{
 				{
@@ -732,7 +576,7 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name:        "host-a: prepared -x-> committed, host-b: prepared -> committed",
+			name:        "a: P -x-> C, b: P -> C",
 			wantOutcome: OutcomeInconsistent,
 			participants: []participantConfig{
 				{
@@ -741,14 +585,13 @@ func TestCoordinator_Execute(t *testing.T) {
 					client: failCommit(),
 				},
 				{
-					id:     "host-b",
-					state:  TransactionPrepared,
-					client: ok(),
+					id:    "host-b",
+					state: TransactionPrepared,
 				},
 			},
 		},
 		{
-			name:        "host-a: prepared -x-> rolled back, host-b: prepare failed -x-> rolled back",
+			name:        "a: P -x-> R, b: PF",
 			wantOutcome: OutcomeInconsistent,
 			participants: []participantConfig{
 				{
@@ -757,46 +600,13 @@ func TestCoordinator_Execute(t *testing.T) {
 					client: failRollback(),
 				},
 				{
-					id:     "host-b",
-					state:  TransactionPrepareFailed,
-					client: failRollback(),
+					id:    "host-b",
+					state: TransactionPrepareFailed,
 				},
 			},
 		},
 		{
-			name:        "host-a: prepared -x-> rolled back, host-b: prepare failed -> rolled back",
-			wantOutcome: OutcomeInconsistent,
-			participants: []participantConfig{
-				{
-					id:     "host-a",
-					state:  TransactionPrepared,
-					client: failRollback(),
-				},
-				{
-					id:     "host-b",
-					state:  TransactionPrepareFailed,
-					client: ok(),
-				},
-			},
-		},
-		{
-			name:        "host-a: prepared -> rolled back, host-b: prepare failed -x-> rolled back",
-			wantOutcome: OutcomeInconsistent,
-			participants: []participantConfig{
-				{
-					id:     "host-a",
-					state:  TransactionPrepared,
-					client: ok(),
-				},
-				{
-					id:     "host-b",
-					state:  TransactionPrepareFailed,
-					client: failRollback(),
-				},
-			},
-		},
-		{
-			name:        "host-a: prepared -x-> committed, host-b: committed -> committed",
+			name:        "a: P -x-> C, b: C",
 			wantOutcome: OutcomeInconsistent,
 			participants: []participantConfig{
 				{
@@ -805,14 +615,13 @@ func TestCoordinator_Execute(t *testing.T) {
 					client: failCommit(),
 				},
 				{
-					id:     "host-b",
-					state:  TransactionCommitted,
-					client: ok(),
+					id:    "host-b",
+					state: TransactionCommitted,
 				},
 			},
 		},
 		{
-			name:        "host-a: prepared -x-> rolled back, host-b: rolled back -> rolled back",
+			name:        "a: P -x-> R, b: R",
 			wantOutcome: OutcomeInconsistent,
 			participants: []participantConfig{
 				{
@@ -821,57 +630,8 @@ func TestCoordinator_Execute(t *testing.T) {
 					client: failRollback(),
 				},
 				{
-					id:     "host-b",
-					state:  TransactionRolledBack,
-					client: ok(),
-				},
-			},
-		},
-		{
-			name:        "host-a: prepare failed -x-> rolled back, host-b: prepare failed -x-> rolled back",
-			wantOutcome: OutcomeInconsistent,
-			participants: []participantConfig{
-				{
-					id:     "host-a",
-					state:  TransactionPrepareFailed,
-					client: failRollback(),
-				},
-				{
-					id:     "host-b",
-					state:  TransactionPrepareFailed,
-					client: failRollback(),
-				},
-			},
-		},
-		{
-			name:        "host-a: prepare failed -x-> rolled back, host-b: prepare failed -> rolled back",
-			wantOutcome: OutcomeInconsistent,
-			participants: []participantConfig{
-				{
-					id:     "host-a",
-					state:  TransactionPrepareFailed,
-					client: failRollback(),
-				},
-				{
-					id:     "host-b",
-					state:  TransactionPrepareFailed,
-					client: ok(),
-				},
-			},
-		},
-		{
-			name:        "host-a: prepare failed -x-> rolled back, host-b: rolled back -> rolled back",
-			wantOutcome: OutcomeInconsistent,
-			participants: []participantConfig{
-				{
-					id:     "host-a",
-					state:  TransactionPrepareFailed,
-					client: failRollback(),
-				},
-				{
-					id:     "host-b",
-					state:  TransactionRolledBack,
-					client: ok(),
+					id:    "host-b",
+					state: TransactionRolledBack,
 				},
 			},
 		},
