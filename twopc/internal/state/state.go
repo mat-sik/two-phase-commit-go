@@ -73,7 +73,7 @@ func (s State[ID]) shouldIssuePrepares() bool {
 }
 
 func (s State[ID]) IsTerminal() bool {
-	all := len(s.participantIDs)
+	all := s.participantCount()
 
 	allStarted := s.stateSets.count()
 	notStarted := all - allStarted
@@ -109,19 +109,23 @@ func (s State[ID]) anyNotStarted() bool {
 }
 
 func (s State[ID]) notStartedCount() int {
-	return len(s.participantIDs) - s.stateSets.count()
+	return s.participantCount() - s.stateSets.count()
 }
 
 func (s State[ID]) isPrepared() bool {
-	return s.stateSets.allPrepared(len(s.participantIDs))
+	return s.stateSets.allPrepared(s.participantCount())
 }
 
 func (s State[ID]) IsCommitted() bool {
-	return s.stateSets.allCommitted(len(s.participantIDs))
+	return s.stateSets.allCommitted(s.participantCount())
 }
 
 func (s State[ID]) IsRolledBack() bool {
-	return s.stateSets.allRolledBack(len(s.participantIDs))
+	return s.stateSets.allRolledBack(s.participantCount())
+}
+
+func (s State[ID]) participantCount() int {
+	return len(s.participantIDs)
 }
 
 func (s State[ID]) nextPrepareTransitions() []Transition[ID] {
@@ -145,7 +149,7 @@ func (s State[ID]) nextRollbackTransitions() []Transition[ID] {
 func (s State[ID]) nextTransitions(skipSet stateSet[ID],
 	newTransitionFunc func(participantID ID) Transition[ID],
 ) []Transition[ID] {
-	newTransitions := make([]Transition[ID], 0, len(s.participantIDs)-len(skipSet))
+	newTransitions := make([]Transition[ID], 0, s.participantCount()-len(skipSet))
 	for participantID := range s.participantIDs {
 		if !skipSet.has(participantID) {
 			newTransitions = append(newTransitions, newTransitionFunc(participantID))
