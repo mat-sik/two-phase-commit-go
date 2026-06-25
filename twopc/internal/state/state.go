@@ -75,7 +75,39 @@ func (s State[ID]) shouldIssuePrepares() bool {
 }
 
 func (s State[ID]) IsTerminal() bool {
-	return s.IsCommitted() || s.IsRolledBack()
+	all := len(s.participantIDs)
+
+	allStarted := s.stateSets.count()
+	notStarted := all - allStarted
+	if notStarted == all {
+		return false
+	}
+
+	prepareFailed := s.stateSets.prepareFailedCount()
+	committed := s.stateSets.committedCount()
+	rolledBack := s.stateSets.rolledBackCount()
+
+	allPrepareFailed := prepareFailed == all
+	allCommitted := committed == all
+	allRolledBack := rolledBack == all
+
+	allNotStartedOrPrepareFailed := notStarted+prepareFailed == all
+	allNotStartedOrRolledBack := notStarted+rolledBack == all
+
+	allPrepareFailedOrRolledBack := prepareFailed+rolledBack == all
+	allNotStartedOrPrepareFailedOrRolledBack := notStarted+prepareFailed+rolledBack == all
+
+	return allPrepareFailed ||
+		allCommitted ||
+		allRolledBack ||
+		allNotStartedOrPrepareFailed ||
+		allNotStartedOrRolledBack ||
+		allPrepareFailedOrRolledBack ||
+		allNotStartedOrPrepareFailedOrRolledBack
+}
+
+func (s State[ID]) notStartedCount() int {
+	return len(s.participantIDs) - s.stateSets.count()
 }
 
 func (s State[ID]) isPrepared() bool {
@@ -99,7 +131,13 @@ func (s State[ID]) nextCommitTransitions() []Transition[ID] {
 }
 
 func (s State[ID]) nextRollbackTransitions() []Transition[ID] {
-	return s.nextTransitions(s.stateSets.rolledBack, RollbackTransition)
+	newTransitions := make([]Transition[ID], 0, len(s.stateSets.prepared))
+	for participantID := range s.participantIDs {
+		if s.stateSets.prepared.has(participantID) {
+			newTransitions = append(newTransitions, RollbackTransition(participantID))
+		}
+	}
+	return newTransitions
 }
 
 func (s State[ID]) nextTransitions(skipSet stateSet[ID],
@@ -239,6 +277,22 @@ func (ss *stateSets[ID]) anyCommitted() bool {
 
 func (ss *stateSets[ID]) anyRolledBack() bool {
 	return len(ss.rolledBack) > 0
+}
+
+func (ss *stateSets[ID]) count() int {
+	return ss.preparedCount() + ss.prepareFailedCount() + ss.committedCount() + ss.rolledBackCount()
+}
+
+func (ss *stateSets[ID]) preparedCount() int {
+	return len(ss.prepared)
+}
+
+func (ss *stateSets[ID]) prepareFailedCount() int {
+	return len(ss.prepareFailed)
+}
+
+func (ss *stateSets[ID]) committedCount() int {
+	return len(ss.committed)
 }
 
 func (ss *stateSets[ID]) rolledBackCount() int {

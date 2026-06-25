@@ -571,18 +571,6 @@ func Test_state_nextStateTransitions(t *testing.T) {
 			}),
 		},
 		{
-			name: "(NS, C)",
-			state: State[string]{
-				participantIDs: hosts("host-a", "host-b"),
-				stateSets: stateSets[string]{
-					prepared:      emptyHosts(),
-					prepareFailed: emptyHosts(),
-					committed:     hosts("host-b"),
-					rolledBack:    emptyHosts(),
-				},
-			},
-		},
-		{
 			name: "(NS,PF)",
 			state: State[string]{
 				participantIDs: hosts("host-a", "host-b"),
@@ -641,6 +629,18 @@ func Test_state_nextStateTransitions(t *testing.T) {
 				committed:     emptyHosts(),
 				rolledBack:    hosts("host-a", "host-b"),
 			}),
+		},
+		{
+			name: "(NS,PF,R)",
+			state: State[string]{
+				participantIDs: hosts("host-a", "host-b", "host-c"),
+				stateSets: stateSets[string]{
+					prepared:      emptyHosts(),
+					prepareFailed: hosts("host-b"),
+					committed:     emptyHosts(),
+					rolledBack:    hosts("host-c"),
+				},
+			},
 		},
 		// ═════════════════════════════════════════════════════════════════════════════
 		// Invalid states
