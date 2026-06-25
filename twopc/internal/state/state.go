@@ -117,11 +117,23 @@ func (s State[ID]) isPrepared() bool {
 }
 
 func (s State[ID]) IsCommitted() bool {
-	return s.stateSets.allCommitted(s.participantCount())
+	return s.participantCount() == s.stateSets.committedCount()
 }
 
-func (s State[ID]) IsRolledBack() bool {
-	return s.stateSets.allRolledBack(s.participantCount())
+func (s State[ID]) IsFailed() bool {
+	return s.isRolledBack() || s.isPartiallyRolledBackPartiallyPrepareFailed() || s.isPrepareFailed()
+}
+
+func (s State[ID]) isRolledBack() bool {
+	return s.participantCount() == s.stateSets.rolledBackCount()
+}
+
+func (s State[ID]) isPartiallyRolledBackPartiallyPrepareFailed() bool {
+	return s.participantCount() == (s.stateSets.prepareFailedCount() + s.stateSets.rolledBackCount())
+}
+
+func (s State[ID]) isPrepareFailed() bool {
+	return s.participantCount() == s.stateSets.prepareFailedCount()
 }
 
 func (s State[ID]) participantCount() int {
@@ -261,20 +273,12 @@ func (ss *stateSets[ID]) stateSetByTransactionState(txState transaction.State) (
 	return set, true
 }
 
-func (ss *stateSets[ID]) allCommitted(participantCount int) bool {
-	return len(ss.committed) == participantCount
-}
-
-func (ss *stateSets[ID]) allRolledBack(participantCount int) bool {
-	return len(ss.rolledBack) == participantCount
+func (ss *stateSets[ID]) allPrepared(participantCount int) bool {
+	return len(ss.prepared) == participantCount
 }
 
 func (ss *stateSets[ID]) anyPreparedFailed() bool {
 	return len(ss.prepareFailed) > 0
-}
-
-func (ss *stateSets[ID]) allPrepared(participantCount int) bool {
-	return len(ss.prepared) == participantCount
 }
 
 func (ss *stateSets[ID]) anyCommitted() bool {

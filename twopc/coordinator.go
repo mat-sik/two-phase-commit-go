@@ -218,10 +218,10 @@ func toTransitions[ID comparable](ops []operation[ID]) []state.Transition[ID] {
 
 func outcome[ID comparable](s state.State[ID]) Outcome {
 	switch {
-	case s.IsRolledBack():
-		return OutcomeRolledBack
 	case s.IsCommitted():
 		return OutcomeCommitted
+	case s.IsFailed():
+		return OutcomeRolledBack
 	default:
 		return OutcomeInconsistent
 	}
