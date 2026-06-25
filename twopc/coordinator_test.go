@@ -697,7 +697,7 @@ func TestCoordinator_Execute_dependencies_fails(t *testing.T) {
 				},
 			},
 			wantErrs:    []error{errNewClient},
-			wantOutcome: OutcomeInconsistent,
+			wantOutcome: OutcomeRolledBack,
 		},
 		{
 			name: "init state loading fails, outcome inconsistent",
