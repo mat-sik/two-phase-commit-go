@@ -52,10 +52,8 @@ func (s State[ID]) tryNextTransitions() ([]Transition[ID], error) {
 }
 
 func (s State[ID]) isInInvalidState() error {
-	if s.stateSets.anyCommitted() && s.stateSets.anyRolledBack() {
-		return invalidStateErr(s.stateSets)
-	}
-	if s.stateSets.anyPreparedFailed() && s.stateSets.anyCommitted() {
+	anyIncompatibleWithCommitted := s.anyNotStarted() || s.stateSets.anyPreparedFailed() || s.stateSets.anyRolledBack()
+	if s.stateSets.anyCommitted() && anyIncompatibleWithCommitted {
 		return invalidStateErr(s.stateSets)
 	}
 	return nil
@@ -104,6 +102,10 @@ func (s State[ID]) IsTerminal() bool {
 		allNotStartedOrRolledBack ||
 		allPrepareFailedOrRolledBack ||
 		allNotStartedOrPrepareFailedOrRolledBack
+}
+
+func (s State[ID]) anyNotStarted() bool {
+	return s.notStartedCount() > 0
 }
 
 func (s State[ID]) notStartedCount() int {
