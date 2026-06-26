@@ -4,7 +4,6 @@ import "time"
 
 type config struct {
 	sendOperationTimeout time.Duration
-	persistStateTimeout  time.Duration
 	backoffBase          time.Duration
 	backoffMax           time.Duration
 	backoffFactor        float64
@@ -21,7 +20,6 @@ func newConfig(opts ...Option) config {
 func newDefaultConfig() config {
 	return config{
 		sendOperationTimeout: 5 * time.Second,
-		persistStateTimeout:  5 * time.Second,
 		backoffBase:          200 * time.Millisecond,
 		backoffMax:           10 * time.Second,
 		backoffFactor:        2,
@@ -36,13 +34,6 @@ type Option func(*config)
 // Defaults to 5s.
 func WithSendOperationTimeout(d time.Duration) Option {
 	return func(c *config) { c.sendOperationTimeout = d }
-}
-
-// WithPersistStateTimeout sets the timeout for persisting a participant's
-// state transition to durable storage after each operation.
-// Defaults to 5s.
-func WithPersistStateTimeout(d time.Duration) Option {
-	return func(c *config) { c.persistStateTimeout = d }
 }
 
 // WithBackoffBase sets the initial backoff delay before retrying a participant

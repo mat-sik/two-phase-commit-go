@@ -8,9 +8,12 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
 )
 
-// TransactionStateChecker is used by the Coordinator to recover the persisted
-// state of a distributed transaction, typically on startup after a crash.
-// The returned map associates each participant ID with its last known state.
+// TransactionStateChecker is used during recovery to load the last known
+// state of each participant in a distributed transaction.
+//
+// The coordinator uses this information to reconstruct transaction progress
+// and resume execution after a crash or restart. The returned map associates
+// participant IDs with their most recently persisted states.
 type TransactionStateChecker[ID comparable] interface {
 	Check(ctx context.Context, transactionID string) (map[ID]TransactionState, error)
 }
@@ -69,43 +72,39 @@ func (a internalTransactionStateCheckerAdapter[ID]) Check(ctx context.Context, t
 	return mappedToInternal, nil
 }
 
-// TransactionStatePersister durably records a participant's state transition
-// before the coordinator considers the transition final.
+// TransactionStatePersister durably records participant state transitions.
 //
-// Implementations should write the state change to a durable store (e.g. a
-// database) and return a PersistResult. The coordinator calls Commit on the
-// result if the network operation to the participant also succeeded. It
-// calls Rollback if it did not. This keeps the persisted record consistent
-// with what was actually sent.
+// The coordinator invokes PersistState after a participant successfully
+// completes an operation (Prepare, Commit, or Rollback). Persistence is
+// performed asynchronously and does not influence the outcome of the
+// two-phase commit protocol.
 //
-// PersistState may block. The coordinator runs it concurrently with the
-// participant operation. The coordinator is responsible for any
-// cancellation via ctx.
+// Implementations should write the participant's latest state to durable
+// storage (for example, a database) so that a future coordinator instance
+// can recover and resume an interrupted transaction.
 //
-// Persistence can fail even when the network operation succeeds. This happens
-// when PersistResult.Err is non-nil, or the subsequent Commit/Rollback call
-// returns an error. In that case the coordinator proceeds with the
-// transaction anyway. It does not retry persistence of that one operation state
-// indefinitely or abort 2PC. The participant's actual state takes priority
-// over the durability of the coordinator's record of it.
+// Persistence failures are collected and returned as part of the final
+// Result.Err(), but they do not prevent the coordinator from continuing
+// protocol execution. Participant state is considered the source of truth,
+// persisted coordinator state exists solely for recovery.
 //
-// Participant operations must be idempotent. So a missing or inaccurate
-// persisted state is not a correctness problem, even if the coordinator
-// dies mid-2PC. A later recovery run will just re-send the operation, and
-// the participant can safely accept it again.
+// Participant operations must therefore be idempotent. If persistence is
+// missing or stale and the coordinator crashes, recovery may resend an
+// operation that was already applied. Participants must safely tolerate
+// such duplicates.
 type TransactionStatePersister[ID comparable] interface {
-	PersistState(ctx context.Context, transactionID string, participantID ID, transactionState TransactionState) PersistResult
+	PersistState(ctx context.Context, transactionID string, participantID ID, transactionState TransactionState) error
 }
 
 type transactionStatePersister[ID comparable] interface {
-	PersistState(ctx context.Context, transactionID string, participantID ID, transactionState transaction.State) PersistResult
+	PersistState(ctx context.Context, transactionID string, participantID ID, transactionState transaction.State) error
 }
 
 type internalStatePersisterAdapter[ID comparable] struct {
 	transactionStatePersister TransactionStatePersister[ID]
 }
 
-func (a internalStatePersisterAdapter[ID]) PersistState(ctx context.Context, txID string, participantID ID, txState transaction.State) PersistResult {
+func (a internalStatePersisterAdapter[ID]) PersistState(ctx context.Context, txID string, participantID ID, txState transaction.State) error {
 	return a.transactionStatePersister.PersistState(ctx, txID, participantID, toExposed(txState))
 }
 
@@ -124,25 +123,6 @@ func toExposed(txState transaction.State) TransactionState {
 	default:
 		panic("unsupported transaction.State")
 	}
-}
-
-// PersistResult is returned by TransactionStatePersister.PersistState.
-// The coordinator calls either Commit or Rollback exactly once, depending on
-// whether the corresponding network operation to the participant succeeded.
-//
-// Err, if non-nil, indicates that the persist attempt itself failed before
-// Commit or Rollback can be called. In that case, Commit and Rollback must
-// not be called.
-type PersistResult struct {
-	// Commit finalizes the persisted state change. Called when the operation
-	// to the participant succeeded.
-	Commit func() error
-	// Rollback undoes the persisted state change. Called when the operation
-	// to the participant failed.
-	Rollback func() error
-	// Err is set when the persistence operation itself failed. When non-nil,
-	// neither Commit nor Rollback should be called.
-	Err error
 }
 
 // PreparePayload is the opaque data sent to a participant during the Prepare

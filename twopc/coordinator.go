@@ -22,7 +22,6 @@ type Coordinator[ID comparable] struct {
 	stateLoader               state.Loader[ID]
 	transactionStatePersister transactionStatePersister[ID]
 	participantRegistrar      participant.Registrar[ID]
-	participantFailureCounter *participant.AttemptCounter[ID]
 }
 
 // PersistenceConfig aggregates required interfaces for transaction state persistence.
@@ -40,17 +39,6 @@ type ClientConfig[ID comparable] struct {
 }
 
 // NewCoordinator creates a new Coordinator with the provided dependencies.
-//
-// transactionStateChecker is used on startup to recover the current state of
-// an in-flight transaction (e.g. after a coordinator crash).
-//
-// transactionStatePersister is called after each phase transition to durably
-// record the new state before the result is considered final. It returns a
-// PersistResult, which the coordinator commits or rolls back depending on
-// whether the operation to the participant succeeded.
-//
-// newClientFunc is called once per participant ID to construct the gRPC (or
-// other transport) client used to send Prepare, Commit, and Rollback calls.
 func NewCoordinator[ID comparable](
 	persistenceConfig PersistenceConfig[ID],
 	clientConfig ClientConfig[ID],
@@ -63,7 +51,6 @@ func NewCoordinator[ID comparable](
 		stateLoader:               state.NewLoader(stateChecker),
 		transactionStatePersister: statePersister,
 		participantRegistrar:      newParticipantRegistrar(clientConfig),
-		participantFailureCounter: participant.NewFailureCounter[ID](),
 	}
 }
 
@@ -76,14 +63,28 @@ func newParticipantRegistrar[ID comparable](clientConfig ClientConfig[ID]) parti
 	return participant.NewRegistrar(newClientFunc, clients)
 }
 
+func (c Coordinator[ID]) newExecutor(ctx context.Context, initialState state.State[ID]) executor[ID] {
+	return executor[ID]{
+		config:                    c.config,
+		state:                     initialState,
+		participantFailureCounter: participant.NewFailureCounter[ID](),
+		participantRegistrar:      c.participantRegistrar,
+		persister:                 newPersister(ctx, c.transactionStatePersister),
+	}
+}
+
 // Execute runs the two-phase commit protocol for the given distributed transaction.
 //
 // It drives all participant transactions through the Prepare → Commit (or Rollback)
-// state machine concurrently. If the context is canceled between phases, the method
-// returns immediately with a joined error that includes the cancellation cause.
+// state machine concurrently. If the context is canceled during execution, the method
+// returns immediately with an error that includes the cancellation cause.
 //
-// Errors from individual participants are accumulated and returned as a single joined
-// error. A nil return means all participants reached a terminal committed state successfully.
+// Errors from participant operations and transaction-state persistence are accumulated
+// and returned as a single joined error. Persistence failures do not affect protocol
+// execution and may be returned even when the transaction reaches a terminal state.
+//
+// Callers should inspect the returned Result.Outcome() to determine the final
+// transaction state and Result.Err() for any errors encountered while executing it.
 func (c Coordinator[ID]) Execute(ctx context.Context, distributedTransaction DistributedTransaction[ID]) Result {
 	c.assertCorrectConfiguration(participantIDs(distributedTransaction.Transactions))
 
@@ -97,7 +98,9 @@ func (c Coordinator[ID]) Execute(ctx context.Context, distributedTransaction Dis
 
 	initialOperations := toInitialOperations(distributedTransaction.Transactions)
 
-	return c.runTransactionLoop(ctx, distributedTransaction.TransactionID, initialState, initialOperations)
+	exec := c.newExecutor(ctx, initialState)
+
+	return exec.runTransactionLoop(ctx, distributedTransaction.TransactionID, initialOperations)
 }
 
 func (c Coordinator[ID]) assertCorrectConfiguration(participantIDs []ID) {
@@ -125,44 +128,54 @@ func toInitialOperations[ID comparable](txs []Transaction[ID]) []operation[ID] {
 	return ops
 }
 
-func (c Coordinator[ID]) runTransactionLoop(
-	ctx context.Context,
-	txID string,
-	state state.State[ID],
-	ops []operation[ID],
-) Result {
-	var successful, failed []operation[ID]
-	var allErrs []error
+type executor[ID comparable] struct {
+	config                    config
+	state                     state.State[ID]
+	participantFailureCounter *participant.AttemptCounter[ID]
+	participantRegistrar      participant.Registrar[ID]
+	persister                 *persister[ID]
+}
 
-	for !state.IsTerminal() {
+func (e executor[ID]) runTransactionLoop(ctx context.Context, txID string, ops []operation[ID]) (result Result) {
+	defer func() {
+		if err := e.persister.stop(); err != nil {
+			result.err = errors.Join(result.err, err)
+		}
+	}()
+
+	var successful, failed []operation[ID]
+	var errs []error
+
+	for !e.state.IsTerminal() {
 		if err := ctx.Err(); err != nil {
+			errs = append(errs, err)
 			return Result{
-				err:     errors.Join(append(allErrs, err)...),
-				outcome: outcome(state),
+				err:     errors.Join(errs...),
+				outcome: outcome(e.state),
 			}
 		}
 
-		ops = nextOperations(state, ops)
+		ops = e.nextOperations(ops)
 
 		var err error
-		successful, failed, err = c.executeRound(ctx, txID, ops, successful[:0], failed[:0])
+		successful, failed, err = e.executeRound(ctx, txID, ops, successful[:0], failed[:0])
 
 		if err != nil {
-			allErrs = append(allErrs, err)
+			errs = append(errs, err)
 		}
 
-		nextState(state, successful, failed)
+		e.nextState(successful, failed)
 	}
 
 	return Result{
-		err:     errors.Join(allErrs...),
-		outcome: outcome(state),
+		err:     errors.Join(errs...),
+		outcome: outcome(e.state),
 	}
 }
 
-func nextOperations[ID comparable](s state.State[ID], ops []operation[ID]) []operation[ID] {
+func (e executor[ID]) nextOperations(ops []operation[ID]) []operation[ID] {
 	payloadByParticipantID := toPayloadByParticipantID(ops)
-	nextTrs := s.NextTransitions()
+	nextTrs := e.state.NextTransitions()
 	return toOperations(nextTrs, payloadByParticipantID)
 }
 
@@ -191,8 +204,8 @@ func toOperations[ID comparable](
 	return nextOps
 }
 
-func nextState[ID comparable](s state.State[ID], successful, failed []operation[ID]) {
-	s.NextState(toTransitions(successful), toTransitions(failed))
+func (e executor[ID]) nextState(successful, failed []operation[ID]) {
+	e.state.NextState(toTransitions(successful), toTransitions(failed))
 }
 
 func toTransitions[ID comparable](ops []operation[ID]) []state.Transition[ID] {
@@ -205,10 +218,10 @@ func toTransitions[ID comparable](ops []operation[ID]) []state.Transition[ID] {
 
 func outcome[ID comparable](s state.State[ID]) Outcome {
 	switch {
-	case s.IsRolledBack():
-		return OutcomeRolledBack
 	case s.IsCommitted():
-		return OutcomeCommitted
+		return OutcomeSuccess
+	case s.IsFailed():
+		return OutcomeFailed
 	default:
 		return OutcomeInconsistent
 	}
@@ -226,7 +239,7 @@ type Result struct {
 
 // Err returns any errors accumulated during execution.
 // These may originate from participant RPCs, state persistence, or context cancellation.
-// A nil error alongside OutcomeCommitted or OutcomeRolledBack means the transaction
+// A nil error alongside OutcomeSuccess or OutcomeFailed means the transaction
 // completed cleanly. A non-nil error alongside a terminal outcome means the transaction
 // reached that outcome despite encountering errors along the way.
 func (r Result) Err() error {
@@ -252,30 +265,33 @@ const (
 	// participants to a terminal state.
 	OutcomeInconsistent = iota
 
-	// OutcomeCommitted means all participants successfully prepared and committed.
-	// The transaction is durably complete.
-	OutcomeCommitted
+	// OutcomeSuccess means all participants successfully prepared and committed their transaction.
+	// This is a successful terminal state.
+	OutcomeSuccess
 
-	// OutcomeRolledBack means all participants have been rolled back.
-	// This occurs when at least one participant failed the prepare phase,
-	// causing the coordinator to roll back all participants before any commit was attempted.
-	OutcomeRolledBack
+	// OutcomeFailed means that the state is consistent but distributed transaction failed.
+	// occurs when:
+	// - all participant transactions have been rolled back
+	// - all participants failed to prepare transaction
+	// - some failed to prepare transaction and some have its transaction rolled back
+	// This is an unsuccessful terminal state.
+	OutcomeFailed
 )
 
-func (c Coordinator[ID]) executeRound(
+func (e executor[ID]) executeRound(
 	ctx context.Context,
 	txID string,
 	ops, successful, failed []operation[ID],
 ) ([]operation[ID], []operation[ID], error) {
 	resultCh := make(chan operationResult[ID], len(ops))
-	c.runOperationsConcurrently(ctx, resultCh, txID, ops)
+	e.sendOperationsConcurrently(ctx, resultCh, txID, ops)
 
 	var errs []error
 	for result := range resultCh {
 		if result.err != nil {
 			errs = append(errs, result.err)
 		}
-		if result.isFailed() {
+		if result.err != nil {
 			failed = append(failed, result.operation)
 		} else {
 			successful = append(successful, result.operation)
@@ -290,7 +306,7 @@ func (c Coordinator[ID]) executeRound(
 	return successful, failed, err
 }
 
-func (c Coordinator[ID]) runOperationsConcurrently(
+func (e executor[ID]) sendOperationsConcurrently(
 	ctx context.Context,
 	resultCh chan<- operationResult[ID],
 	txID string,
@@ -302,7 +318,12 @@ func (c Coordinator[ID]) runOperationsConcurrently(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := c.runOperation(ctx, txID, op)
+			err := e.withBackoff(ctx, op.participantID, func() error {
+				return e.sendOperation(ctx, txID, op)
+			})
+			if err == nil {
+				e.persister.enqueuePersistState(ctx, txID, op.participantID, op.targetState)
+			}
 			resultCh <- operationResult[ID]{err: err, operation: op}
 		}()
 	}
@@ -318,58 +339,15 @@ type operationResult[ID comparable] struct {
 	operation operation[ID]
 }
 
-func (r operationResult[ID]) isFailed() bool {
-	return errors.Is(r.err, errSendingOperation)
-}
-
-func (c Coordinator[ID]) runOperation(ctx context.Context, txID string, op operation[ID]) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	operationSentCh := c.sendOperationConcurrently(ctx, txID, op)
-
-	persistCtx, persistCancel := context.WithTimeout(ctx, c.config.persistStateTimeout)
-	defer persistCancel()
-	persistResultCh := c.persistStateConcurrently(persistCtx, txID, op.participantID, op.targetState)
-
-	err := <-operationSentCh
-
-	operationSendingFailed := err != nil
-	if operationSendingFailed {
-		err = errors.Join(err, errSendingOperation)
-		cancel()
-	}
-
-	persistResult := <-persistResultCh
-
-	persistErr := c.finaliseStatePersisting(persistResult, txID, op.participantID, op.targetState, operationSendingFailed)
-
-	return errors.Join(err, persistErr)
-}
-
-var errSendingOperation = errors.New("failed sending operation")
-
-func (c Coordinator[ID]) sendOperationConcurrently(ctx context.Context, txID string, op operation[ID]) <-chan error {
-	operationDoneCh := make(chan error)
-
-	go func() {
-		operationDoneCh <- c.withBackoff(ctx, op.participantID, func() error {
-			return c.sendOperation(ctx, txID, op)
-		})
-	}()
-
-	return operationDoneCh
-}
-
-func (c Coordinator[ID]) withBackoff(ctx context.Context, participantID ID, workFunc func() error) error {
-	if attempt := c.participantFailureCounter.Attempt(participantID); attempt > 0 {
-		backoffWait(ctx, c.config, attempt)
+func (e executor[ID]) withBackoff(ctx context.Context, participantID ID, workFunc func() error) error {
+	if attempt := e.participantFailureCounter.Attempt(participantID); attempt > 0 {
+		backoffWait(ctx, e.config, attempt)
 	}
 	if err := workFunc(); err != nil {
-		c.participantFailureCounter.Fail(participantID)
+		e.participantFailureCounter.Fail(participantID)
 		return fmt.Errorf("backing off participant %v: %w", participantID, err)
 	}
-	c.participantFailureCounter.Success(participantID)
+	e.participantFailureCounter.Success(participantID)
 	return nil
 }
 
@@ -378,11 +356,11 @@ func backoffWait(ctx context.Context, cfg config, attempt int) {
 	backoff.Wait(ctx, attempt)
 }
 
-func (c Coordinator[ID]) sendOperation(ctx context.Context, txID string, op operation[ID]) error {
-	ctx, cancel := context.WithTimeout(ctx, c.config.sendOperationTimeout)
+func (e executor[ID]) sendOperation(ctx context.Context, txID string, op operation[ID]) error {
+	ctx, cancel := context.WithTimeout(ctx, e.config.sendOperationTimeout)
 	defer cancel()
 
-	client, err := c.participantRegistrar.GetClient(op.participantID)
+	client, err := e.participantRegistrar.GetClient(op.participantID)
 	if err != nil {
 		return fmt.Errorf("getting %v client: %w", op.participantID, err)
 	}
@@ -408,59 +386,6 @@ func (c Coordinator[ID]) sendOperation(ctx context.Context, txID string, op oper
 	}
 }
 
-func (c Coordinator[ID]) persistStateConcurrently(
-	ctx context.Context,
-	transactionID string,
-	participantID ID,
-	transactionState transaction.State,
-) <-chan PersistResult {
-	persistResultCh := make(chan PersistResult)
-
-	go func() {
-		persistResultCh <- c.transactionStatePersister.PersistState(ctx, transactionID, participantID, transactionState)
-	}()
-
-	return persistResultCh
-}
-
-func (c Coordinator[ID]) finaliseStatePersisting(
-	result PersistResult,
-	txID string,
-	participantID ID,
-	targetState transaction.State,
-	operationFailed bool,
-) (err error) {
-	defer func() {
-		if err != nil {
-			err = errors.Join(err, errPersistingState)
-		}
-	}()
-
-	if result.Err != nil {
-		return fmt.Errorf("persisting participant %v tx %s state %d failed: %w",
-			participantID, txID, targetState, result.Err,
-		)
-	}
-
-	if operationFailed {
-		if rollbackErr := result.Rollback(); rollbackErr != nil {
-			return fmt.Errorf("rolling back participant %v tx %s state %d failed: %w",
-				participantID, txID, targetState, rollbackErr,
-			)
-		}
-		return nil
-	}
-
-	if commitErr := result.Commit(); commitErr != nil {
-		return fmt.Errorf("committing participant %v tx %s state %d failed: %w",
-			participantID, txID, targetState, commitErr,
-		)
-	}
-	return nil
-}
-
-var errPersistingState = errors.New("failed persisting state")
-
 type operation[ID comparable] struct {
 	participantID ID
 	payload       participant.PreparePayload
@@ -483,8 +408,8 @@ func (o operation[ID]) toTransition() state.Transition[ID] {
 		return state.PrepareTransition(o.participantID)
 	case o.sourceState == transaction.Prepared && o.targetState == transaction.Committed:
 		return state.CommitTransition(o.participantID)
-	case o.targetState == transaction.RolledBack:
-		return state.RollbackTransition(o.participantID, o.sourceState)
+	case o.sourceState == transaction.Prepared && o.targetState == transaction.RolledBack:
+		return state.RollbackTransition(o.participantID)
 	default:
 		panic("logic should prohibit this")
 	}

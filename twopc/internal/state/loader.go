@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
 )
@@ -39,25 +41,51 @@ func (l Loader[ID]) LoadState(ctx context.Context, transactionID string, partici
 		return State[ID]{}, fmt.Errorf("checking tx %s states: %w", transactionID, err)
 	}
 
+	participantIDsSet := toSet(participantIDs)
+
 	if len(stateByParticipantID) == 0 {
 		return State[ID]{
-			participantIDs: toSet(participantIDs),
+			participantIDs: participantIDsSet,
 			stateSets:      sets,
 		}, nil
 	}
 
-	if err = validateParticipantIDs(stateByParticipantID, participantIDs); err != nil {
+	if err = validateParticipantIDs(stateByParticipantID, participantIDsSet); err != nil {
 		return State[ID]{}, err
 	}
 
-	for _, participantID := range participantIDs {
-		sets.addValueToSet(stateByParticipantID[participantID], participantID)
+	if notPersisted, terminalFound := l.loadPersisted(sets, participantIDsSet, stateByParticipantID); terminalFound {
+		l.assumeNotPersistedArePrepared(sets, notPersisted)
 	}
 
 	return State[ID]{
-		participantIDs: toSet(participantIDs),
+		participantIDs: participantIDsSet,
 		stateSets:      sets,
 	}, nil
+}
+
+func (l Loader[ID]) loadPersisted(
+	sets stateSets[ID],
+	participantIDs map[ID]struct{},
+	stateByParticipantID map[ID]transaction.State,
+) (notPersisted []ID, terminalFound bool) {
+	for participantID := range participantIDs {
+		if state, ok := stateByParticipantID[participantID]; ok {
+			sets.addValueToSet(state, participantID)
+			if state == transaction.PrepareFailed || state == transaction.Committed || state == transaction.RolledBack {
+				terminalFound = true
+			}
+		} else {
+			notPersisted = append(notPersisted, participantID)
+		}
+	}
+	return notPersisted, terminalFound
+}
+
+func (l Loader[ID]) assumeNotPersistedArePrepared(sets stateSets[ID], notPersisted []ID) {
+	for _, participantID := range notPersisted {
+		sets.addValueToSet(transaction.Prepared, participantID)
+	}
 }
 
 func toSet[ID comparable](participantIDs []ID) map[ID]struct{} {
@@ -68,25 +96,14 @@ func toSet[ID comparable](participantIDs []ID) map[ID]struct{} {
 	return participantIDsSet
 }
 
-func validateParticipantIDs[ID comparable](loadedFromPersistentStore map[ID]transaction.State, providedAsInput []ID) error {
-	if len(loadedFromPersistentStore) != len(providedAsInput) {
-		return notMatchingParticipantsErr(loadedFromPersistentStore, providedAsInput)
-	}
-	for _, id := range providedAsInput {
-		_, ok := loadedFromPersistentStore[id]
-		if !ok {
-			return fmt.Errorf("extra participant %v", id)
+func validateParticipantIDs[ID comparable](persisted map[ID]transaction.State, input map[ID]struct{}) error {
+	for persistedParticipant := range persisted {
+		if _, ok := input[persistedParticipant]; !ok {
+			return fmt.Errorf("persisted participant %v not found in the input %v",
+				persistedParticipant,
+				slices.Collect(maps.Keys(input)),
+			)
 		}
 	}
 	return nil
-}
-
-func notMatchingParticipantsErr[ID comparable](loadedFromPersistentStore map[ID]transaction.State, provided []ID) error {
-	persisted := make([]ID, 0, len(loadedFromPersistentStore))
-	for k := range loadedFromPersistentStore {
-		persisted = append(persisted, k)
-	}
-	return fmt.Errorf("not matching participants persisted %v provided %v",
-		persisted, provided,
-	)
 }
