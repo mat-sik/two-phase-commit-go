@@ -219,9 +219,9 @@ func toTransitions[ID comparable](ops []operation[ID]) []state.Transition[ID] {
 func outcome[ID comparable](s state.State[ID]) Outcome {
 	switch {
 	case s.IsCommitted():
-		return OutcomeCommitted
+		return OutcomeSuccess
 	case s.IsFailed():
-		return OutcomeRolledBack
+		return OutcomeFailed
 	default:
 		return OutcomeInconsistent
 	}
@@ -239,7 +239,7 @@ type Result struct {
 
 // Err returns any errors accumulated during execution.
 // These may originate from participant RPCs, state persistence, or context cancellation.
-// A nil error alongside OutcomeCommitted or OutcomeRolledBack means the transaction
+// A nil error alongside OutcomeSuccess or OutcomeFailed means the transaction
 // completed cleanly. A non-nil error alongside a terminal outcome means the transaction
 // reached that outcome despite encountering errors along the way.
 func (r Result) Err() error {
@@ -265,14 +265,17 @@ const (
 	// participants to a terminal state.
 	OutcomeInconsistent = iota
 
-	// OutcomeCommitted means all participants successfully prepared and committed.
-	// The transaction is durably complete.
-	OutcomeCommitted
+	// OutcomeSuccess means all participants successfully prepared and committed their transaction.
+	// This is a successful terminal state.
+	OutcomeSuccess
 
-	// OutcomeRolledBack means all participants have been rolled back.
-	// This occurs when at least one participant failed the prepare phase,
-	// causing the coordinator to roll back all participants before any commit was attempted.
-	OutcomeRolledBack
+	// OutcomeFailed means that the state is consistent but distributed transaction failed.
+	// occurs when:
+	// - all participant transactions have been rolled back
+	// - all participants failed to prepare transaction
+	// - some failed to prepare transaction and some have its transaction rolled back
+	// This is an unsuccessful terminal state.
+	OutcomeFailed
 )
 
 func (e executor[ID]) executeRound(

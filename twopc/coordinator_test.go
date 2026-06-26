@@ -15,7 +15,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		// ═════════════════════════════════════════════════════════════════════════════
 		{
 			name:        "NS -> P -> C",
-			wantOutcome: OutcomeCommitted,
+			wantOutcome: OutcomeSuccess,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -24,9 +24,8 @@ func TestCoordinator_Execute(t *testing.T) {
 			},
 		},
 		{
-			name: "NS -> PF",
-			// TODO: Maybe this outcome should be renamed so that we can distinguish these two terminal states
-			wantOutcome: OutcomeRolledBack,
+			name:        "NS -> PF",
+			wantOutcome: OutcomeFailed,
 			participants: []participantConfig{
 				{
 					id:     "host-a",
@@ -37,7 +36,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "a: NS -> P -> C, b: NS -> P -> C",
-			wantOutcome: OutcomeCommitted,
+			wantOutcome: OutcomeSuccess,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -51,7 +50,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "a: NS -> PF, b: NS -> PF",
-			wantOutcome: OutcomeRolledBack,
+			wantOutcome: OutcomeFailed,
 			participants: []participantConfig{
 				{
 					id:     "host-a",
@@ -67,7 +66,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "a: NS -> P -> R, b: NS -> PF",
-			wantOutcome: OutcomeRolledBack,
+			wantOutcome: OutcomeFailed,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -85,7 +84,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		// ═════════════════════════════════════════════════════════════════════════════
 		{
 			name:        "a: P(NS) -> C, b: P -> C",
-			wantOutcome: OutcomeCommitted,
+			wantOutcome: OutcomeSuccess,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -99,7 +98,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "(NS,PF)",
-			wantOutcome: OutcomeRolledBack,
+			wantOutcome: OutcomeFailed,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -113,7 +112,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "a: P(NS) -> C, b: C",
-			wantOutcome: OutcomeCommitted,
+			wantOutcome: OutcomeSuccess,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -127,7 +126,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "a: P(NS) -> R, b: R",
-			wantOutcome: OutcomeRolledBack,
+			wantOutcome: OutcomeFailed,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -141,7 +140,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "a: P(NS) -> C, b: P(NS) -> C, c: P(NS) -> C",
-			wantOutcome: OutcomeCommitted,
+			wantOutcome: OutcomeSuccess,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -159,7 +158,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "a: P(NS) -> C, b: P(NS) -> C, c: P -> C",
-			wantOutcome: OutcomeCommitted,
+			wantOutcome: OutcomeSuccess,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -177,7 +176,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "(NS,NS,PF)",
-			wantOutcome: OutcomeRolledBack,
+			wantOutcome: OutcomeFailed,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -195,7 +194,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "a: P(NS) -> C, b: P(NS) -> C, c: C",
-			wantOutcome: OutcomeCommitted,
+			wantOutcome: OutcomeSuccess,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -213,7 +212,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "(NS,NS,R)",
-			wantOutcome: OutcomeRolledBack,
+			wantOutcome: OutcomeFailed,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -231,7 +230,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "a: P(NS) -> C, host-b: P -> C, host-c: P -> C",
-			wantOutcome: OutcomeCommitted,
+			wantOutcome: OutcomeSuccess,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -249,7 +248,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "a: NS, b: P -> R, c: PF -> R",
-			wantOutcome: OutcomeRolledBack,
+			wantOutcome: OutcomeFailed,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -267,7 +266,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "a: P(NS) -> C, b: P -> C, c: C",
-			wantOutcome: OutcomeCommitted,
+			wantOutcome: OutcomeSuccess,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -285,7 +284,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "a: NS, b: P -> R, c: R",
-			wantOutcome: OutcomeRolledBack,
+			wantOutcome: OutcomeFailed,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -303,7 +302,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "(NS,PF,PF)",
-			wantOutcome: OutcomeRolledBack,
+			wantOutcome: OutcomeFailed,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -321,7 +320,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "(NS,PF,R)",
-			wantOutcome: OutcomeRolledBack,
+			wantOutcome: OutcomeFailed,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -339,7 +338,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "(NS,C,C)",
-			wantOutcome: OutcomeCommitted,
+			wantOutcome: OutcomeSuccess,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -357,7 +356,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "(NS,R,R)",
-			wantOutcome: OutcomeRolledBack,
+			wantOutcome: OutcomeFailed,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -375,7 +374,7 @@ func TestCoordinator_Execute(t *testing.T) {
 		},
 		{
 			name:        "a: P(NS) -> R, b: P -> R, c: PF, d: R",
-			wantOutcome: OutcomeRolledBack,
+			wantOutcome: OutcomeFailed,
 			participants: []participantConfig{
 				{
 					id:    "host-a",
@@ -674,7 +673,7 @@ func TestCoordinator_Execute_dependencies_fails(t *testing.T) {
 				},
 			},
 			wantErrs:    []error{errPersist},
-			wantOutcome: OutcomeCommitted,
+			wantOutcome: OutcomeSuccess,
 		},
 		{
 			name: "host client not registered, new client fails init, outcome inconsistent",
@@ -697,7 +696,7 @@ func TestCoordinator_Execute_dependencies_fails(t *testing.T) {
 				},
 			},
 			wantErrs:    []error{errNewClient},
-			wantOutcome: OutcomeRolledBack,
+			wantOutcome: OutcomeFailed,
 		},
 		{
 			name: "init state loading fails, outcome inconsistent",
