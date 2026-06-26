@@ -79,6 +79,8 @@ github.com/mat-sik/two-phase-commit-go/twopc v1.0.8 h1:mFID4F4GKOO+6+is1Lw5S3g+H
 github.com/mat-sik/two-phase-commit-go/twopc v1.0.8/go.mod h1:GuBhO5PTdMc7/qO0O8WldsToMt7JpeGxt6a35qKYG5E=
 github.com/mat-sik/two-phase-commit-go/twopc v1.0.9 h1:LXdXTkkQ7AQZGh+KyPlOHN5Ac4lHrViXzXJTuUESwBU=
 github.com/mat-sik/two-phase-commit-go/twopc v1.0.9/go.mod h1:GuBhO5PTdMc7/qO0O8WldsToMt7JpeGxt6a35qKYG5E=
+github.com/mat-sik/two-phase-commit-go/twopc v1.1.0 h1:HARBA8PuYDKb2CQQry9KEi+BfyRFd+Hfm34rJjLw4Yk=
+github.com/mat-sik/two-phase-commit-go/twopc v1.1.0/go.mod h1:GuBhO5PTdMc7/qO0O8WldsToMt7JpeGxt6a35qKYG5E=
 github.com/mdelapenya/tlscert v0.2.0 h1:7H81W6Z/4weDvZBNOfQte5GpIMo0lGYEeWbkGp5LJHI=
 github.com/mdelapenya/tlscert v0.2.0/go.mod h1:O4njj3ELLnJjGdkN7M/vIVCpZ+Cf0L6muqOG4tLSl8o=
 github.com/moby/docker-image-spec v1.3.1 h1:jMKff3w6PgbfSa69GfNg+zN/XLhfXJGnEx3Nl2EsFP0=

@@ -62,16 +62,26 @@ func (s PostgresTransactionStatePersister) PersistState(
 	transactionID string,
 	participantID string,
 	transactionState twopc.TransactionState,
-) twopc.PersistResult {
-	tx, err := s.pool.Begin(ctx)
+) (err error) {
+	var tx pgx.Tx
+	tx, err = s.pool.Begin(ctx)
 	if err != nil {
-		return twopc.PersistResult{
-			Err: fmt.Errorf(
-				"beginning pgx tx for persisting tx %s state %d for participant %s: %w",
-				transactionID, transactionState, participantID, err,
-			),
-		}
+		return fmt.Errorf(
+			"beginning pgx tx for persisting tx %s state %d for participant %s: %w",
+			transactionID, transactionState, participantID, err,
+		)
 	}
+	defer func() {
+		if err != nil {
+			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+				err = errors.Join(err, fmt.Errorf(
+					"rolling back pgx tx for persisting tx %s state %d for participant %s: %w",
+					transactionID, transactionState, participantID, rollbackErr,
+				))
+			}
+		}
+	}()
+
 	const persistStateQuery = `
 			INSERT INTO transaction_states (transaction_id, participant_id, state)
 			VALUES ($1, $2, $3)
@@ -79,31 +89,16 @@ func (s PostgresTransactionStatePersister) PersistState(
 				SET state = EXCLUDED.state
 	`
 	if _, err = tx.Exec(ctx, persistStateQuery, transactionID, participantID, transactionState); err != nil {
-		err = fmt.Errorf(
+		return fmt.Errorf(
 			"persisting tx %s state %d for participant %s: %w",
 			transactionID, transactionState, participantID, err,
 		)
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-			err = errors.Join(err, fmt.Errorf(
-				"rolling back pgx tx for persisting tx %s state %d for participant %s: %w",
-				transactionID, transactionState, participantID, rollbackErr,
-			))
-		}
-		return twopc.PersistResult{
-			Err: err,
-		}
 	}
-	return successfulPersistResult(ctx, tx)
-}
-
-func successfulPersistResult(ctx context.Context, tx pgx.Tx) twopc.PersistResult {
-	return twopc.PersistResult{
-		Commit: func() error {
-			return tx.Commit(ctx)
-		},
-		Rollback: func() error {
-			return tx.Rollback(ctx)
-		},
-		Err: nil,
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf(
+			"committing tx %s state %d for participant %s: %w",
+			transactionID, transactionState, participantID, err,
+		)
 	}
+	return nil
 }

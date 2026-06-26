@@ -45,7 +45,7 @@ func Test_mock_persistence_basic_logic(t *testing.T) {
 				},
 			},
 			wantErr:       false,
-			wantedOutcome: twopc.OutcomeCommitted,
+			wantedOutcome: twopc.OutcomeSuccess,
 		},
 		{
 			name: "REST client happy path",
@@ -87,7 +87,7 @@ func Test_mock_persistence_basic_logic(t *testing.T) {
 				},
 			},
 			wantErr:       false,
-			wantedOutcome: twopc.OutcomeCommitted,
+			wantedOutcome: twopc.OutcomeSuccess,
 		},
 		{
 			name: "mixed clients happy path",
@@ -125,7 +125,7 @@ func Test_mock_persistence_basic_logic(t *testing.T) {
 				},
 			},
 			wantErr:       false,
-			wantedOutcome: twopc.OutcomeCommitted,
+			wantedOutcome: twopc.OutcomeSuccess,
 		},
 		{
 			name: "failing gRPC client -> rollback",
@@ -158,7 +158,7 @@ func Test_mock_persistence_basic_logic(t *testing.T) {
 				},
 			},
 			wantErr:       true,
-			wantedOutcome: twopc.OutcomeRolledBack,
+			wantedOutcome: twopc.OutcomeFailed,
 		},
 		{
 			name: "failing REST client -> rollback",
@@ -200,7 +200,7 @@ func Test_mock_persistence_basic_logic(t *testing.T) {
 				},
 			},
 			wantErr:       true,
-			wantedOutcome: twopc.OutcomeRolledBack,
+			wantedOutcome: twopc.OutcomeFailed,
 		},
 		{
 			name: "failing gRPC client -> committed",
@@ -233,7 +233,7 @@ func Test_mock_persistence_basic_logic(t *testing.T) {
 				},
 			},
 			wantErr:       true,
-			wantedOutcome: twopc.OutcomeCommitted,
+			wantedOutcome: twopc.OutcomeSuccess,
 		},
 		{
 			name: "failing REST client -> committed",
@@ -275,7 +275,7 @@ func Test_mock_persistence_basic_logic(t *testing.T) {
 				},
 			},
 			wantErr:       true,
-			wantedOutcome: twopc.OutcomeCommitted,
+			wantedOutcome: twopc.OutcomeSuccess,
 		},
 	}
 	for _, tt := range tests {

@@ -48,7 +48,7 @@ func Test_postgres_persistence(t *testing.T) {
 				},
 			},
 			wantErr:       false,
-			wantedOutcome: twopc.OutcomeCommitted,
+			wantedOutcome: twopc.OutcomeSuccess,
 		},
 		{
 			name: "REST client basic logic happy path",
@@ -90,7 +90,7 @@ func Test_postgres_persistence(t *testing.T) {
 				},
 			},
 			wantErr:       false,
-			wantedOutcome: twopc.OutcomeCommitted,
+			wantedOutcome: twopc.OutcomeSuccess,
 		},
 		{
 			name: "gRPC client transfer logic happy path",
@@ -135,7 +135,7 @@ func Test_postgres_persistence(t *testing.T) {
 				},
 			},
 			wantErr:       false,
-			wantedOutcome: twopc.OutcomeCommitted,
+			wantedOutcome: twopc.OutcomeSuccess,
 		},
 		{
 			name: "REST client transfer logic happy path",
@@ -180,7 +180,7 @@ func Test_postgres_persistence(t *testing.T) {
 				},
 			},
 			wantErr:       false,
-			wantedOutcome: twopc.OutcomeCommitted,
+			wantedOutcome: twopc.OutcomeSuccess,
 		},
 		{
 			name: "mixed client basic logic happy path",
@@ -218,7 +218,7 @@ func Test_postgres_persistence(t *testing.T) {
 				},
 			},
 			wantErr:       false,
-			wantedOutcome: twopc.OutcomeCommitted,
+			wantedOutcome: twopc.OutcomeSuccess,
 		},
 		{
 			name: "mixed client mixed logic happy path",
@@ -260,7 +260,7 @@ func Test_postgres_persistence(t *testing.T) {
 				},
 			},
 			wantErr:       false,
-			wantedOutcome: twopc.OutcomeCommitted,
+			wantedOutcome: twopc.OutcomeSuccess,
 		},
 	}
 	for _, tt := range tests {
@@ -319,7 +319,7 @@ func Test_postgres_persistence_basic_logic_gRPC_eventual_consistency(t *testing.
 		addresses := srvBundle.addresses()
 		outcome := txCoordinator.Execute(ctx, tx.toTwopc(addresses))
 		cancel()
-		if outcome.Outcome() == twopc.OutcomeCommitted {
+		if outcome.Outcome() == twopc.OutcomeSuccess {
 			break
 		}
 	}
