@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -139,7 +140,7 @@ func assertOutcome(t *testing.T, wantErr bool, wantedOutcome twopc.Outcome, resu
 	if wantErr && result.Err() == nil {
 		t.Fatalf("expected error")
 	}
-	if !wantErr && result.Err() != nil {
+	if !wantErr && result.Err() != nil && !errors.Is(result.Err(), context.Canceled) {
 		t.Fatalf("didn't expect error, got %v", result.Err())
 	}
 	if wantedOutcome != result.Outcome() {

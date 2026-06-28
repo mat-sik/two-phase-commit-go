@@ -194,7 +194,7 @@ func toRunServerRequests(runnables []serverRunnable) []runServerRequest {
 func runPostgresForPools(t *testing.T, participantAmount int) (*pgxpool.Pool, []*pgxpool.Pool) {
 	t.Helper()
 
-	coordinatorCh := make(chan runContainerResult, participantAmount)
+	coordinatorCh := make(chan runContainerResult)
 	go func() {
 		pool, terminator, err := runPostgresForCoordinatorPool(t.Context())
 		coordinatorCh <- runContainerResult{
