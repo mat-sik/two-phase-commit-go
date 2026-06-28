@@ -69,16 +69,6 @@ github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 h1:6E+4a0GO5zZEnZ
 github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0/go.mod h1:zJYVVT2jmtg6P3p1VtQj7WsuWi/y4VnjVBn7F8KPB3I=
 github.com/magiconair/properties v1.8.10 h1:s31yESBquKXCV9a/ScB3ESkOjUYYv+X0rg8SYxI99mE=
 github.com/magiconair/properties v1.8.10/go.mod h1:Dhd985XPs7jluiymwWYZ0G4Z61jb3vdS329zhj2hYo0=
-github.com/mat-sik/two-phase-commit-go/twopc v1.0.5 h1:xYELIioKoNuA/BFRLk59OOmmDvmdZtr0zal7LEuED+k=
-github.com/mat-sik/two-phase-commit-go/twopc v1.0.5/go.mod h1:GuBhO5PTdMc7/qO0O8WldsToMt7JpeGxt6a35qKYG5E=
-github.com/mat-sik/two-phase-commit-go/twopc v1.0.6 h1:KjOsROx5DJGBZENQqd3Dz2soFY4cyMjnkbkIen/mG0I=
-github.com/mat-sik/two-phase-commit-go/twopc v1.0.6/go.mod h1:GuBhO5PTdMc7/qO0O8WldsToMt7JpeGxt6a35qKYG5E=
-github.com/mat-sik/two-phase-commit-go/twopc v1.0.7 h1:kp/3hyMdMzUQ2rR92Cebz9CTdN0HUTUpuWRFzHHVehU=
-github.com/mat-sik/two-phase-commit-go/twopc v1.0.7/go.mod h1:GuBhO5PTdMc7/qO0O8WldsToMt7JpeGxt6a35qKYG5E=
-github.com/mat-sik/two-phase-commit-go/twopc v1.0.8 h1:mFID4F4GKOO+6+is1Lw5S3g+H1j/C04yWboNBD9siTo=
-github.com/mat-sik/two-phase-commit-go/twopc v1.0.8/go.mod h1:GuBhO5PTdMc7/qO0O8WldsToMt7JpeGxt6a35qKYG5E=
-github.com/mat-sik/two-phase-commit-go/twopc v1.0.9 h1:LXdXTkkQ7AQZGh+KyPlOHN5Ac4lHrViXzXJTuUESwBU=
-github.com/mat-sik/two-phase-commit-go/twopc v1.0.9/go.mod h1:GuBhO5PTdMc7/qO0O8WldsToMt7JpeGxt6a35qKYG5E=
 github.com/mat-sik/two-phase-commit-go/twopc v1.1.0 h1:HARBA8PuYDKb2CQQry9KEi+BfyRFd+Hfm34rJjLw4Yk=
 github.com/mat-sik/two-phase-commit-go/twopc v1.1.0/go.mod h1:GuBhO5PTdMc7/qO0O8WldsToMt7JpeGxt6a35qKYG5E=
 github.com/mdelapenya/tlscert v0.2.0 h1:7H81W6Z/4weDvZBNOfQte5GpIMo0lGYEeWbkGp5LJHI=
@@ -111,6 +101,8 @@ github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 h1:o4JXh1EVt
 github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55/go.mod h1:OmDBASR4679mdNQnz2pUhc2G8CO2JrUAVFDRBDP/hJE=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
 github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
+github.com/sethvargo/go-envconfig v1.3.0 h1:gJs+Fuv8+f05omTpwWIu6KmuseFAXKrIaOZSh8RMt0U=
+github.com/sethvargo/go-envconfig v1.3.0/go.mod h1:JLd0KFWQYzyENqnEPWWZ49i4vzZo/6nRidxI8YvGiHw=
 github.com/shirou/gopsutil/v4 v4.26.3 h1:2ESdQt90yU3oXF/CdOlRCJxrP+Am1aBYubTMTfxJ1qc=
 github.com/shirou/gopsutil/v4 v4.26.3/go.mod h1:LZ6ewCSkBqUpvSOf+LsTGnRinC6iaNUNMGBtDkJBaLQ=
 github.com/sirupsen/logrus v1.9.4 h1:TsZE7l11zFCLZnZ+teH4Umoq5BhEIfIzfRDZ1Uzql2w=
