@@ -1,12 +1,18 @@
 package twopc
 
-import "time"
+import (
+	"time"
+
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
+)
 
 type config struct {
 	sendOperationTimeout time.Duration
 	backoffBase          time.Duration
 	backoffMax           time.Duration
 	backoffFactor        float64
+	tracer               trace.Tracer
 }
 
 func newConfig(opts ...Option) config {
@@ -23,6 +29,7 @@ func newDefaultConfig() config {
 		backoffBase:          200 * time.Millisecond,
 		backoffMax:           10 * time.Second,
 		backoffFactor:        2,
+		tracer:               noop.NewTracerProvider().Tracer("noop"),
 	}
 }
 
@@ -52,4 +59,20 @@ func WithBackoffMax(d time.Duration) Option {
 // delay after each failed attempt. Must be greater than 1. Defaults to 2.
 func WithBackoffFactor(f float64) Option {
 	return func(c *config) { c.backoffFactor = f }
+}
+
+// WithOTelTracer sets the OpenTelemetry tracer used to instrument coordinator
+// execution. When set, the coordinator emits spans for the full transaction
+// lifecycle: the outer transaction loop, each execution round, per-participant
+// operations, backoff waits, and async state persistence.
+//
+// Defaults to a noop tracer, which produces no telemetry and adds no overhead.
+//
+// Span attributes include participant IDs and prepare payloads formatted via
+// [fmt.Sprintf] with the %v verb. To produce human-readable values in spans,
+// implement [fmt.Stringer] on the ID type and [PreparePayload] concrete type.
+func WithOTelTracer(tracer trace.Tracer) Option {
+	return func(c *config) {
+		c.tracer = tracer
+	}
 }

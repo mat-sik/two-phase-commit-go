@@ -5,6 +5,9 @@ import (
 	"math"
 	"math/rand/v2"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Backoff struct {
@@ -26,6 +29,15 @@ func NewBackoff(base time.Duration, max time.Duration, factor float64) Backoff {
 
 func (s Backoff) Wait(ctx context.Context, attempt int) {
 	delay := nextSleepDuration(s.base, s.max, s.factor, attempt)
+
+	span := trace.SpanFromContext(ctx)
+	span.AddEvent("backoff waiting",
+		trace.WithAttributes(
+			attribute.Int("backoff.attempt", attempt),
+			attribute.Int64("backoff.wait.delay.ms", delay.Milliseconds()),
+		),
+	)
+
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
 	select {
