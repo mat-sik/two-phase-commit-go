@@ -41,10 +41,14 @@ func (p Participant) Validate() error {
 		return fmt.Errorf("unknown mode %q: must be TRANSFER or BASIC", p.Mode)
 	}
 
-	if p.Mode == ModeTransfer && p.DatabaseURL == "" {
+	if p.ShouldInitDBPool() && p.DatabaseURL == "" {
 		return fmt.Errorf("DATABASE_URL is required when MODE is TRANSFER")
 	}
 	return nil
+}
+
+func (p Participant) ShouldInitDBPool() bool {
+	return p.Mode == ModeTransfer
 }
 
 func NewParticipant(ctx context.Context) (Participant, error) {
