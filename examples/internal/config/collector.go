@@ -2,19 +2,20 @@ package config
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/sethvargo/go-envconfig"
 )
 
 type Collector struct {
-	CollectorHost string `env:"OTEL_COLLECTOR_HOST, default=localhost:4317"`
+	CollectorHost string `env:"OTEL_COLLECTOR_HOST"`
 	ServiceName   string `env:"OTEL_SERVICE_NAME, default=unnamed"`
 }
 
 func NewCollector(ctx context.Context) (Collector, error) {
 	var config Collector
 	if err := envconfig.Process(ctx, &config); err != nil {
-		return Collector{}, err
+		return Collector{}, fmt.Errorf("processing collector env variables")
 	}
 
 	return config, nil

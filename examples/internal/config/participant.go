@@ -54,7 +54,7 @@ func (p Participant) ShouldInitDBPool() bool {
 func NewParticipant(ctx context.Context) (Participant, error) {
 	var config Participant
 	if err := envconfig.Process(ctx, &config); err != nil {
-		return Participant{}, err
+		return Participant{}, fmt.Errorf("processing participant env variables")
 	}
 	if err := config.Validate(); err != nil {
 		return Participant{}, err

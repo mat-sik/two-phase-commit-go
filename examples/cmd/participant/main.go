@@ -2,9 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/config"
@@ -17,35 +24,46 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
+	os.Exit(run())
+}
+
+func run() int {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
 
 	collectorConfig, err := config.NewCollector(ctx)
 	if err != nil {
-		panic(err)
+		slog.Error("reading collector config", "err", err)
+		return 1
 	}
 
 	var participantConfig config.Participant
 	participantConfig, err = config.NewParticipant(ctx)
 	if err != nil {
-		panic(err)
+		slog.Error("reading participant config", "err", err)
+		return 1
 	}
 
-	var shutdown setup.ShutdownFunc
-	shutdown, err = setup.InitOTelSDK(ctx, collectorConfig.CollectorHost, collectorConfig.ServiceName)
-	if err != nil {
-		panic(err)
-	}
-	defer func() {
-		if err = shutdown(ctx); err != nil {
-			panic(err)
+	if collectorConfig.CollectorHost != "" {
+		var shutdown setup.ShutdownFunc
+		shutdown, err = setup.InitOTelSDK(ctx, collectorConfig.CollectorHost, collectorConfig.ServiceName)
+		if err != nil {
+			slog.Error("initializing OTel SDK", "err", err)
+			return 1
 		}
-	}()
+		defer func() {
+			if err = shutdown(context.Background()); err != nil {
+				slog.Error("shutting down OTel SDK", "err", err)
+			}
+		}()
+	}
 
 	var pool *pgxpool.Pool
 	if participantConfig.ShouldInitDBPool() {
 		pool, err = pgxpool.New(ctx, participantConfig.DatabaseURL)
 		if err != nil {
-			panic(err)
+			slog.Error("creating pgx pool", "err", err)
+			return 1
 		}
 		defer pool.Close()
 	}
@@ -53,28 +71,41 @@ func main() {
 	var lis net.Listener
 	lis, err = newListener(participantConfig.Port)
 	if err != nil {
-		panic(err)
+		slog.Error(err.Error())
+		return 1
 	}
 	defer func() {
-		if err = lis.Close(); err != nil {
-			panic(err)
+		if err = lis.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			slog.Error("closing listener", "err", err)
 		}
 	}()
 
-	var srvRunner serverRunner
-	var srvStopper serverStopper
-	srvRunner, srvStopper, err = newServerRunner(participantConfig.Protocol, participantConfig.Mode, lis, pool)
-	if err != nil {
-		panic(err)
-	}
-	defer func() {
-		if err = srvStopper(); err != nil {
-			panic(err)
+	srvRunner, srvStopper := newServerHandles(participantConfig.Protocol, participantConfig.Mode, lis, pool)
+
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithCancel(ctx)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		<-ctx.Done()
+		if stopErr := srvStopper(); stopErr != nil {
+			slog.Error("stopping server", "err", stopErr)
 		}
-	}()
+	})
+	defer wg.Wait()
+
+	slog.Info("server started", "address", lis.Addr())
 	if err = srvRunner(lis); err != nil {
-		panic(err)
+		cancel()
+		if !isGracefulShutdown(err) {
+			slog.Error("serving", "err", err)
+			return 1
+		}
 	}
+
+	slog.Info("server stopped")
+	return 0
 }
 
 func newListener(port int) (net.Listener, error) {
@@ -85,40 +116,41 @@ func newListener(port int) (net.Listener, error) {
 	return lis, nil
 }
 
-func newServerRunner(protocol config.Protocol, mode config.Mode, lis net.Listener, pool *pgxpool.Pool) (serverRunner, serverStopper, error) {
+func newServerHandles(protocol config.Protocol, mode config.Mode, lis net.Listener, pool *pgxpool.Pool) (serverRunner, serverStopper) {
 	switch protocol {
 	case config.ProtocolGRPC:
-		return newGrpcServerRunner(lis, mode, pool)
+		return newGrpcServerHandles(lis, mode, pool)
 	case config.ProtocolREST:
-		return newRestServerRunner(mode, pool)
+		return newRestServerHandles(mode, pool)
 	default:
-		panic("unsupported protocol")
+		panic(fmt.Sprintf("unsupported protocol: %s", protocol))
 	}
 }
 
 type serverRunner func(lis net.Listener) error
 type serverStopper func() error
 
-func newGrpcServerRunner(lis net.Listener, mode config.Mode, pool *pgxpool.Pool) (serverRunner, serverStopper, error) {
-	srv, err := newGRPCServer(lis, mode, pool)
-	if err != nil {
-		return nil, nil, err
-	}
+func newGrpcServerHandles(lis net.Listener, mode config.Mode, pool *pgxpool.Pool) (serverRunner, serverStopper) {
+	srv := newGRPCServer(lis, mode, pool)
 
 	runner := func(_ net.Listener) error {
-		return srv.Serve(lis)
+		if err := srv.Serve(lis); err != nil {
+			return fmt.Errorf("serving gRPC server: %w", err)
+		}
+		return nil
 	}
 
 	stopper := func() error {
 		srv.GracefulStop()
 		return nil
 	}
-	return runner, stopper, nil
+
+	return runner, stopper
 }
 
-func newGRPCServer(lis net.Listener, mode config.Mode, pool *pgxpool.Pool) (*grpc.Server, error) {
+func newGRPCServer(lis net.Listener, mode config.Mode, pool *pgxpool.Pool) *grpc.Server {
 	registerer := newGRPCServerRegisterer(mode, pool)
-	return server.NewGRPCServer(registerer, lis.Addr()), nil
+	return server.NewGRPCServer(registerer, lis.Addr())
 }
 
 func newGRPCServerRegisterer(mode config.Mode, pool *pgxpool.Pool) server.GRPCHandlerRegisterer {
@@ -134,22 +166,33 @@ func newGRPCServerRegisterer(mode config.Mode, pool *pgxpool.Pool) server.GRPCHa
 			basic.RegisterBasicServiceServer(server, handler)
 		}
 	default:
-		panic("unsupported mode")
+		panic(fmt.Sprintf("unsupported mode: %s", mode))
 	}
 }
 
-func newRestServerRunner(mode config.Mode, pool *pgxpool.Pool) (serverRunner, serverStopper, error) {
+func newRestServerHandles(mode config.Mode, pool *pgxpool.Pool) (serverRunner, serverStopper) {
 	mux := newMux(mode, pool)
 	srv := server.NewRESTServer(mux)
 
 	runner := func(lis net.Listener) error {
-		return srv.Serve(lis)
+		if err := srv.Serve(lis); err != nil {
+			return fmt.Errorf("serving REST server: %w", err)
+		}
+		return nil
 	}
 
 	stopper := func() error {
-		return srv.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := srv.Shutdown(ctx); err != nil {
+			err = errors.Join(err, srv.Close())
+			return fmt.Errorf("closing REST server: %w", err)
+		}
+		return nil
 	}
-	return runner, stopper, nil
+
+	return runner, stopper
 }
 
 func newMux(mode config.Mode, pool *pgxpool.Pool) *http.ServeMux {
@@ -159,6 +202,10 @@ func newMux(mode config.Mode, pool *pgxpool.Pool) *http.ServeMux {
 	case config.ModeBasic:
 		return adapter.NewBasicMux()
 	default:
-		panic("unsupported mode")
+		panic(fmt.Sprintf("unsupported mode: %s", mode))
 	}
+}
+
+func isGracefulShutdown(err error) bool {
+	return errors.Is(err, http.ErrServerClosed) || errors.Is(err, grpc.ErrServerStopped)
 }

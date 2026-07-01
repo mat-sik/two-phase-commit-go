@@ -20,7 +20,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 )
 
 func InitOTelSDK(ctx context.Context, collectorHost string, serviceName string) (joinedShutdowns ShutdownFunc, err error) {
@@ -99,13 +99,17 @@ func newCollectorConn(target string) (*grpc.ClientConn, ShutdownFunc, error) {
 }
 
 func newResource(serviceName string) (*resource.Resource, error) {
-	return resource.Merge(
+	res, err := resource.Merge(
 		resource.Default(),
 		resource.NewWithAttributes(
 			semconv.SchemaURL,
 			semconv.ServiceName(serviceName),
 		),
 	)
+	if err != nil {
+		return nil, fmt.Errorf("creating resource: %w", err)
+	}
+	return res, nil
 }
 
 func registerTracerProvider(ctx context.Context, res *resource.Resource, conn *grpc.ClientConn) (ShutdownFunc, error) {
