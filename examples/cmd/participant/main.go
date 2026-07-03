@@ -17,6 +17,7 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/config"
 	basic "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/basic/v1"
 	transfer "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/transfer/v1"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/migrations"
 	setup "github.com/mat-sik/two-phase-commit-go/examples/internal/otel"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/server"
@@ -66,6 +67,11 @@ func run() int {
 			return 1
 		}
 		defer pool.Close()
+
+		if err = migrations.Run(pool, "db/coordinator/migrations"); err != nil {
+			slog.Error("running transfer participant migrations", "err", err)
+			return 1
+		}
 	}
 
 	var lis net.Listener
