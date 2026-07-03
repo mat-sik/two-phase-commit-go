@@ -11,10 +11,10 @@ type Coordinator struct {
 	DatabaseURL string `env:"DATABASE_URL"`
 }
 
-func NewCoordinator(ctx context.Context) (Collector, error) {
-	var config Collector
+func NewCoordinator(ctx context.Context) (Coordinator, error) {
+	var config Coordinator
 	if err := envconfig.Process(ctx, &config); err != nil {
-		return Collector{}, err
+		return Coordinator{}, err
 	}
 
 	return config, nil
