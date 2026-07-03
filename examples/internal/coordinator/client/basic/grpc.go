@@ -14,10 +14,10 @@ type basicGRPCClient struct {
 	client pb.BasicServiceClient
 }
 
-func NewGRPCClient(clientID string) (twopc.Client, error) {
-	conn, err := grpc.NewClient(clientID, grpc.WithTransportCredentials(insecure.NewCredentials()))
+func NewGRPCClient(participantID string) (twopc.Client, error) {
+	conn, err := grpc.NewClient(participantID, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return nil, fmt.Errorf("creating gRPC conn %s: %w", clientID, err)
+		return nil, fmt.Errorf("creating gRPC conn %s: %w", participantID, err)
 	}
 	return basicGRPCClient{
 		client: pb.NewBasicServiceClient(conn),

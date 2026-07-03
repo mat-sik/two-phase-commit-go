@@ -15,10 +15,10 @@ func (m MockTransactionStatePersister) PersistState(_ context.Context, _ string,
 }
 
 type MockTransactionStateChecker struct {
-	stateByClientID map[string]twopc.TransactionState
-	err             error
+	stateByParticipantID map[string]twopc.TransactionState
+	err                  error
 }
 
 func (m MockTransactionStateChecker) Check(_ context.Context, _ string) (map[string]twopc.TransactionState, error) {
-	return m.stateByClientID, m.err
+	return m.stateByParticipantID, m.err
 }
