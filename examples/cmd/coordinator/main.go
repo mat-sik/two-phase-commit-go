@@ -21,7 +21,7 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator/client/transfer"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/coordinator/persister"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/migrations"
-	setup "github.com/mat-sik/two-phase-commit-go/examples/internal/otel"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/otelinit"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -49,8 +49,8 @@ func run() int {
 	}
 
 	if collectorConfig.CollectorHost != "" {
-		var shutdown setup.ShutdownFunc
-		shutdown, err = setup.InitOTelSDK(ctx, collectorConfig.CollectorHost, collectorConfig.ServiceName)
+		var shutdown otelinit.ShutdownFunc
+		shutdown, err = otelinit.InitOTelSDK(ctx, collectorConfig.CollectorHost, collectorConfig.ServiceName)
 		if err != nil {
 			slog.Error("initializing OTel SDK", "err", err)
 			return 1

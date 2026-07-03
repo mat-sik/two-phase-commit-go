@@ -18,7 +18,7 @@ import (
 	basic "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/basic/v1"
 	transfer "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/transfer/v1"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/migrations"
-	setup "github.com/mat-sik/two-phase-commit-go/examples/internal/otel"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/otelinit"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/server"
 	"google.golang.org/grpc"
@@ -46,8 +46,8 @@ func run() int {
 	}
 
 	if collectorConfig.CollectorHost != "" {
-		var shutdown setup.ShutdownFunc
-		shutdown, err = setup.InitOTelSDK(ctx, collectorConfig.CollectorHost, collectorConfig.ServiceName)
+		var shutdown otelinit.ShutdownFunc
+		shutdown, err = otelinit.InitOTelSDK(ctx, collectorConfig.CollectorHost, collectorConfig.ServiceName)
 		if err != nil {
 			slog.Error("initializing OTel SDK", "err", err)
 			return 1
