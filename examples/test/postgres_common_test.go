@@ -257,7 +257,7 @@ type runContainerResult struct {
 }
 
 func runPostgresForParticipantPool(ctx context.Context) (*pgxpool.Pool, postgresTerminator, error) {
-	return runPostgresForPool(ctx, "testdata/participant-schema.sql")
+	return runPostgresForPool(ctx, "testdata/participant-transfer-schema.sql")
 }
 
 func runPostgresForCoordinatorPool(ctx context.Context) (*pgxpool.Pool, postgresTerminator, error) {
