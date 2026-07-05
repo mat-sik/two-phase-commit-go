@@ -68,7 +68,7 @@ func run() int {
 		}
 		defer pool.Close()
 
-		if err = migrations.Run(pool, "db/coordinator/migrations"); err != nil {
+		if err = migrations.Run(pool, "db/participant/transfer/migrations"); err != nil {
 			slog.Error("running transfer participant migrations", "err", err)
 			return 1
 		}
