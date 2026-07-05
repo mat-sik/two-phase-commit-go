@@ -347,7 +347,7 @@ func (tx transaction) validate() error {
 func (tx transaction) toTwopc() twopc.Transaction[string] {
 	var payload twopc.PreparePayload
 	if tx.BasicPayload != nil {
-		payload = *tx.BasicPayload
+		payload = (*tx.BasicPayload).Payload
 	} else if tx.TransferPayload != nil {
 		payload = *tx.TransferPayload
 	} else {
