@@ -9,9 +9,12 @@ services:
 
   coordinator-db:
     image: postgres:18.4-alpine
+    command: [ postgres, -c, max_prepared_transactions=100 ]
     restart: on-failure
     networks:
       - net
+    ports:
+      - '5432:5432'
     environment:
       POSTGRES_DB: coordinator
       POSTGRES_USER: coordinator
@@ -36,17 +39,20 @@ services:
         condition: service_started
     environment:
       PORT: 8080
-      DATABASE_URL: 'postgres://coordinator:coordinator@coordinator-db:5432/coordinator?sslmode=disable'
-      OTEL_COLLECTOR_HOST: 'otel-lgtm:4317'
+      DATABASE_URL: postgres://coordinator:coordinator@coordinator-db:5432/coordinator?sslmode=disable
+      OTEL_COLLECTOR_HOST: otel-lgtm:4317
       OTEL_SERVICE_NAME: coordinator
     ports:
       - '8080:8080'
 
   participant1-db:
     image: postgres:18.4-alpine
+    command: [ postgres, -c, max_prepared_transactions=100 ]
     restart: on-failure
     networks:
       - net
+    ports:
+      - '5433:5432'
     environment:
       POSTGRES_DB: participant1
       POSTGRES_USER: participant1
@@ -73,17 +79,20 @@ services:
       PORT: 50051
       PROTOCOL: GRPC
       MODE: TRANSFER
-      DATABASE_URL: 'postgres://participant1:participant1@participant1-db:5432/participant1?sslmode=disable'
-      OTEL_COLLECTOR_HOST: 'otel-lgtm:4317'
+      DATABASE_URL: postgres://participant1:participant1@participant1-db:5432/participant1?sslmode=disable
+      OTEL_COLLECTOR_HOST: otel-lgtm:4317
       OTEL_SERVICE_NAME: participant1
     ports:
       - '50051:50051'
 
   participant2-db:
     image: postgres:18.4-alpine
+    command: [ postgres, -c, max_prepared_transactions=100 ]
     restart: on-failure
     networks:
       - net
+    ports:
+      - '5434:5432'
     environment:
       POSTGRES_DB: participant2
       POSTGRES_USER: participant2
@@ -110,23 +119,26 @@ services:
       PORT: 8080
       PROTOCOL: REST
       MODE: TRANSFER
-      DATABASE_URL: 'postgres://participant2:participant2@participant2-db:5432/participant2?sslmode=disable'
-      OTEL_COLLECTOR_HOST: 'otel-lgtm:4317'
+      DATABASE_URL: postgres://participant2:participant2@participant2-db:5432/participant2?sslmode=disable
+      OTEL_COLLECTOR_HOST: otel-lgtm:4317
       OTEL_SERVICE_NAME: participant2
     ports:
       - '8081:8080'
 
   participant3-db:
     image: postgres:18.4-alpine
+    command: [ postgres, -c, max_prepared_transactions=100 ]
     restart: on-failure
     networks:
       - net
+    ports:
+      - '5435:5432'
     environment:
       POSTGRES_DB: participant3
       POSTGRES_USER: participant3
       POSTGRES_PASSWORD: participant3
     healthcheck:
-      test: [ 'CMD-SHELL', 'pg_isready -U participant3 -d participant3' ]
+      test: [ CMD-SHELL, 'pg_isready -U participant3 -d participant3' ]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -146,9 +158,9 @@ services:
     environment:
       PORT: 50051
       PROTOCOL: GRPC
-      MODE: TRANSFER
-      DATABASE_URL: 'postgres://participant3:participant3@participant3-db:5432/participant3?sslmode=disable'
-      OTEL_COLLECTOR_HOST: 'otel-lgtm:4317'
+      MODE: BASIC
+      DATABASE_URL: postgres://participant3:participant3@participant3-db:5432/participant3?sslmode=disable
+      OTEL_COLLECTOR_HOST: otel-lgtm:4317
       OTEL_SERVICE_NAME: participant3
     ports:
       - '50052:50051'
