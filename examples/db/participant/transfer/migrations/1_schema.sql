@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TABLE accounts
 (
     id      TEXT           NOT NULL PRIMARY KEY,

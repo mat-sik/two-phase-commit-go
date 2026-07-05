@@ -257,11 +257,11 @@ type runContainerResult struct {
 }
 
 func runPostgresForParticipantPool(ctx context.Context) (*pgxpool.Pool, postgresTerminator, error) {
-	return runPostgresForPool(ctx, "../db/participant/transfer/migrations/schema.sql")
+	return runPostgresForPool(ctx, "../db/participant/transfer/migrations/1_schema.sql")
 }
 
 func runPostgresForCoordinatorPool(ctx context.Context) (*pgxpool.Pool, postgresTerminator, error) {
-	return runPostgresForPool(ctx, "../db/coordinator/migrations/schema.sql")
+	return runPostgresForPool(ctx, "../db/coordinator/migrations/1_schema.sql")
 }
 
 func runPostgresForPool(ctx context.Context, scripts ...string) (*pgxpool.Pool, postgresTerminator, error) {

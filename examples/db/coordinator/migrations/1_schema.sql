@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TABLE transaction_states
 (
     transaction_id TEXT    NOT NULL,
