@@ -284,8 +284,8 @@ func recordOutcome(ctx context.Context, result Result) {
 // A non-nil Err does not imply an inconsistent state — for example, a participant may have
 // returned a transient error while the transaction still reached a terminal state.
 type Result struct {
-	err     error
 	outcome Outcome
+	err     error
 }
 
 // Err returns any errors accumulated during execution.
