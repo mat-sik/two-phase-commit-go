@@ -79,6 +79,8 @@ github.com/mat-sik/two-phase-commit-go/twopc v1.1.0 h1:HARBA8PuYDKb2CQQry9KEi+Bf
 github.com/mat-sik/two-phase-commit-go/twopc v1.1.0/go.mod h1:GuBhO5PTdMc7/qO0O8WldsToMt7JpeGxt6a35qKYG5E=
 github.com/mat-sik/two-phase-commit-go/twopc v1.1.1-0.20260705141328-644aea64bc12 h1:mpRe72QemttIXNJkPvDC3ARgicLpDDStlzCFuP3e2GQ=
 github.com/mat-sik/two-phase-commit-go/twopc v1.1.1-0.20260705141328-644aea64bc12/go.mod h1:tk1WWU/YfSYiMnT9LQ+468iwe/IGceC3j6C4UPMgvIY=
+github.com/mat-sik/two-phase-commit-go/twopc v1.1.1-0.20260705151949-eb135d313f59 h1:ZgW9+LI/zD1Fgj5yd6q/GAcJoG+lcuA/1Enz9xEreIU=
+github.com/mat-sik/two-phase-commit-go/twopc v1.1.1-0.20260705151949-eb135d313f59/go.mod h1:tk1WWU/YfSYiMnT9LQ+468iwe/IGceC3j6C4UPMgvIY=
 github.com/mattn/go-isatty v0.0.21 h1:xYae+lCNBP7QuW4PUnNG61ffM4hVIfm+zUzDuSzYLGs=
 github.com/mattn/go-isatty v0.0.21/go.mod h1:ZXfXG4SQHsB/w3ZeOYbR0PrPwLy+n6xiMrJlRFqopa4=
 github.com/mdelapenya/tlscert v0.2.0 h1:7H81W6Z/4weDvZBNOfQte5GpIMo0lGYEeWbkGp5LJHI=
