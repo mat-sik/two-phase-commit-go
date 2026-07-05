@@ -75,10 +75,6 @@ github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 h1:6E+4a0GO5zZEnZ
 github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0/go.mod h1:zJYVVT2jmtg6P3p1VtQj7WsuWi/y4VnjVBn7F8KPB3I=
 github.com/magiconair/properties v1.8.10 h1:s31yESBquKXCV9a/ScB3ESkOjUYYv+X0rg8SYxI99mE=
 github.com/magiconair/properties v1.8.10/go.mod h1:Dhd985XPs7jluiymwWYZ0G4Z61jb3vdS329zhj2hYo0=
-github.com/mat-sik/two-phase-commit-go/twopc v1.1.0 h1:HARBA8PuYDKb2CQQry9KEi+BfyRFd+Hfm34rJjLw4Yk=
-github.com/mat-sik/two-phase-commit-go/twopc v1.1.0/go.mod h1:GuBhO5PTdMc7/qO0O8WldsToMt7JpeGxt6a35qKYG5E=
-github.com/mat-sik/two-phase-commit-go/twopc v1.1.1-0.20260705141328-644aea64bc12 h1:mpRe72QemttIXNJkPvDC3ARgicLpDDStlzCFuP3e2GQ=
-github.com/mat-sik/two-phase-commit-go/twopc v1.1.1-0.20260705141328-644aea64bc12/go.mod h1:tk1WWU/YfSYiMnT9LQ+468iwe/IGceC3j6C4UPMgvIY=
 github.com/mat-sik/two-phase-commit-go/twopc v1.1.1-0.20260705151949-eb135d313f59 h1:ZgW9+LI/zD1Fgj5yd6q/GAcJoG+lcuA/1Enz9xEreIU=
 github.com/mat-sik/two-phase-commit-go/twopc v1.1.1-0.20260705151949-eb135d313f59/go.mod h1:tk1WWU/YfSYiMnT9LQ+468iwe/IGceC3j6C4UPMgvIY=
 github.com/mattn/go-isatty v0.0.21 h1:xYae+lCNBP7QuW4PUnNG61ffM4hVIfm+zUzDuSzYLGs=
@@ -148,6 +144,8 @@ github.com/yusufpapurcu/wmi v1.2.4 h1:zFUKzehAFReQwLys1b/iSMl+JQGSCSjtVqQn9bBrPo
 github.com/yusufpapurcu/wmi v1.2.4/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
 go.opentelemetry.io/auto/sdk v1.2.1/go.mod h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=
+go.opentelemetry.io/contrib/bridges/otelslog v0.19.0 h1:5RgvxieNq9tS3ewrV1vnODvbHPfKUIJcYtF9Cvz+6aQ=
+go.opentelemetry.io/contrib/bridges/otelslog v0.19.0/go.mod h1:iTBIdNwx/xmUhfgJs6+84S4dIK059811cO1eUBjKcHY=
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.69.0 h1:2yEATaop1/a1I4psnSLgWVPLWwCzkqWakgJy7xTDVy0=
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.69.0/go.mod h1:D7J12YRapIekYyPWgGPlA/23pRmpSEZC5xJC/TTLI9U=
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0 h1:CqXxU8VOmDefoh0+ztfGaymYbhdB/tT3zs79QaZTNGY=

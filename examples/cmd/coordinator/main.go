@@ -189,7 +189,7 @@ func (c distributedTransactionUseCase) doTx(ctx context.Context, tx distributedT
 }
 
 func (c distributedTransactionUseCase) newCoordinator(clientTypeByParticipantID map[string]clientType) *twopc.Coordinator[string] {
-	tracer := otel.Tracer("github.com/mat-sik/two-phase-commit-go/internal/coordinator")
+	tracer := otel.Tracer("coordinator-tracer")
 	return twopc.NewCoordinator(
 		c.persistenceConfig(),
 		c.clientConfig(clientTypeByParticipantID),

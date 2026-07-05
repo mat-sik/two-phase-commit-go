@@ -4,23 +4,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
-	"go.opentelemetry.io/otel/log/global"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/log"
-	"go.opentelemetry.io/otel/sdk/resource"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/log/global"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func InitOTelSDK(ctx context.Context, collectorHost string, serviceName string) (joinedShutdowns ShutdownFunc, err error) {
@@ -173,6 +173,10 @@ func registerLoggerProvider(ctx context.Context, res *resource.Resource, conn *g
 	}
 
 	global.SetLoggerProvider(provider)
+
+	handler := otelslog.NewHandler("slog-logger")
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
 
 	return provider.Shutdown, nil
 }
