@@ -27,7 +27,6 @@ type Coordinator[ID comparable] struct {
 	stateLoader               state.Loader[ID]
 	transactionStatePersister transactionStatePersister[ID]
 	participantRegistrar      participant.Registrar[ID]
-	tracer                    trace.Tracer
 }
 
 // PersistenceConfig aggregates required interfaces for transaction state persistence.
@@ -75,7 +74,7 @@ func (c Coordinator[ID]) newExecutor(ctx context.Context, initialState state.Sta
 		state:                     initialState,
 		participantFailureCounter: participant.NewFailureCounter[ID](),
 		participantRegistrar:      c.participantRegistrar,
-		persister:                 newPersister(ctx, c.transactionStatePersister, c.tracer),
+		persister:                 newPersister(ctx, c.transactionStatePersister, c.config.tracer),
 		tracer:                    c.config.tracer,
 	}
 }
