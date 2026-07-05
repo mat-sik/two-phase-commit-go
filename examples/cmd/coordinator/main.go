@@ -25,6 +25,7 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 )
 
 func main() {
@@ -188,7 +189,12 @@ func (c distributedTransactionUseCase) doTx(ctx context.Context, tx distributedT
 }
 
 func (c distributedTransactionUseCase) newCoordinator(clientTypeByParticipantID map[string]clientType) *twopc.Coordinator[string] {
-	return twopc.NewCoordinator(c.persistenceConfig(), c.clientConfig(clientTypeByParticipantID))
+	tracer := otel.Tracer("github.com/mat-sik/two-phase-commit-go/internal/coordinator")
+	return twopc.NewCoordinator(
+		c.persistenceConfig(),
+		c.clientConfig(clientTypeByParticipantID),
+		twopc.WithOTelTracer(tracer),
+	)
 }
 
 func (c distributedTransactionUseCase) persistenceConfig() twopc.PersistenceConfig[string] {

@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/mat-sik/two-phase-commit-go/twopc v1.1.0
+	github.com/mat-sik/two-phase-commit-go/twopc v1.1.1-0.20260705141328-644aea64bc12
 	github.com/pressly/goose/v3 v3.27.2
 	github.com/sethvargo/go-envconfig v1.3.0
 	github.com/testcontainers/testcontainers-go v0.42.0
