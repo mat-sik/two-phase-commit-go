@@ -46,7 +46,7 @@ func (c transferGRPCClient) PrepareTransaction(ctx context.Context, transactionI
 
 	req := pb.PrepareTransactionRequest{TransactionId: transactionID, Payload: grpcTransferPayload}
 	if _, err := c.client.PrepareTransaction(ctx, &req, grpc.WaitForReady(true)); err != nil {
-		err = fmt.Errorf("gRPC sending prepare tx %s payload %v: %w", transactionID, payload, err)
+		return fmt.Errorf("gRPC sending prepare tx %s payload %v: %w", transactionID, payload, err)
 	}
 	return nil
 }
@@ -54,7 +54,7 @@ func (c transferGRPCClient) PrepareTransaction(ctx context.Context, transactionI
 func (c transferGRPCClient) CommitTransaction(ctx context.Context, transactionID string) error {
 	req := pb.CommitTransactionRequest{TransactionId: transactionID}
 	if _, err := c.client.CommitTransaction(ctx, &req, grpc.WaitForReady(true)); err != nil {
-		err = fmt.Errorf("gRPC sending commit tx %s: %w", transactionID, err)
+		return fmt.Errorf("gRPC sending commit tx %s: %w", transactionID, err)
 	}
 	return nil
 }
@@ -62,7 +62,7 @@ func (c transferGRPCClient) CommitTransaction(ctx context.Context, transactionID
 func (c transferGRPCClient) RollbackTransaction(ctx context.Context, transactionID string) error {
 	req := pb.RollbackTransactionRequest{TransactionId: transactionID}
 	if _, err := c.client.RollbackTransaction(ctx, &req, grpc.WaitForReady(true)); err != nil {
-		err = fmt.Errorf("gRPC sending rollback tx %s: %w", transactionID, err)
+		return fmt.Errorf("gRPC sending rollback tx %s: %w", transactionID, err)
 	}
 	return nil
 }

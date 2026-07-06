@@ -224,7 +224,7 @@ func Test_postgres_persistence(t *testing.T) {
 			name: "mixed client mixed logic happy path",
 			serverRunners: []serverRunnable{
 				newGRPCBasicLogicServerRunnable(),
-				newGRPCBasicLogicServerRunnable(),
+				newGRPCTransferLogicServerRunnable(),
 				newRESTHandlerServerRunnable(),
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
@@ -261,6 +261,48 @@ func Test_postgres_persistence(t *testing.T) {
 			},
 			wantErr:       false,
 			wantedOutcome: twopc.OutcomeSuccess,
+		},
+		{
+			name: "mixed client mixed logic fail path because non matching server",
+			serverRunners: []serverRunnable{
+				newGRPCBasicLogicServerRunnable(),
+				newGRPCBasicLogicServerRunnable(),
+				newRESTHandlerServerRunnable(),
+			},
+			coordinatorConfig: testContainersCoordinatorConfig{
+				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
+				clientConfig: coordinatorClientConfig{
+					clientConfigProvider: newMixedClientConfig(),
+					participantTransports: map[int]transportType{
+						0: transportTypeBasicGRPC,
+						1: transportTypeTransferGRPC,
+						2: transportTypeREST,
+					},
+				},
+			},
+			distributedTransaction: distributedTransaction{
+				transactionID: "tx-postgres-mixed-mixed-1",
+				transactions: []transaction{
+					{
+						participantNumber: 0,
+						payload:           "one",
+					},
+					{
+						participantNumber: 1,
+						payload: participant.TransferPayload{
+							SenderID:   "Bob",
+							ReceiverID: "Cecile",
+							Amount:     100.5,
+						},
+					},
+					{
+						participantNumber: 2,
+						payload:           "three",
+					},
+				},
+			},
+			wantErr:       true,
+			wantedOutcome: twopc.OutcomeFailed,
 		},
 	}
 	for _, tt := range tests {
