@@ -100,25 +100,23 @@ func Test_mock_persistence_basic_logic(t *testing.T) {
 				persistenceConfig: coordinator.NewMockPersistenceConfig(),
 				clientConfig: coordinatorClientConfig{
 					clientConfigProvider: newMixedClientConfig(),
-					participantTransports: map[int]transportType{
-						0: transportTypeBasicGRPC,
-						1: transportTypeBasicGRPC,
-						2: transportTypeREST,
-					},
 				},
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-mock-basic-mixed-1",
 				transactions: []transaction{
 					{
+						protocol:          transportTypeBasicGRPC,
 						participantNumber: 0,
 						payload:           "one",
 					},
 					{
+						protocol:          transportTypeBasicGRPC,
 						participantNumber: 1,
 						payload:           "two",
 					},
 					{
+						protocol:          transportTypeREST,
 						participantNumber: 2,
 						payload:           "three",
 					},

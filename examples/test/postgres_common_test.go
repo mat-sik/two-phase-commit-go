@@ -167,12 +167,20 @@ func runTestContainersTest(t *testing.T, tt testContainersTestCase) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	participantTransports := newParticipantTransports(tt.distributedTransaction.transactions)
+
 	persistenceConfig := tt.coordinatorConfig.persistenceConfigProvider(coordinatorPool)
 	clientConfig := tt.coordinatorConfig.clientConfig
 	coordinatorOpts := tt.coordinatorConfig.opts
 
 	addresses := srvBundle.addresses()
-	txCoordinator := newCoordinator(persistenceConfig, clientConfig, addresses, coordinatorOpts...)
+	txCoordinator := newCoordinator(
+		persistenceConfig,
+		clientConfig.clientConfigProvider,
+		participantTransports,
+		addresses,
+		coordinatorOpts...,
+	)
 	outcome := txCoordinator.Execute(ctx, tt.distributedTransaction.toTwopc(addresses))
 
 	assertOutcome(t, tt.wantErr, tt.wantedOutcome, outcome)

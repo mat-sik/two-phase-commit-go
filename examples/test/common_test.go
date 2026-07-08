@@ -30,8 +30,7 @@ type coordinatorConfig struct {
 }
 
 type coordinatorClientConfig struct {
-	clientConfigProvider  clientConfigProvider
-	participantTransports map[int]transportType
+	clientConfigProvider clientConfigProvider
 }
 
 type clientConfigProvider func(transportTypeByParticipantID map[string]transportType) twopc.ClientConfig[string]
@@ -74,6 +73,7 @@ func (dt distributedTransaction) toTwopc(addresses []string) twopc.DistributedTr
 }
 
 type transaction struct {
+	protocol          transportType
 	participantNumber int
 	payload           twopc.PreparePayload
 }
@@ -102,10 +102,18 @@ func runTest(t *testing.T, tt testCase) {
 
 	addresses := srvBundle.addresses()
 
+	participantTransports := newParticipantTransports(tt.distributedTransaction.transactions)
+
 	persistenceConfig := tt.coordinatorConfig.persistenceConfig
 	clientConfig := tt.coordinatorConfig.clientConfig
 	coordinatorOpts := tt.coordinatorConfig.opts
-	txCoordinator := newCoordinator(persistenceConfig, clientConfig, addresses, coordinatorOpts...)
+	txCoordinator := newCoordinator(
+		persistenceConfig,
+		clientConfig.clientConfigProvider,
+		participantTransports,
+		addresses,
+		coordinatorOpts...,
+	)
 
 	outcome := txCoordinator.Execute(ctx, tt.distributedTransaction.toTwopc(addresses))
 
@@ -116,18 +124,27 @@ func runTest(t *testing.T, tt testCase) {
 	}
 }
 
+func newParticipantTransports(transactions []transaction) map[int]transportType {
+	participantTransports := make(map[int]transportType, len(transactions))
+	for _, tx := range transactions {
+		participantTransports[tx.participantNumber] = tx.protocol
+	}
+	return participantTransports
+}
+
 func newCoordinator(
 	persistenceConfig twopc.PersistenceConfig[string],
-	clientConfig coordinatorClientConfig,
+	clientConfigProvider clientConfigProvider,
+	participantTransports map[int]transportType,
 	addresses []string,
 	opts ...twopc.Option,
 ) *twopc.Coordinator[string] {
-	transportTypeByParticipantId := make(map[string]transportType, len(clientConfig.participantTransports))
-	for participantNumber, participantTransportType := range clientConfig.participantTransports {
+	transportTypeByParticipantId := make(map[string]transportType, len(participantTransports))
+	for participantNumber, participantTransportType := range participantTransports {
 		transportTypeByParticipantId[addresses[participantNumber]] = participantTransportType
 	}
 
-	txCoordinatorClientConfig := clientConfig.clientConfigProvider(transportTypeByParticipantId)
+	txCoordinatorClientConfig := clientConfigProvider(transportTypeByParticipantId)
 	return twopc.NewCoordinator(
 		persistenceConfig,
 		txCoordinatorClientConfig,

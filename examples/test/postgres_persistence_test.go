@@ -193,25 +193,23 @@ func Test_postgres_persistence(t *testing.T) {
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
 				clientConfig: coordinatorClientConfig{
 					clientConfigProvider: newMixedClientConfig(),
-					participantTransports: map[int]transportType{
-						0: transportTypeBasicGRPC,
-						1: transportTypeBasicGRPC,
-						2: transportTypeREST,
-					},
 				},
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-basic-mixed-1",
 				transactions: []transaction{
 					{
+						protocol:          transportTypeBasicGRPC,
 						participantNumber: 0,
 						payload:           "one",
 					},
 					{
+						protocol:          transportTypeBasicGRPC,
 						participantNumber: 1,
 						payload:           "two",
 					},
 					{
+						protocol:          transportTypeREST,
 						participantNumber: 2,
 						payload:           "three",
 					},
@@ -231,21 +229,18 @@ func Test_postgres_persistence(t *testing.T) {
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
 				clientConfig: coordinatorClientConfig{
 					clientConfigProvider: newMixedClientConfig(),
-					participantTransports: map[int]transportType{
-						0: transportTypeBasicGRPC,
-						1: transportTypeTransferGRPC,
-						2: transportTypeREST,
-					},
 				},
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-mixed-mixed-1",
 				transactions: []transaction{
 					{
+						protocol:          transportTypeBasicGRPC,
 						participantNumber: 0,
 						payload:           "one",
 					},
 					{
+						protocol:          transportTypeTransferGRPC,
 						participantNumber: 1,
 						payload: participant.TransferPayload{
 							SenderID:   "Bob",
@@ -254,6 +249,7 @@ func Test_postgres_persistence(t *testing.T) {
 						},
 					},
 					{
+						protocol:          transportTypeREST,
 						participantNumber: 2,
 						payload:           "three",
 					},
@@ -273,21 +269,18 @@ func Test_postgres_persistence(t *testing.T) {
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
 				clientConfig: coordinatorClientConfig{
 					clientConfigProvider: newMixedClientConfig(),
-					participantTransports: map[int]transportType{
-						0: transportTypeBasicGRPC,
-						1: transportTypeTransferGRPC,
-						2: transportTypeREST,
-					},
 				},
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-mixed-mixed-1",
 				transactions: []transaction{
 					{
+						protocol:          transportTypeBasicGRPC,
 						participantNumber: 0,
 						payload:           "one",
 					},
 					{
+						protocol:          transportTypeTransferGRPC,
 						participantNumber: 1,
 						payload: participant.TransferPayload{
 							SenderID:   "Bob",
@@ -296,6 +289,7 @@ func Test_postgres_persistence(t *testing.T) {
 						},
 					},
 					{
+						protocol:          transportTypeREST,
 						participantNumber: 2,
 						payload:           "three",
 					},
