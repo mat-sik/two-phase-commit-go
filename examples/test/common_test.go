@@ -29,10 +29,10 @@ type coordinatorConfig struct {
 	opts                 []twopc.Option
 }
 
-type clientConfigProvider func(transportTypeByParticipantID map[string]transportType) twopc.ClientConfig[string]
+type clientConfigProvider func(clientTypeByParticipantID map[string]clientType) twopc.ClientConfig[string]
 
 func newClientConfig(clientConfig twopc.ClientConfig[string]) clientConfigProvider {
-	return constant[map[string]transportType, twopc.ClientConfig[string]](clientConfig)
+	return constant[map[string]clientType, twopc.ClientConfig[string]](clientConfig)
 }
 
 func constant[In, Out any](output Out) func(In) Out {
@@ -42,11 +42,11 @@ func constant[In, Out any](output Out) func(In) Out {
 }
 
 func newMixedClientConfig() clientConfigProvider {
-	return func(transportTypeByParticipantID map[string]transportType) twopc.ClientConfig[string] {
+	return func(clientTypeByParticipantID map[string]clientType) twopc.ClientConfig[string] {
 		return twopc.ClientConfig[string]{
 			NewClientFunc: func(participantID string) (twopc.Client, error) {
-				participantTransportType := transportTypeByParticipantID[participantID]
-				return clientFor(participantTransportType)(participantID)
+				participantClientType := clientTypeByParticipantID[participantID]
+				return clientFor(participantClientType)(participantID)
 			},
 		}
 	}
@@ -69,7 +69,7 @@ func (dt distributedTransaction) toTwopc(addresses []string) twopc.DistributedTr
 }
 
 type transaction struct {
-	protocol          transportType
+	protocol          clientType
 	participantNumber int
 	payload           twopc.PreparePayload
 }
@@ -117,8 +117,8 @@ func runTest(t *testing.T, tt testCase) {
 	}
 }
 
-func newParticipantTransports(transactions []transaction) map[int]transportType {
-	participantTransports := make(map[int]transportType, len(transactions))
+func newParticipantTransports(transactions []transaction) map[int]clientType {
+	participantTransports := make(map[int]clientType, len(transactions))
 	for _, tx := range transactions {
 		participantTransports[tx.participantNumber] = tx.protocol
 	}
@@ -128,16 +128,16 @@ func newParticipantTransports(transactions []transaction) map[int]transportType 
 func newCoordinator(
 	persistenceConfig twopc.PersistenceConfig[string],
 	clientConfigProvider clientConfigProvider,
-	participantTransports map[int]transportType,
+	participantClientTypes map[int]clientType,
 	addresses []string,
 	opts ...twopc.Option,
 ) *twopc.Coordinator[string] {
-	transportTypeByParticipantId := make(map[string]transportType, len(participantTransports))
-	for participantNumber, participantTransportType := range participantTransports {
-		transportTypeByParticipantId[addresses[participantNumber]] = participantTransportType
+	clientTypeByParticipantId := make(map[string]clientType, len(participantClientTypes))
+	for participantNumber, participantClientType := range participantClientTypes {
+		clientTypeByParticipantId[addresses[participantNumber]] = participantClientType
 	}
 
-	txCoordinatorClientConfig := clientConfigProvider(transportTypeByParticipantId)
+	txCoordinatorClientConfig := clientConfigProvider(clientTypeByParticipantId)
 	return twopc.NewCoordinator(
 		persistenceConfig,
 		txCoordinatorClientConfig,
@@ -158,23 +158,23 @@ func assertOutcome(t *testing.T, wantErr bool, wantedOutcome twopc.Outcome, resu
 	}
 }
 
-type transportType int
+type clientType int
 
 const (
-	transportTypeREST         transportType = iota
-	transportTypeBasicGRPC    transportType = iota
-	transportTypeTransferGRPC transportType = iota
+	clientTypeREST         clientType = iota
+	clientTypeBasicGRPC    clientType = iota
+	clientTypeTransferGRPC clientType = iota
 )
 
-func clientFor(transportType transportType) func(participantID string) (twopc.Client, error) {
-	switch transportType {
-	case transportTypeREST:
+func clientFor(t clientType) func(participantID string) (twopc.Client, error) {
+	switch t {
+	case clientTypeREST:
 		return client.NewRESTClient
-	case transportTypeBasicGRPC:
+	case clientTypeBasicGRPC:
 		return basic.NewGRPCClient
-	case transportTypeTransferGRPC:
+	case clientTypeTransferGRPC:
 		return transfer.NewGRPCClient
 	default:
-		panic(fmt.Sprintf("unsupported transport type: %d", transportType))
+		panic(fmt.Sprintf("unsupported transport type: %d", t))
 	}
 }

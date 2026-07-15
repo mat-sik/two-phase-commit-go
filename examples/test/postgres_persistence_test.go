@@ -189,17 +189,17 @@ func Test_postgres_persistence(t *testing.T) {
 				transactionID: "tx-postgres-basic-mixed-1",
 				transactions: []transaction{
 					{
-						protocol:          transportTypeBasicGRPC,
+						protocol:          clientTypeBasicGRPC,
 						participantNumber: 0,
 						payload:           "one",
 					},
 					{
-						protocol:          transportTypeBasicGRPC,
+						protocol:          clientTypeBasicGRPC,
 						participantNumber: 1,
 						payload:           "two",
 					},
 					{
-						protocol:          transportTypeREST,
+						protocol:          clientTypeREST,
 						participantNumber: 2,
 						payload:           "three",
 					},
@@ -223,12 +223,12 @@ func Test_postgres_persistence(t *testing.T) {
 				transactionID: "tx-postgres-mixed-mixed-1",
 				transactions: []transaction{
 					{
-						protocol:          transportTypeBasicGRPC,
+						protocol:          clientTypeBasicGRPC,
 						participantNumber: 0,
 						payload:           "one",
 					},
 					{
-						protocol:          transportTypeTransferGRPC,
+						protocol:          clientTypeTransferGRPC,
 						participantNumber: 1,
 						payload: participant.TransferPayload{
 							SenderID:   "Bob",
@@ -237,7 +237,7 @@ func Test_postgres_persistence(t *testing.T) {
 						},
 					},
 					{
-						protocol:          transportTypeREST,
+						protocol:          clientTypeREST,
 						participantNumber: 2,
 						payload:           "three",
 					},
@@ -261,12 +261,12 @@ func Test_postgres_persistence(t *testing.T) {
 				transactionID: "tx-postgres-mixed-mixed-1",
 				transactions: []transaction{
 					{
-						protocol:          transportTypeBasicGRPC,
+						protocol:          clientTypeBasicGRPC,
 						participantNumber: 0,
 						payload:           "one",
 					},
 					{
-						protocol:          transportTypeTransferGRPC,
+						protocol:          clientTypeTransferGRPC,
 						participantNumber: 1,
 						payload: participant.TransferPayload{
 							SenderID:   "Bob",
@@ -275,7 +275,7 @@ func Test_postgres_persistence(t *testing.T) {
 						},
 					},
 					{
-						protocol:          transportTypeREST,
+						protocol:          clientTypeREST,
 						participantNumber: 2,
 						payload:           "three",
 					},
