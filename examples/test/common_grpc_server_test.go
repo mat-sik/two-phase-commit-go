@@ -12,27 +12,27 @@ import (
 	"google.golang.org/grpc"
 )
 
-func basicGRPCServerRequests(handlers []*adapter.GRPCBasicHandler) []runServerRequest {
-	return mapToRunServerRequests(handlers, mapFromGRPCBasicHandler)
+func basicGRPCServerLaunches(handlers []*adapter.GRPCBasicHandler) []serverLaunch {
+	return mapToServerLaunches(handlers, mapFromGRPCBasicHandler)
 }
 
-func mapFromGRPCBasicHandler(handler *adapter.GRPCBasicHandler) runServerRequest {
+func mapFromGRPCBasicHandler(handler *adapter.GRPCBasicHandler) serverLaunch {
 	registerer := func(server *grpc.Server) {
 		basic.RegisterBasicServiceServer(server, handler)
 	}
-	return newRunServerRequest(registerer)
+	return newServerLaunch(registerer)
 }
 
-func mapFromGRPCTransferHandler(handler *adapter.GRPCTransferHandler) runServerRequest {
+func mapFromGRPCTransferHandler(handler *adapter.GRPCTransferHandler) serverLaunch {
 	registerer := func(server *grpc.Server) {
 		transfer.RegisterTransferServiceServer(server, handler)
 	}
-	return newRunServerRequest(registerer)
+	return newServerLaunch(registerer)
 }
 
-func newRunServerRequest(registerer server.GRPCHandlerRegisterer) runServerRequest {
+func newServerLaunch(registerer server.GRPCHandlerRegisterer) serverLaunch {
 	var serverPtr atomic.Pointer[grpc.Server]
-	return runServerRequest{
+	return serverLaunch{
 		serverRunner:  newGRPCServerRunner(registerer, &serverPtr),
 		serverStopper: newGRPCServerStopper(&serverPtr),
 	}

@@ -19,29 +19,28 @@ func Test_postgres_persistence(t *testing.T) {
 	tests := []testContainersTestCase{
 		{
 			name: "gRPC client basic logic happy path",
-			serverRunners: []serverRunnable{
-				newGRPCBasicLogicServerRunnable(),
-				newGRPCBasicLogicServerRunnable(),
-				newGRPCBasicLogicServerRunnable(),
+			serverSpecs: []serverSpec{
+				gRPCBasicLogicServerSpec{},
+				gRPCBasicLogicServerSpec{},
+				gRPCBasicLogicServerSpec{},
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
-				clientConfigProvider:      newClientConfig(coordinator.NewBasicGRPCClient()),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-basic-grpc-1",
 				transactions: []transaction{
 					{
-						participantNumber: 0,
 						payload:           "one",
+						communicationType: communicationTypeBasicGRPC,
 					},
 					{
-						participantNumber: 1,
 						payload:           "two",
+						communicationType: communicationTypeBasicGRPC,
 					},
 					{
-						participantNumber: 2,
 						payload:           "three",
+						communicationType: communicationTypeBasicGRPC,
 					},
 				},
 			},
@@ -50,38 +49,37 @@ func Test_postgres_persistence(t *testing.T) {
 		},
 		{
 			name: "REST client basic logic happy path",
-			serverRunners: []serverRunnable{
-				newRESTHandlerServerRunnable(),
-				newRESTHandlerServerRunnable(),
-				newRESTHandlerServerRunnable(),
+			serverSpecs: []serverSpec{
+				restBasicLogicServerSpec{},
+				restBasicLogicServerSpec{},
+				restBasicLogicServerSpec{},
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
-				clientConfigProvider:      newClientConfig(coordinator.NewRestClient()),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-basic-REST-1",
 				transactions: []transaction{
 					{
-						participantNumber: 0,
 						payload: basic.PreparePayload{
 							Payload:   "one",
 							CreatedAt: time.Now(),
 						},
+						communicationType: communicationTypeRest,
 					},
 					{
-						participantNumber: 1,
 						payload: basic.PreparePayload{
 							Payload:   "two",
 							CreatedAt: time.Now(),
 						},
+						communicationType: communicationTypeRest,
 					},
 					{
-						participantNumber: 2,
 						payload: basic.PreparePayload{
 							Payload:   "three",
 							CreatedAt: time.Now(),
 						},
+						communicationType: communicationTypeRest,
 					},
 				},
 			},
@@ -90,41 +88,40 @@ func Test_postgres_persistence(t *testing.T) {
 		},
 		{
 			name: "gRPC client transfer logic happy path",
-			serverRunners: []serverRunnable{
-				newGRPCTransferLogicServerRunnable(),
-				newGRPCTransferLogicServerRunnable(),
-				newGRPCTransferLogicServerRunnable(),
+			serverSpecs: []serverSpec{
+				&gRPCTransferLogicServerSpec{},
+				&gRPCTransferLogicServerSpec{},
+				&gRPCTransferLogicServerSpec{},
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
-				clientConfigProvider:      newClientConfig(coordinator.NewTransferGRPCClient()),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-transfer-grpc-1",
 				transactions: []transaction{
 					{
-						participantNumber: 0,
 						payload: participant.TransferPayload{
 							SenderID:   "Alice",
 							ReceiverID: "Bob",
 							Amount:     100.5,
 						},
+						communicationType: communicationTypeTransferGrpc,
 					},
 					{
-						participantNumber: 1,
 						payload: participant.TransferPayload{
 							SenderID:   "Bob",
 							ReceiverID: "Cecile",
 							Amount:     100.5,
 						},
+						communicationType: communicationTypeTransferGrpc,
 					},
 					{
-						participantNumber: 2,
 						payload: participant.TransferPayload{
 							SenderID:   "Cecile",
 							ReceiverID: "Alice",
 							Amount:     100.5,
 						},
+						communicationType: communicationTypeTransferGrpc,
 					},
 				},
 			},
@@ -133,41 +130,40 @@ func Test_postgres_persistence(t *testing.T) {
 		},
 		{
 			name: "REST client transfer logic happy path",
-			serverRunners: []serverRunnable{
-				newRESTProviderServerRunnable(),
-				newRESTProviderServerRunnable(),
-				newRESTProviderServerRunnable(),
+			serverSpecs: []serverSpec{
+				&restTransferLogicServerSpec{},
+				&restTransferLogicServerSpec{},
+				&restTransferLogicServerSpec{},
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
-				clientConfigProvider:      newClientConfig(coordinator.NewRestClient()),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-transfer-rest-1",
 				transactions: []transaction{
 					{
-						participantNumber: 0,
 						payload: participant.TransferPayload{
 							SenderID:   "Alice",
 							ReceiverID: "Bob",
 							Amount:     100.5,
 						},
+						communicationType: communicationTypeRest,
 					},
 					{
-						participantNumber: 1,
 						payload: participant.TransferPayload{
 							SenderID:   "Bob",
 							ReceiverID: "Cecile",
 							Amount:     100.5,
 						},
+						communicationType: communicationTypeRest,
 					},
 					{
-						participantNumber: 2,
 						payload: participant.TransferPayload{
 							SenderID:   "Cecile",
 							ReceiverID: "Alice",
 							Amount:     100.5,
 						},
+						communicationType: communicationTypeRest,
 					},
 				},
 			},
@@ -176,32 +172,28 @@ func Test_postgres_persistence(t *testing.T) {
 		},
 		{
 			name: "mixed client basic logic happy path",
-			serverRunners: []serverRunnable{
-				newGRPCBasicLogicServerRunnable(),
-				newGRPCBasicLogicServerRunnable(),
-				newRESTHandlerServerRunnable(),
+			serverSpecs: []serverSpec{
+				gRPCBasicLogicServerSpec{},
+				gRPCBasicLogicServerSpec{},
+				restBasicLogicServerSpec{},
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
-				clientConfigProvider:      newMixedClientConfig(),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-basic-mixed-1",
 				transactions: []transaction{
 					{
-						protocol:          clientTypeBasicGRPC,
-						participantNumber: 0,
 						payload:           "one",
+						communicationType: communicationTypeBasicGRPC,
 					},
 					{
-						protocol:          clientTypeBasicGRPC,
-						participantNumber: 1,
 						payload:           "two",
+						communicationType: communicationTypeBasicGRPC,
 					},
 					{
-						protocol:          clientTypeREST,
-						participantNumber: 2,
 						payload:           "three",
+						communicationType: communicationTypeRest,
 					},
 				},
 			},
@@ -210,36 +202,32 @@ func Test_postgres_persistence(t *testing.T) {
 		},
 		{
 			name: "mixed client mixed logic happy path",
-			serverRunners: []serverRunnable{
-				newGRPCBasicLogicServerRunnable(),
-				newGRPCTransferLogicServerRunnable(),
-				newRESTHandlerServerRunnable(),
+			serverSpecs: []serverSpec{
+				gRPCBasicLogicServerSpec{},
+				&restTransferLogicServerSpec{},
+				restBasicLogicServerSpec{},
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
-				clientConfigProvider:      newMixedClientConfig(),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-mixed-mixed-1",
 				transactions: []transaction{
 					{
-						protocol:          clientTypeBasicGRPC,
-						participantNumber: 0,
 						payload:           "one",
+						communicationType: communicationTypeBasicGRPC,
 					},
 					{
-						protocol:          clientTypeTransferGRPC,
-						participantNumber: 1,
 						payload: participant.TransferPayload{
 							SenderID:   "Bob",
 							ReceiverID: "Cecile",
 							Amount:     100.5,
 						},
+						communicationType: communicationTypeRest,
 					},
 					{
-						protocol:          clientTypeREST,
-						participantNumber: 2,
 						payload:           "three",
+						communicationType: communicationTypeRest,
 					},
 				},
 			},
@@ -248,36 +236,32 @@ func Test_postgres_persistence(t *testing.T) {
 		},
 		{
 			name: "mixed client mixed logic fail path because non matching server",
-			serverRunners: []serverRunnable{
-				newGRPCBasicLogicServerRunnable(),
-				newGRPCBasicLogicServerRunnable(),
-				newRESTHandlerServerRunnable(),
+			serverSpecs: []serverSpec{
+				gRPCBasicLogicServerSpec{},
+				&restTransferLogicServerSpec{},
+				restBasicLogicServerSpec{},
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
-				clientConfigProvider:      newMixedClientConfig(),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-mixed-mixed-1",
 				transactions: []transaction{
 					{
-						protocol:          clientTypeBasicGRPC,
-						participantNumber: 0,
 						payload:           "one",
+						communicationType: communicationTypeBasicGRPC,
 					},
 					{
-						protocol:          clientTypeTransferGRPC,
-						participantNumber: 1,
 						payload: participant.TransferPayload{
 							SenderID:   "Bob",
 							ReceiverID: "Cecile",
 							Amount:     100.5,
 						},
+						communicationType: communicationTypeTransferGrpc,
 					},
 					{
-						protocol:          clientTypeREST,
-						participantNumber: 2,
 						payload:           "three",
+						communicationType: communicationTypeRest,
 					},
 				},
 			},
@@ -310,12 +294,21 @@ func Test_postgres_persistence_basic_logic_gRPC_eventual_consistency(t *testing.
 	tx := distributedTransaction{
 		transactionID: "tx-postgres-basic-grpc-eventual-consistency-1",
 		transactions: []transaction{
-			{participantNumber: 0, payload: "one"},
-			{participantNumber: 1, payload: "two"},
-			{participantNumber: 2, payload: "three"},
+			{
+				payload:           "one",
+				communicationType: communicationTypeBasicGRPC,
+			},
+			{
+				payload:           "two",
+				communicationType: communicationTypeBasicGRPC,
+			},
+			{
+				payload:           "three",
+				communicationType: communicationTypeBasicGRPC,
+			},
 		},
 	}
-	srvConfig := basicGRPCServerRequests([]*adapter.GRPCBasicHandler{
+	srvConfig := basicGRPCServerLaunches([]*adapter.GRPCBasicHandler{
 		adapter.NewFailingBasicGRPCHandler(0, 15, 0),
 		adapter.NewFailingBasicGRPCHandler(0, 20, 0),
 		adapter.NewFailingBasicGRPCHandler(0, 30, 0),

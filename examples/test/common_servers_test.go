@@ -3,11 +3,14 @@ package test
 import (
 	"net"
 	"sync"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/adapter"
 )
 
-func runServers(requests []runServerRequest) (serverBundle, error) {
-	listeners := make([]net.Listener, 0, len(requests))
-	for range requests {
+func runServers(launch []serverLaunch) (serverBundle, error) {
+	listeners := make([]net.Listener, 0, len(launch))
+	for range launch {
 		lis, err := net.Listen("tcp", ":0")
 		if err != nil {
 			return serverBundle{}, err
@@ -16,17 +19,17 @@ func runServers(requests []runServerRequest) (serverBundle, error) {
 	}
 
 	wg := sync.WaitGroup{}
-	wg.Add(len(requests))
+	wg.Add(len(launch))
 
-	serversErrCh := make(chan error, len(requests))
+	serversErrCh := make(chan error, len(launch))
 
-	serverHandles := make([]serverHandle, 0, len(requests))
+	serverHandles := make([]serverHandle, 0, len(launch))
 	for i, lis := range listeners {
-		go requests[i].serverRunner(&wg, serversErrCh, lis)
+		go launch[i].serverRunner(&wg, serversErrCh, lis)
 
 		serverHandles = append(serverHandles, serverHandle{
 			address:       localhostAddress(lis),
-			serverStopper: requests[i].serverStopper,
+			serverStopper: launch[i].serverStopper,
 		})
 	}
 
@@ -47,17 +50,66 @@ func localhostAddress(lis net.Listener) string {
 	return "localhost:" + port
 }
 
-type runServerRequest struct {
+type serverLaunch struct {
 	serverRunner  serverRunner
 	serverStopper serverStopper
 	addr          *string
 }
 
-func (rsr runServerRequest) getAddr() string {
+func (rsr serverLaunch) getAddr() string {
 	if rsr.addr != nil {
 		return *rsr.addr
 	}
 	return ":0"
+}
+
+type serverSpec interface {
+	toServerLaunch() serverLaunch
+}
+
+type restBasicLogicServerSpec struct {
+	prepareFailUntilAttempt, commitFailUntilAttempt, rollbackFailUntilAttempt int
+}
+
+func (r restBasicLogicServerSpec) toServerLaunch() serverLaunch {
+	return mapFromMux(adapter.NewFailingBasicMux(r.prepareFailUntilAttempt, r.commitFailUntilAttempt, r.rollbackFailUntilAttempt))
+}
+
+type gRPCBasicLogicServerSpec struct {
+	prepareFailUntilAttempt, commitFailUntilAttempt, rollbackFailUntilAttempt int
+}
+
+func (r gRPCBasicLogicServerSpec) toServerLaunch() serverLaunch {
+	return mapFromGRPCBasicHandler(adapter.NewFailingBasicGRPCHandler(r.prepareFailUntilAttempt, r.commitFailUntilAttempt, r.rollbackFailUntilAttempt))
+}
+
+type serverSpecWithPool interface {
+	serverSpec
+	injectPool(pool *pgxpool.Pool)
+}
+
+type restTransferLogicServerSpec struct {
+	pool *pgxpool.Pool
+}
+
+func (r *restTransferLogicServerSpec) toServerLaunch() serverLaunch {
+	return mapFromMux(adapter.NewTransferMux(r.pool))
+}
+
+func (r *restTransferLogicServerSpec) injectPool(pool *pgxpool.Pool) {
+	r.pool = pool
+}
+
+type gRPCTransferLogicServerSpec struct {
+	pool *pgxpool.Pool
+}
+
+func (r *gRPCTransferLogicServerSpec) toServerLaunch() serverLaunch {
+	return mapFromGRPCTransferHandler(adapter.NewTransferGRPCHandler(r.pool))
+}
+
+func (r *gRPCTransferLogicServerSpec) injectPool(pool *pgxpool.Pool) {
+	r.pool = pool
 }
 
 type serverBundle struct {
@@ -82,11 +134,11 @@ func (sb serverBundle) shutdown() []error {
 	wg := sync.WaitGroup{}
 	serverStoppers := sb.serverStoppers()
 	errCh := make(chan error, len(serverStoppers))
-	for _, serverStopper := range serverStoppers {
+	for _, srvStopper := range serverStoppers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := serverStopper()
+			err := srvStopper()
 			if err != nil {
 				errCh <- err
 			}
@@ -130,10 +182,10 @@ func runServer(wg *sync.WaitGroup, errCh chan<- error, serveFunc func() error) {
 	}
 }
 
-func mapToRunServerRequests[T any](elements []T, mappingFunc func(T) runServerRequest) []runServerRequest {
-	runServerRequests := make([]runServerRequest, 0, len(elements))
+func mapToServerLaunches[T any](elements []T, mappingFunc func(T) serverLaunch) []serverLaunch {
+	serverLaunches := make([]serverLaunch, 0, len(elements))
 	for _, el := range elements {
-		runServerRequests = append(runServerRequests, mappingFunc(el))
+		serverLaunches = append(serverLaunches, mappingFunc(el))
 	}
-	return runServerRequests
+	return serverLaunches
 }

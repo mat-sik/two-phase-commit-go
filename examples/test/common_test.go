@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
 	"testing"
 	"time"
 
@@ -16,7 +15,7 @@ import (
 
 type testCase struct {
 	name                   string
-	runServerRequests      []runServerRequest
+	serverSpecs            []serverSpec
 	coordinatorConfig      coordinatorConfig
 	distributedTransaction distributedTransaction
 	wantErr                bool
@@ -24,32 +23,8 @@ type testCase struct {
 }
 
 type coordinatorConfig struct {
-	persistenceConfig    twopc.PersistenceConfig[string]
-	clientConfigProvider clientConfigProvider
-	opts                 []twopc.Option
-}
-
-type clientConfigProvider func(clientTypeByParticipantID map[string]clientType) twopc.ClientConfig[string]
-
-func newClientConfig(clientConfig twopc.ClientConfig[string]) clientConfigProvider {
-	return constant[map[string]clientType, twopc.ClientConfig[string]](clientConfig)
-}
-
-func constant[In, Out any](output Out) func(In) Out {
-	return func(_ In) Out {
-		return output
-	}
-}
-
-func newMixedClientConfig() clientConfigProvider {
-	return func(clientTypeByParticipantID map[string]clientType) twopc.ClientConfig[string] {
-		return twopc.ClientConfig[string]{
-			NewClientFunc: func(participantID string) (twopc.Client, error) {
-				participantClientType := clientTypeByParticipantID[participantID]
-				return clientFor(participantClientType)(participantID)
-			},
-		}
-	}
+	persistenceConfig twopc.PersistenceConfig[string]
+	opts              []twopc.Option
 }
 
 type distributedTransaction struct {
@@ -59,8 +34,8 @@ type distributedTransaction struct {
 
 func (dt distributedTransaction) toTwopc(addresses []string) twopc.DistributedTransaction[string] {
 	transactions := make([]twopc.Transaction[string], 0, len(dt.transactions))
-	for _, tx := range dt.transactions {
-		transactions = append(transactions, tx.toTwopc(addresses))
+	for i := range len(dt.transactions) {
+		transactions = append(transactions, dt.transactions[i].toTwopc(addresses[i]))
 	}
 	return twopc.DistributedTransaction[string]{
 		TransactionID: dt.transactionID,
@@ -69,16 +44,11 @@ func (dt distributedTransaction) toTwopc(addresses []string) twopc.DistributedTr
 }
 
 type transaction struct {
-	protocol          clientType
-	participantNumber int
 	payload           twopc.PreparePayload
+	communicationType communicationType
 }
 
-func (tx transaction) toTwopc(addresses []string) twopc.Transaction[string] {
-	participantID := fmt.Sprintf("localhost:%d", rand.Intn(65535-1024)+1024)
-	if tx.participantNumber <= len(addresses)-1 {
-		participantID = addresses[tx.participantNumber]
-	}
+func (tx transaction) toTwopc(participantID string) twopc.Transaction[string] {
 	return twopc.Transaction[string]{
 		ParticipantID: participantID,
 		Payload:       tx.payload,
@@ -88,25 +58,25 @@ func (tx transaction) toTwopc(addresses []string) twopc.Transaction[string] {
 func runTest(t *testing.T, tt testCase) {
 	t.Helper()
 
-	srvBundle, err := runServers(tt.runServerRequests)
+	srvBundle, err := runServers(toServerLaunches(tt.serverSpecs))
 	if err != nil {
 		t.Fatalf("failed to start servers: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
 	addresses := srvBundle.addresses()
 
-	participantTransports := newParticipantTransports(tt.distributedTransaction.transactions)
+	clientConfig := twopc.ClientConfig[string]{
+		NewClientFunc: newClientFunc(tt.distributedTransaction.transactions, addresses),
+	}
 
-	txCoordinator := newCoordinator(
+	txCoordinator := twopc.NewCoordinator(
 		tt.coordinatorConfig.persistenceConfig,
-		tt.coordinatorConfig.clientConfigProvider,
-		participantTransports,
-		addresses,
+		clientConfig,
 		tt.coordinatorConfig.opts...,
 	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
 	outcome := txCoordinator.Execute(ctx, tt.distributedTransaction.toTwopc(addresses))
 
@@ -117,32 +87,22 @@ func runTest(t *testing.T, tt testCase) {
 	}
 }
 
-func newParticipantTransports(transactions []transaction) map[int]clientType {
-	participantTransports := make(map[int]clientType, len(transactions))
-	for _, tx := range transactions {
-		participantTransports[tx.participantNumber] = tx.protocol
+func toServerLaunches(serverSpecs []serverSpec) []serverLaunch {
+	requests := make([]serverLaunch, 0, len(serverSpecs))
+	for _, spec := range serverSpecs {
+		requests = append(requests, spec.toServerLaunch())
 	}
-	return participantTransports
+	return requests
 }
 
-func newCoordinator(
-	persistenceConfig twopc.PersistenceConfig[string],
-	clientConfigProvider clientConfigProvider,
-	participantClientTypes map[int]clientType,
-	addresses []string,
-	opts ...twopc.Option,
-) *twopc.Coordinator[string] {
-	clientTypeByParticipantId := make(map[string]clientType, len(participantClientTypes))
-	for participantNumber, participantClientType := range participantClientTypes {
-		clientTypeByParticipantId[addresses[participantNumber]] = participantClientType
+func newClientFunc(transactions []transaction, addresses []string) func(string) (twopc.Client, error) {
+	newClientFuncByParticipantID := make(map[string]func(string) (twopc.Client, error))
+	for i := range len(transactions) {
+		newClientFuncByParticipantID[addresses[i]] = transactions[i].communicationType.clientFunc()
 	}
-
-	txCoordinatorClientConfig := clientConfigProvider(clientTypeByParticipantId)
-	return twopc.NewCoordinator(
-		persistenceConfig,
-		txCoordinatorClientConfig,
-		opts...,
-	)
+	return func(participantID string) (twopc.Client, error) {
+		return newClientFuncByParticipantID[participantID](participantID)
+	}
 }
 
 func assertOutcome(t *testing.T, wantErr bool, wantedOutcome twopc.Outcome, result twopc.Result) {
@@ -158,23 +118,23 @@ func assertOutcome(t *testing.T, wantErr bool, wantedOutcome twopc.Outcome, resu
 	}
 }
 
-type clientType int
+type communicationType int
 
 const (
-	clientTypeREST         clientType = iota
-	clientTypeBasicGRPC    clientType = iota
-	clientTypeTransferGRPC clientType = iota
+	communicationTypeRest = iota
+	communicationTypeBasicGRPC
+	communicationTypeTransferGrpc
 )
 
-func clientFor(t clientType) func(participantID string) (twopc.Client, error) {
-	switch t {
-	case clientTypeREST:
+func (ct communicationType) clientFunc() func(participantID string) (twopc.Client, error) {
+	switch ct {
+	case communicationTypeRest:
 		return client.NewRESTClient
-	case clientTypeBasicGRPC:
+	case communicationTypeBasicGRPC:
 		return basic.NewGRPCClient
-	case clientTypeTransferGRPC:
+	case communicationTypeTransferGrpc:
 		return transfer.NewGRPCClient
 	default:
-		panic(fmt.Sprintf("unsupported transport type: %d", t))
+		panic(fmt.Sprintf("unsupported communication type: %T", ct))
 	}
 }
