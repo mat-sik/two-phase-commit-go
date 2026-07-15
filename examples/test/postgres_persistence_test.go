@@ -26,9 +26,7 @@ func Test_postgres_persistence(t *testing.T) {
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
-				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newClientConfig(coordinator.NewBasicGRPCClient()),
-				},
+				clientConfigProvider:      newClientConfig(coordinator.NewBasicGRPCClient()),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-basic-grpc-1",
@@ -59,9 +57,7 @@ func Test_postgres_persistence(t *testing.T) {
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
-				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newClientConfig(coordinator.NewRestClient()),
-				},
+				clientConfigProvider:      newClientConfig(coordinator.NewRestClient()),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-basic-REST-1",
@@ -101,9 +97,7 @@ func Test_postgres_persistence(t *testing.T) {
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
-				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newClientConfig(coordinator.NewTransferGRPCClient()),
-				},
+				clientConfigProvider:      newClientConfig(coordinator.NewTransferGRPCClient()),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-transfer-grpc-1",
@@ -146,9 +140,7 @@ func Test_postgres_persistence(t *testing.T) {
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
-				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newClientConfig(coordinator.NewRestClient()),
-				},
+				clientConfigProvider:      newClientConfig(coordinator.NewRestClient()),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-transfer-rest-1",
@@ -191,9 +183,7 @@ func Test_postgres_persistence(t *testing.T) {
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
-				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newMixedClientConfig(),
-				},
+				clientConfigProvider:      newMixedClientConfig(),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-basic-mixed-1",
@@ -227,9 +217,7 @@ func Test_postgres_persistence(t *testing.T) {
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
-				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newMixedClientConfig(),
-				},
+				clientConfigProvider:      newMixedClientConfig(),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-mixed-mixed-1",
@@ -267,9 +255,7 @@ func Test_postgres_persistence(t *testing.T) {
 			},
 			coordinatorConfig: testContainersCoordinatorConfig{
 				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
-				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newMixedClientConfig(),
-				},
+				clientConfigProvider:      newMixedClientConfig(),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-postgres-mixed-mixed-1",

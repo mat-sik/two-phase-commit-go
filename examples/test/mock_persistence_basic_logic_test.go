@@ -22,10 +22,8 @@ func Test_mock_persistence_basic_logic(t *testing.T) {
 				adapter.NewBasicGRPCHandler(),
 			}),
 			coordinatorConfig: coordinatorConfig{
-				persistenceConfig: coordinator.NewMockPersistenceConfig(),
-				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newClientConfig(coordinator.NewBasicGRPCClient()),
-				},
+				persistenceConfig:    coordinator.NewMockPersistenceConfig(),
+				clientConfigProvider: newClientConfig(coordinator.NewBasicGRPCClient()),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-mock-basic-gRPC-1",
@@ -55,10 +53,8 @@ func Test_mock_persistence_basic_logic(t *testing.T) {
 				adapter.NewBasicMux(),
 			}),
 			coordinatorConfig: coordinatorConfig{
-				persistenceConfig: coordinator.NewMockPersistenceConfig(),
-				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newClientConfig(coordinator.NewRestClient()),
-				},
+				persistenceConfig:    coordinator.NewMockPersistenceConfig(),
+				clientConfigProvider: newClientConfig(coordinator.NewRestClient()),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-mock-basic-REST-1",
@@ -97,10 +93,8 @@ func Test_mock_persistence_basic_logic(t *testing.T) {
 				mapFromMux(adapter.NewBasicMux()),
 			},
 			coordinatorConfig: coordinatorConfig{
-				persistenceConfig: coordinator.NewMockPersistenceConfig(),
-				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newMixedClientConfig(),
-				},
+				persistenceConfig:    coordinator.NewMockPersistenceConfig(),
+				clientConfigProvider: newMixedClientConfig(),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-mock-basic-mixed-1",
@@ -133,10 +127,8 @@ func Test_mock_persistence_basic_logic(t *testing.T) {
 				adapter.NewFailingBasicGRPCHandler(1, 0, 0),
 			}),
 			coordinatorConfig: coordinatorConfig{
-				persistenceConfig: coordinator.NewMockPersistenceConfig(),
-				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newClientConfig(coordinator.NewBasicGRPCClient()),
-				},
+				persistenceConfig:    coordinator.NewMockPersistenceConfig(),
+				clientConfigProvider: newClientConfig(coordinator.NewBasicGRPCClient()),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-mock-basic-gRPC-2",
@@ -166,10 +158,8 @@ func Test_mock_persistence_basic_logic(t *testing.T) {
 				adapter.NewFailingBasicMux(1, 0, 0),
 			}),
 			coordinatorConfig: coordinatorConfig{
-				persistenceConfig: coordinator.NewMockPersistenceConfig(),
-				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newClientConfig(coordinator.NewRestClient()),
-				},
+				persistenceConfig:    coordinator.NewMockPersistenceConfig(),
+				clientConfigProvider: newClientConfig(coordinator.NewRestClient()),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-mock-basic-REST-2",
@@ -208,10 +198,8 @@ func Test_mock_persistence_basic_logic(t *testing.T) {
 				adapter.NewFailingBasicGRPCHandler(0, 1, 0),
 			}),
 			coordinatorConfig: coordinatorConfig{
-				persistenceConfig: coordinator.NewMockPersistenceConfig(),
-				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newClientConfig(coordinator.NewBasicGRPCClient()),
-				},
+				persistenceConfig:    coordinator.NewMockPersistenceConfig(),
+				clientConfigProvider: newClientConfig(coordinator.NewBasicGRPCClient()),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-mock-basic-gRPC-3",
@@ -241,10 +229,8 @@ func Test_mock_persistence_basic_logic(t *testing.T) {
 				adapter.NewFailingBasicMux(0, 1, 0),
 			}),
 			coordinatorConfig: coordinatorConfig{
-				persistenceConfig: coordinator.NewMockPersistenceConfig(),
-				clientConfig: coordinatorClientConfig{
-					clientConfigProvider: newClientConfig(coordinator.NewRestClient()),
-				},
+				persistenceConfig:    coordinator.NewMockPersistenceConfig(),
+				clientConfigProvider: newClientConfig(coordinator.NewRestClient()),
 			},
 			distributedTransaction: distributedTransaction{
 				transactionID: "tx-mock-basic-REST-3",

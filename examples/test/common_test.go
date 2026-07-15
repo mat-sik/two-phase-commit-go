@@ -24,13 +24,9 @@ type testCase struct {
 }
 
 type coordinatorConfig struct {
-	persistenceConfig twopc.PersistenceConfig[string]
-	clientConfig      coordinatorClientConfig
-	opts              []twopc.Option
-}
-
-type coordinatorClientConfig struct {
+	persistenceConfig    twopc.PersistenceConfig[string]
 	clientConfigProvider clientConfigProvider
+	opts                 []twopc.Option
 }
 
 type clientConfigProvider func(transportTypeByParticipantID map[string]transportType) twopc.ClientConfig[string]
@@ -104,15 +100,12 @@ func runTest(t *testing.T, tt testCase) {
 
 	participantTransports := newParticipantTransports(tt.distributedTransaction.transactions)
 
-	persistenceConfig := tt.coordinatorConfig.persistenceConfig
-	clientConfig := tt.coordinatorConfig.clientConfig
-	coordinatorOpts := tt.coordinatorConfig.opts
 	txCoordinator := newCoordinator(
-		persistenceConfig,
-		clientConfig.clientConfigProvider,
+		tt.coordinatorConfig.persistenceConfig,
+		tt.coordinatorConfig.clientConfigProvider,
 		participantTransports,
 		addresses,
-		coordinatorOpts...,
+		tt.coordinatorConfig.opts...,
 	)
 
 	outcome := txCoordinator.Execute(ctx, tt.distributedTransaction.toTwopc(addresses))

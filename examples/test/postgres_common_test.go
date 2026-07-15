@@ -134,7 +134,7 @@ func genericToRunServerRequest[T comparable](
 
 type testContainersCoordinatorConfig struct {
 	persistenceConfigProvider persistenceConfigProvider
-	clientConfig              coordinatorClientConfig
+	clientConfigProvider      clientConfigProvider
 	opts                      []twopc.Option
 }
 
@@ -169,18 +169,15 @@ func runTestContainersTest(t *testing.T, tt testContainersTestCase) {
 
 	participantTransports := newParticipantTransports(tt.distributedTransaction.transactions)
 
-	persistenceConfig := tt.coordinatorConfig.persistenceConfigProvider(coordinatorPool)
-	clientConfig := tt.coordinatorConfig.clientConfig
-	coordinatorOpts := tt.coordinatorConfig.opts
-
 	addresses := srvBundle.addresses()
 	txCoordinator := newCoordinator(
-		persistenceConfig,
-		clientConfig.clientConfigProvider,
+		tt.coordinatorConfig.persistenceConfigProvider(coordinatorPool),
+		tt.coordinatorConfig.clientConfigProvider,
 		participantTransports,
 		addresses,
-		coordinatorOpts...,
+		tt.coordinatorConfig.opts...,
 	)
+
 	outcome := txCoordinator.Execute(ctx, tt.distributedTransaction.toTwopc(addresses))
 
 	assertOutcome(t, tt.wantErr, tt.wantedOutcome, outcome)
