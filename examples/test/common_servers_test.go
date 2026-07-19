@@ -56,6 +56,12 @@ type serverLaunch struct {
 	addr          *string
 }
 
+var noopServerLaunch = serverLaunch{
+	serverRunner:  noopServerRunner,
+	serverStopper: noopServerStopper,
+	addr:          nil,
+}
+
 func (rsr serverLaunch) getAddr() string {
 	if rsr.addr != nil {
 		return *rsr.addr
@@ -65,6 +71,13 @@ func (rsr serverLaunch) getAddr() string {
 
 type serverSpec interface {
 	toServerLaunch() serverLaunch
+}
+
+type noopServerSpec struct {
+}
+
+func (n noopServerSpec) toServerLaunch() serverLaunch {
+	return noopServerLaunch
 }
 
 type restBasicLogicServerSpec struct {
@@ -173,7 +186,16 @@ func (sb serverBundle) serverStoppers() []serverStopper {
 
 type serverRunner func(wg *sync.WaitGroup, errCh chan<- error, lis net.Listener)
 
+var noopServerRunner = func(wg *sync.WaitGroup, errCh chan<- error, lis net.Listener) {
+	defer wg.Done()
+	errCh <- lis.Close()
+}
+
 type serverStopper func() error
+
+var noopServerStopper = func() error {
+	return nil
+}
 
 func runServer(wg *sync.WaitGroup, errCh chan<- error, serveFunc func() error) {
 	defer wg.Done()

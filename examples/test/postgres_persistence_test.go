@@ -268,6 +268,40 @@ func Test_postgres_persistence(t *testing.T) {
 			wantErr:       true,
 			wantedOutcome: twopc.OutcomeFailed,
 		},
+		{
+			name: "mixed client mixed logic fail path because one server is not running",
+			serverSpecs: []serverSpec{
+				gRPCBasicLogicServerSpec{},
+				noopServerSpec{},
+				restBasicLogicServerSpec{},
+			},
+			coordinatorConfig: testContainersCoordinatorConfig{
+				persistenceConfigProvider: coordinator.NewPostgresPersistenceConfig,
+			},
+			distributedTransaction: distributedTransaction{
+				transactionID: "tx-postgres-mixed-mixed-1",
+				transactions: []transaction{
+					{
+						payload:           "one",
+						communicationType: communicationTypeBasicGRPC,
+					},
+					{
+						payload: participant.TransferPayload{
+							SenderID:   "Bob",
+							ReceiverID: "Cecile",
+							Amount:     100.5,
+						},
+						communicationType: communicationTypeTransferGrpc,
+					},
+					{
+						payload:           "three",
+						communicationType: communicationTypeRest,
+					},
+				},
+			},
+			wantErr:       true,
+			wantedOutcome: twopc.OutcomeFailed,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
