@@ -212,8 +212,8 @@ type ShutdownFunc func(ctx context.Context) error
 func join(shutdowns []ShutdownFunc) ShutdownFunc {
 	return func(ctx context.Context) error {
 		var shutdownErr error
-		for _, fn := range shutdowns {
-			shutdownErr = errors.Join(shutdownErr, fn(ctx))
+		for i := len(shutdowns) - 1; i >= 0; i-- {
+			shutdownErr = errors.Join(shutdownErr, shutdowns[i](ctx))
 		}
 		return shutdownErr
 	}

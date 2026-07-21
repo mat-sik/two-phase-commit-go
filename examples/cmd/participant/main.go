@@ -24,7 +24,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-// TODO: inspect why shut down takes so long
 func main() {
 	os.Exit(run())
 }
