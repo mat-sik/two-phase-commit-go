@@ -68,17 +68,6 @@ func newParticipantRegistrar[ID comparable](clientConfig ClientConfig[ID]) parti
 	return participant.NewRegistrar(newClientFunc, clients)
 }
 
-func (c Coordinator[ID]) newExecutor(ctx context.Context, initialState state.State[ID]) executor[ID] {
-	return executor[ID]{
-		config:                    c.config,
-		state:                     initialState,
-		participantFailureCounter: participant.NewFailureCounter[ID](),
-		participantRegistrar:      c.participantRegistrar,
-		persister:                 newPersister(ctx, c.transactionStatePersister, c.config.tracer),
-		tracer:                    c.config.tracer,
-	}
-}
-
 // Execute runs the two-phase commit protocol for the given distributed transaction.
 //
 // It drives all participant transactions through the Prepare → Commit (or Rollback)
@@ -102,12 +91,35 @@ func (c Coordinator[ID]) Execute(ctx context.Context, distributedTransaction Dis
 		}
 	}
 
-	// TODO: probably this initial operations are not needed and could be replaced by payloadByParticipantID map
-	initialOperations := toInitialOperations(distributedTransaction.Transactions)
+	exec := c.newExecutor(ctx, initialState, distributedTransaction)
+	return exec.runTransactionLoop(ctx)
+}
 
-	exec := c.newExecutor(ctx, initialState)
+func (c Coordinator[ID]) newExecutor(
+	ctx context.Context,
+	initialState state.State[ID],
+	distributedTransaction DistributedTransaction[ID],
+) executor[ID] {
+	return executor[ID]{
+		config:                    c.config,
+		state:                     initialState,
+		transactionID:             distributedTransaction.TransactionID,
+		payloadByParticipantID:    newPayloadByParticipantID(distributedTransaction),
+		participantFailureCounter: participant.NewFailureCounter[ID](),
+		participantRegistrar:      c.participantRegistrar,
+		persister:                 newPersister(ctx, c.transactionStatePersister, c.config.tracer),
+		tracer:                    c.config.tracer,
+	}
+}
 
-	return exec.runTransactionLoop(ctx, distributedTransaction.TransactionID, initialOperations)
+func newPayloadByParticipantID[ID comparable](
+	distributedTransaction DistributedTransaction[ID],
+) map[ID]participant.PreparePayload {
+	payloadByParticipant := make(map[ID]participant.PreparePayload, len(distributedTransaction.Transactions))
+	for _, tx := range distributedTransaction.Transactions {
+		payloadByParticipant[tx.ParticipantID] = tx.Payload
+	}
+	return payloadByParticipant
 }
 
 func (c Coordinator[ID]) assertCorrectConfiguration(participantIDs []ID) {
@@ -127,26 +139,20 @@ func participantIDs[ID comparable](trs []Transaction[ID]) []ID {
 	return ids
 }
 
-func toInitialOperations[ID comparable](txs []Transaction[ID]) []operation[ID] {
-	ops := make([]operation[ID], 0, len(txs))
-	for _, tx := range txs {
-		ops = append(ops, newInitialOperation(tx.ParticipantID, tx.Payload))
-	}
-	return ops
-}
-
 type executor[ID comparable] struct {
 	config                    config
 	state                     state.State[ID]
+	transactionID             string
+	payloadByParticipantID    map[ID]participant.PreparePayload
 	participantFailureCounter *participant.AttemptCounter[ID]
 	participantRegistrar      participant.Registrar[ID]
 	persister                 *persister[ID]
 	tracer                    trace.Tracer
 }
 
-func (e executor[ID]) runTransactionLoop(ctx context.Context, txID string, ops []operation[ID]) (result Result) {
+func (e executor[ID]) runTransactionLoop(ctx context.Context) (result Result) {
 	var span trace.Span
-	ctx, span = runTransactionLoopSpan(ctx, e.tracer, txID, ops)
+	ctx, span = runTransactionLoopSpan(ctx, e.tracer, e.transactionID, e.payloadByParticipantID)
 
 	defer func() {
 		if err := e.persister.stop(); err != nil {
@@ -168,10 +174,10 @@ func (e executor[ID]) runTransactionLoop(ctx context.Context, txID string, ops [
 			}
 		}
 
-		ops = e.nextOperations(ops)
+		ops := e.nextOperations()
 
 		var err error
-		successful, failed, err = e.executeRound(ctx, txID, ops, successful[:0], failed[:0])
+		successful, failed, err = e.executeRound(ctx, ops, successful[:0], failed[:0])
 
 		if err != nil {
 			errs = append(errs, err)
@@ -186,18 +192,9 @@ func (e executor[ID]) runTransactionLoop(ctx context.Context, txID string, ops [
 	}
 }
 
-func (e executor[ID]) nextOperations(ops []operation[ID]) []operation[ID] {
-	payloadByParticipantID := toPayloadByParticipantID(ops)
+func (e executor[ID]) nextOperations() []operation[ID] {
 	nextTrs := e.state.NextTransitions()
-	return toOperations(nextTrs, payloadByParticipantID)
-}
-
-func toPayloadByParticipantID[ID comparable](ops []operation[ID]) map[ID]participant.PreparePayload {
-	payloadByParticipantID := make(map[ID]participant.PreparePayload)
-	for _, op := range ops {
-		payloadByParticipantID[op.participantID] = op.payload
-	}
-	return payloadByParticipantID
+	return toOperations(nextTrs, e.payloadByParticipantID)
 }
 
 func toOperations[ID comparable](
@@ -244,21 +241,25 @@ func runTransactionLoopSpan[ID comparable](
 	ctx context.Context,
 	tracer trace.Tracer,
 	txID string,
-	ops []operation[ID],
+	payloadByParticipantID map[ID]participant.PreparePayload,
 ) (context.Context, trace.Span) {
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, "distributed-transaction-loop")
 
-	participants := make(map[string]struct{}, len(ops))
-	for _, op := range ops {
-		participantIDString := fmt.Sprintf("%v", op.participantID)
-		participants[participantIDString] = struct{}{}
+	attrs := make([]attribute.KeyValue, 0, len(payloadByParticipantID)+1)
+
+	attrs = append(attrs,
+		attribute.String("transaction.id", txID),
+	)
+
+	for participantID, payload := range payloadByParticipantID {
+		attrs = append(attrs, attribute.String(
+			fmt.Sprintf("participant.%v.payload", participantID),
+			fmt.Sprintf("%v", payload),
+		))
 	}
 
-	span.SetAttributes(
-		attribute.String("transaction.id", txID),
-		attribute.StringSlice("participants", slices.Collect(maps.Keys(participants))),
-	)
+	span.SetAttributes(attrs...)
 
 	return ctx, span
 }
@@ -330,7 +331,6 @@ const (
 
 func (e executor[ID]) executeRound(
 	ctx context.Context,
-	txID string,
 	ops, successful, failed []operation[ID],
 ) ([]operation[ID], []operation[ID], error) {
 	var span trace.Span
@@ -338,7 +338,7 @@ func (e executor[ID]) executeRound(
 	defer span.End()
 
 	resultCh := make(chan operationResult[ID], len(ops))
-	e.sendOperationsConcurrently(ctx, resultCh, txID, ops)
+	e.sendOperationsConcurrently(ctx, resultCh, ops)
 
 	var errs []error
 	for result := range resultCh {
@@ -379,7 +379,6 @@ func executeRoundSpan[ID comparable](ctx context.Context, tracer trace.Tracer, o
 func (e executor[ID]) sendOperationsConcurrently(
 	ctx context.Context,
 	resultCh chan<- operationResult[ID],
-	txID string,
 	ops []operation[ID],
 ) {
 	var wg sync.WaitGroup
@@ -395,10 +394,10 @@ func (e executor[ID]) sendOperationsConcurrently(
 			}()
 
 			err := e.withBackoff(ctx, op.participantID, func() error {
-				return e.sendOperation(ctx, txID, op)
+				return e.sendOperation(ctx, op)
 			})
 			if err == nil {
-				e.persister.enqueuePersistState(ctx, txID, op.participantID, op.targetState)
+				e.persister.enqueuePersistState(ctx, e.transactionID, op.participantID, op.targetState)
 			} else {
 				span.RecordError(err)
 				span.SetStatus(codes.Error, "communication with participant")
@@ -447,7 +446,7 @@ func backoffWait(ctx context.Context, cfg config, attempt int) {
 	backoff.Wait(ctx, attempt)
 }
 
-func (e executor[ID]) sendOperation(ctx context.Context, txID string, op operation[ID]) error {
+func (e executor[ID]) sendOperation(ctx context.Context, op operation[ID]) error {
 	ctx, cancel := context.WithTimeout(ctx, e.config.sendOperationTimeout)
 	defer cancel()
 
@@ -458,18 +457,18 @@ func (e executor[ID]) sendOperation(ctx context.Context, txID string, op operati
 
 	switch op.targetState {
 	case transaction.Prepared:
-		if err = client.PrepareTransaction(ctx, txID, op.payload); err != nil {
-			return fmt.Errorf("preparing tx %s payload %v: %w", txID, op.payload, err)
+		if err = client.PrepareTransaction(ctx, e.transactionID, op.payload); err != nil {
+			return fmt.Errorf("preparing tx %s payload %v: %w", e.transactionID, op.payload, err)
 		}
 		return nil
 	case transaction.Committed:
-		if err = client.CommitTransaction(ctx, txID); err != nil {
-			return fmt.Errorf("committing tx %s: %w", txID, err)
+		if err = client.CommitTransaction(ctx, e.transactionID); err != nil {
+			return fmt.Errorf("committing tx %s: %w", e.transactionID, err)
 		}
 		return nil
 	case transaction.RolledBack:
-		if err = client.RollbackTransaction(ctx, txID); err != nil {
-			return fmt.Errorf("rolling back tx %s: %w", txID, err)
+		if err = client.RollbackTransaction(ctx, e.transactionID); err != nil {
+			return fmt.Errorf("rolling back tx %s: %w", e.transactionID, err)
 		}
 		return nil
 	default:
@@ -482,15 +481,6 @@ type operation[ID comparable] struct {
 	payload       participant.PreparePayload
 	sourceState   transaction.State
 	targetState   transaction.State
-}
-
-func newInitialOperation[ID comparable](participantID ID, payload participant.PreparePayload) operation[ID] {
-	return operation[ID]{
-		participantID: participantID,
-		payload:       payload,
-		sourceState:   transaction.NotStarted,
-		targetState:   transaction.Prepared,
-	}
 }
 
 func (o operation[ID]) toTransition() state.Transition[ID] {
