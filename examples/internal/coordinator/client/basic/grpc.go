@@ -6,6 +6,7 @@ import (
 
 	pb "github.com/mat-sik/two-phase-commit-go/examples/internal/generated/basic/v1"
 	"github.com/mat-sik/two-phase-commit-go/twopc"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -14,10 +15,14 @@ type basicGRPCClient struct {
 	client pb.BasicServiceClient
 }
 
-func NewGRPCClient(clientID string) (twopc.Client, error) {
-	conn, err := grpc.NewClient(clientID, grpc.WithTransportCredentials(insecure.NewCredentials()))
+func NewGRPCClient(participantID string) (twopc.Client, error) {
+	conn, err := grpc.NewClient(
+		participantID,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
 	if err != nil {
-		return nil, fmt.Errorf("creating gRPC conn %s: %w", clientID, err)
+		return nil, fmt.Errorf("creating gRPC conn %s: %w", participantID, err)
 	}
 	return basicGRPCClient{
 		client: pb.NewBasicServiceClient(conn),

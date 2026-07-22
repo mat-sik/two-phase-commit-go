@@ -4,12 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/participant"
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/retry"
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/state"
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Coordinator orchestrates a two-phase commit protocol across multiple participants.
@@ -69,7 +74,8 @@ func (c Coordinator[ID]) newExecutor(ctx context.Context, initialState state.Sta
 		state:                     initialState,
 		participantFailureCounter: participant.NewFailureCounter[ID](),
 		participantRegistrar:      c.participantRegistrar,
-		persister:                 newPersister(ctx, c.transactionStatePersister),
+		persister:                 newPersister(ctx, c.transactionStatePersister, c.config.tracer),
+		tracer:                    c.config.tracer,
 	}
 }
 
@@ -96,6 +102,7 @@ func (c Coordinator[ID]) Execute(ctx context.Context, distributedTransaction Dis
 		}
 	}
 
+	// TODO: probably this initial operations are not needed and could be replaced by payloadByParticipantID map
 	initialOperations := toInitialOperations(distributedTransaction.Transactions)
 
 	exec := c.newExecutor(ctx, initialState)
@@ -134,13 +141,19 @@ type executor[ID comparable] struct {
 	participantFailureCounter *participant.AttemptCounter[ID]
 	participantRegistrar      participant.Registrar[ID]
 	persister                 *persister[ID]
+	tracer                    trace.Tracer
 }
 
 func (e executor[ID]) runTransactionLoop(ctx context.Context, txID string, ops []operation[ID]) (result Result) {
+	var span trace.Span
+	ctx, span = runTransactionLoopSpan(ctx, e.tracer, txID, ops)
+
 	defer func() {
 		if err := e.persister.stop(); err != nil {
 			result.err = errors.Join(result.err, err)
 		}
+		recordOutcome(ctx, result)
+		span.End()
 	}()
 
 	var successful, failed []operation[ID]
@@ -148,9 +161,9 @@ func (e executor[ID]) runTransactionLoop(ctx context.Context, txID string, ops [
 
 	for !e.state.IsTerminal() {
 		if err := ctx.Err(); err != nil {
-			errs = append(errs, err)
+			span.AddEvent("abandoning due to context err")
 			return Result{
-				err:     errors.Join(errs...),
+				err:     errors.Join(append(errs, err)...),
 				outcome: outcome(e.state),
 			}
 		}
@@ -227,14 +240,51 @@ func outcome[ID comparable](s state.State[ID]) Outcome {
 	}
 }
 
+func runTransactionLoopSpan[ID comparable](
+	ctx context.Context,
+	tracer trace.Tracer,
+	txID string,
+	ops []operation[ID],
+) (context.Context, trace.Span) {
+	var span trace.Span
+	ctx, span = tracer.Start(ctx, "distributed-transaction-loop")
+
+	participants := make(map[string]struct{}, len(ops))
+	for _, op := range ops {
+		participantIDString := fmt.Sprintf("%v", op.participantID)
+		participants[participantIDString] = struct{}{}
+	}
+
+	span.SetAttributes(
+		attribute.String("transaction.id", txID),
+		attribute.StringSlice("participants", slices.Collect(maps.Keys(participants))),
+	)
+
+	return ctx, span
+}
+
+func recordOutcome(ctx context.Context, result Result) {
+	span := trace.SpanFromContext(ctx)
+	if result.err != nil {
+		span.RecordError(result.Err(),
+			trace.WithAttributes(attribute.Int("transaction.outcome", int(result.Outcome()))),
+		)
+		if result.Outcome() == OutcomeFailed {
+			span.SetStatus(codes.Error, "transaction failed")
+		} else if result.Outcome() == OutcomeInconsistent {
+			span.SetStatus(codes.Error, "transaction failed and participants left in inconsistent state")
+		}
+	}
+}
+
 // Result holds the outcome of a two-phase commit execution.
 // Callers should inspect Outcome first to determine the final transaction state,
 // then check Err for any infrastructure or participant errors that occurred during execution.
 // A non-nil Err does not imply an inconsistent state — for example, a participant may have
 // returned a transient error while the transaction still reached a terminal state.
 type Result struct {
-	err     error
 	outcome Outcome
+	err     error
 }
 
 // Err returns any errors accumulated during execution.
@@ -283,6 +333,10 @@ func (e executor[ID]) executeRound(
 	txID string,
 	ops, successful, failed []operation[ID],
 ) ([]operation[ID], []operation[ID], error) {
+	var span trace.Span
+	ctx, span = executeRoundSpan(ctx, e.tracer, ops)
+	defer span.End()
+
 	resultCh := make(chan operationResult[ID], len(ops))
 	e.sendOperationsConcurrently(ctx, resultCh, txID, ops)
 
@@ -306,6 +360,22 @@ func (e executor[ID]) executeRound(
 	return successful, failed, err
 }
 
+func executeRoundSpan[ID comparable](ctx context.Context, tracer trace.Tracer, ops []operation[ID]) (context.Context, trace.Span) {
+	var span trace.Span
+	ctx, span = tracer.Start(ctx, "execution-round")
+
+	participants := make(map[string]struct{}, len(ops))
+	for _, op := range ops {
+		participantIDString := fmt.Sprintf("%v", op.participantID)
+		participants[participantIDString] = struct{}{}
+	}
+	span.SetAttributes(
+		attribute.StringSlice("operation.participants", slices.Collect(maps.Keys(participants))),
+	)
+
+	return ctx, span
+}
+
 func (e executor[ID]) sendOperationsConcurrently(
 	ctx context.Context,
 	resultCh chan<- operationResult[ID],
@@ -317,12 +387,21 @@ func (e executor[ID]) sendOperationsConcurrently(
 	for _, op := range ops {
 		wg.Add(1)
 		go func() {
-			defer wg.Done()
+			ctx, span := sendOperationConcurrentlySpan(ctx, e.tracer, op)
+
+			defer func() {
+				span.End()
+				wg.Done()
+			}()
+
 			err := e.withBackoff(ctx, op.participantID, func() error {
 				return e.sendOperation(ctx, txID, op)
 			})
 			if err == nil {
 				e.persister.enqueuePersistState(ctx, txID, op.participantID, op.targetState)
+			} else {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "communication with participant")
 			}
 			resultCh <- operationResult[ID]{err: err, operation: op}
 		}()
@@ -332,6 +411,18 @@ func (e executor[ID]) sendOperationsConcurrently(
 		wg.Wait()
 		close(resultCh)
 	}()
+}
+
+func sendOperationConcurrentlySpan[ID comparable](ctx context.Context, tracer trace.Tracer, op operation[ID]) (context.Context, trace.Span) {
+	var span trace.Span
+	ctx, span = tracer.Start(ctx, "sending-operation")
+	span.SetAttributes(
+		attribute.String("participant.id", fmt.Sprintf("%v", op.participantID)),
+		attribute.String("payload", fmt.Sprintf("%v", op.payload)),
+		attribute.Int("state.source", int(op.sourceState)),
+		attribute.Int("state.target", int(op.targetState)),
+	)
+	return ctx, span
 }
 
 type operationResult[ID comparable] struct {

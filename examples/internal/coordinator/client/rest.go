@@ -10,6 +10,7 @@ import (
 	"net/url"
 
 	"github.com/mat-sik/two-phase-commit-go/twopc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type restClient struct {
@@ -17,10 +18,12 @@ type restClient struct {
 	client *http.Client
 }
 
-func NewRESTClient(clientID string) (twopc.Client, error) {
+func NewRESTClient(participantID string) (twopc.Client, error) {
 	return restClient{
-		host:   clientID,
-		client: &http.Client{},
+		host: participantID,
+		client: &http.Client{
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+		},
 	}, nil
 }
 

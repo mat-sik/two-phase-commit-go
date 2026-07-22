@@ -3,9 +3,13 @@ package twopc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/mat-sik/two-phase-commit-go/twopc/internal/transaction"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type persister[ID comparable] struct {
@@ -15,9 +19,14 @@ type persister[ID comparable] struct {
 	handlerStore              *persisterHandlerStore[ID]
 	errorsStore               *persisterErrorStore
 	transactionStatePersister transactionStatePersister[ID]
+	tracer                    trace.Tracer
 }
 
-func newPersister[ID comparable](ctx context.Context, transactionStatePersister transactionStatePersister[ID]) *persister[ID] {
+func newPersister[ID comparable](
+	ctx context.Context,
+	transactionStatePersister transactionStatePersister[ID],
+	tracer trace.Tracer,
+) *persister[ID] {
 	ctx, cancel := context.WithCancel(ctx)
 	return &persister[ID]{
 		rootCtx:                   ctx,
@@ -25,6 +34,7 @@ func newPersister[ID comparable](ctx context.Context, transactionStatePersister 
 		handlerStore:              &persisterHandlerStore[ID]{},
 		errorsStore:               &persisterErrorStore{},
 		transactionStatePersister: transactionStatePersister,
+		tracer:                    tracer,
 	}
 }
 
@@ -40,7 +50,9 @@ func (p *persister[ID]) enqueuePersistState(ctx context.Context, txID string, pa
 func (p *persister[ID]) persistState(ctx context.Context, txID string, participantID ID, state transaction.State) {
 	ctx, cancel := context.WithCancel(ctx)
 	stop := context.AfterFunc(p.rootCtx, cancel)
-	defer stop()
+
+	var span trace.Span
+	ctx, span = persistStateSpan(ctx, p.tracer, txID, participantID, state)
 
 	done := make(chan struct{})
 
@@ -53,9 +65,11 @@ func (p *persister[ID]) persistState(ctx context.Context, txID string, participa
 	}
 
 	defer func() {
+		stop()
 		cancel()
 		close(done)
 		p.handlerStore.compareAndDelete(key, handle)
+		span.End()
 	}()
 
 	if prev, ok := p.handlerStore.swap(key, handle); ok {
@@ -66,9 +80,31 @@ func (p *persister[ID]) persistState(ctx context.Context, txID string, participa
 	}
 
 	if ctx.Err() == nil {
-		err := p.transactionStatePersister.PersistState(ctx, txID, participantID, state)
-		p.errorsStore.add(err)
+		if err := p.transactionStatePersister.PersistState(ctx, txID, participantID, state); err != nil {
+			p.errorsStore.add(err)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "persist state")
+		}
 	}
+}
+
+func persistStateSpan[ID comparable](
+	ctx context.Context,
+	tracer trace.Tracer,
+	txID string,
+	participantID ID,
+	state transaction.State,
+) (context.Context, trace.Span) {
+	var span trace.Span
+	ctx, span = tracer.Start(ctx, "persist-state")
+
+	span.SetAttributes(
+		attribute.String("transaction.id", txID),
+		attribute.String("participant.id", fmt.Sprintf("%v", participantID)),
+		attribute.Int("state", int(state)),
+	)
+
+	return ctx, span
 }
 
 func (p *persister[ID]) stop() error {
