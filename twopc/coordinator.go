@@ -421,7 +421,6 @@ func sendOperationConcurrentlySpan[ID comparable](ctx context.Context, tracer tr
 	ctx, span = tracer.Start(ctx, "sending-operation")
 	span.SetAttributes(
 		attribute.String("participant.id", fmt.Sprintf("%v", op.participantID)),
-		attribute.String("payload", fmt.Sprintf("%v", op.payload)),
 		attribute.Int("state.source", int(op.sourceState)),
 		attribute.Int("state.target", int(op.targetState)),
 	)
