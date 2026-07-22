@@ -360,7 +360,11 @@ func (e executor[ID]) executeRound(
 	return successful, failed, err
 }
 
-func executeRoundSpan[ID comparable](ctx context.Context, tracer trace.Tracer, ops []operation[ID]) (context.Context, trace.Span) {
+func executeRoundSpan[ID comparable](
+	ctx context.Context,
+	tracer trace.Tracer,
+	ops []operation[ID],
+) (context.Context, trace.Span) {
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, "execution-round")
 
