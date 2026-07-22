@@ -77,6 +77,8 @@ github.com/magiconair/properties v1.8.10 h1:s31yESBquKXCV9a/ScB3ESkOjUYYv+X0rg8S
 github.com/magiconair/properties v1.8.10/go.mod h1:Dhd985XPs7jluiymwWYZ0G4Z61jb3vdS329zhj2hYo0=
 github.com/mat-sik/two-phase-commit-go/twopc v1.1.1-0.20260705151949-eb135d313f59 h1:ZgW9+LI/zD1Fgj5yd6q/GAcJoG+lcuA/1Enz9xEreIU=
 github.com/mat-sik/two-phase-commit-go/twopc v1.1.1-0.20260705151949-eb135d313f59/go.mod h1:tk1WWU/YfSYiMnT9LQ+468iwe/IGceC3j6C4UPMgvIY=
+github.com/mat-sik/two-phase-commit-go/twopc v1.1.1-0.20260722200307-a2df23ef477a h1:pwZqEaxa/qmWg2Ee2BzMcYZHl0zTtrF7UZXHdqLin/Y=
+github.com/mat-sik/two-phase-commit-go/twopc v1.1.1-0.20260722200307-a2df23ef477a/go.mod h1:tk1WWU/YfSYiMnT9LQ+468iwe/IGceC3j6C4UPMgvIY=
 github.com/mattn/go-isatty v0.0.21 h1:xYae+lCNBP7QuW4PUnNG61ffM4hVIfm+zUzDuSzYLGs=
 github.com/mattn/go-isatty v0.0.21/go.mod h1:ZXfXG4SQHsB/w3ZeOYbR0PrPwLy+n6xiMrJlRFqopa4=
 github.com/mdelapenya/tlscert v0.2.0 h1:7H81W6Z/4weDvZBNOfQte5GpIMo0lGYEeWbkGp5LJHI=
