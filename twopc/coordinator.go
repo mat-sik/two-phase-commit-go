@@ -281,7 +281,7 @@ func recordOutcome(ctx context.Context, result Result) {
 // Result holds the outcome of a two-phase commit execution.
 // Callers should inspect Outcome first to determine the final transaction state,
 // then check Err for any infrastructure or participant errors that occurred during execution.
-// A non-nil Err does not imply an inconsistent state — for example, a participant may have
+// A non-nil Err does not imply an inconsistent state - for example, a participant may have
 // returned a transient error while the transaction still reached a terminal state.
 type Result struct {
 	outcome Outcome
@@ -310,7 +310,7 @@ const (
 	// OutcomeInconsistent means the transaction did not reach a clean terminal state.
 	// This occurs either when the persisted transaction state could not be read on startup,
 	// or when Execute encounters an unrecoverable infrastructure failure before all participants
-	// could reach the same terminal state — for example, some participants committed while
+	// could reach the same terminal state - for example, some participants committed while
 	// others did not, or some rolled back while others did not.
 	// The caller must invoke Execute again with the same transaction ID to drive all
 	// participants to a terminal state.

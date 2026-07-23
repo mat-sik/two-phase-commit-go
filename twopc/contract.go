@@ -132,6 +132,9 @@ type PreparePayload interface{}
 
 // Client is the interface the coordinator uses to communicate with a single
 // two-phase commit participant. Each method corresponds to one phase message.
+// Endpoints called by these methods must be idempotent, since the coordinator
+// may retry a call after a timeout or transient failure without knowing
+// whether the participant already processed it.
 type Client interface {
 	// PrepareTransaction asks the participant to prepare the given transaction.
 	// payload carries the operation-specific data needed by the participant.
@@ -141,7 +144,7 @@ type Client interface {
 	// prepared transaction. Called only after all participants have voted yes.
 	CommitTransaction(ctx context.Context, transactionID string) error
 	// RollbackTransaction instructs the participant to roll back the previously
-	// prepared (or never-prepared) transaction.
+	// prepared transaction.
 	RollbackTransaction(ctx context.Context, transactionID string) error
 }
 
