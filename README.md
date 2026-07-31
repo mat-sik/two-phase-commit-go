@@ -1,6 +1,6 @@
 # twopc
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/mat-sik/two-phase-commit-go/twopc.svg)](https://pkg.go.dev/github.com/mat-sik/two-phase-commit-go/twopc@v1.1.0)
+[![Go Reference](https://pkg.go.dev/badge/github.com/mat-sik/two-phase-commit-go/twopc.svg)](https://pkg.go.dev/github.com/mat-sik/two-phase-commit-go/twopc@v1.1.1)
 [![CI](https://github.com/mat-sik/two-phase-commit-go/actions/workflows/ci.yaml/badge.svg)](https://github.com/mat-sik/two-phase-commit-go/actions)
 [![License](https://img.shields.io/github/license/mat-sik/two-phase-commit-go)](https://github.com/mat-sik/two-phase-commit-go/blob/main/LICENSE)
 
@@ -25,12 +25,12 @@ The library has OTel traces instrumentation implemented.
 
 ## Docs
 
-Package docs can be found on [`pkg.go.dev`](https://pkg.go.dev/github.com/mat-sik/two-phase-commit-go/twopc@v1.1.0)
+Package docs can be found on [`pkg.go.dev`](https://pkg.go.dev/github.com/mat-sik/two-phase-commit-go/twopc@v1.1.1)
 
 ## Installation
 
 ```bash
-go get github.com/mat-sik/two-phase-commit-go/twopc@v1.1.0
+go get github.com/mat-sik/two-phase-commit-go/twopc@v1.1.1
 ```
 
 Requires Go 1.26.2 or later.
