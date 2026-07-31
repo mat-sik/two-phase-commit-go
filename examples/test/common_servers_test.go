@@ -53,20 +53,11 @@ func localhostAddress(lis net.Listener) string {
 type serverLaunch struct {
 	serverRunner  serverRunner
 	serverStopper serverStopper
-	addr          *string
 }
 
 var noopServerLaunch = serverLaunch{
 	serverRunner:  noopServerRunner,
 	serverStopper: noopServerStopper,
-	addr:          nil,
-}
-
-func (rsr serverLaunch) getAddr() string {
-	if rsr.addr != nil {
-		return *rsr.addr
-	}
-	return ":0"
 }
 
 type serverSpec interface {
