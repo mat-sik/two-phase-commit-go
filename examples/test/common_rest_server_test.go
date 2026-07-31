@@ -9,10 +9,6 @@ import (
 	"github.com/mat-sik/two-phase-commit-go/examples/internal/participant/server"
 )
 
-func restServerLaunches(muxes []*http.ServeMux) []serverLaunch {
-	return mapToServerLaunches(muxes, mapFromMux)
-}
-
 func mapFromMux(mux *http.ServeMux) serverLaunch {
 	srv := server.NewRESTServer(mux)
 	return serverLaunch{

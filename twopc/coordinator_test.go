@@ -856,10 +856,6 @@ func failPrepare() *stubClient {
 	return &stubClient{prepareErr: errPrepare}
 }
 
-func failPrepareAndRollback() *stubClient {
-	return &stubClient{prepareErr: errPrepare, rollbackErr: errRollback}
-}
-
 func failCommit() *stubClient {
 	return &stubClient{commitErr: errCommit}
 }

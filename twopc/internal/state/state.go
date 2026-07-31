@@ -170,22 +170,6 @@ func (s State[ID]) nextTransitions(skipSet stateSet[ID],
 	return newTransitions
 }
 
-func (ss *stateSets[ID]) transactionState(participantID ID) transaction.State {
-	if ss.prepared.has(participantID) {
-		return transaction.Prepared
-	}
-	if ss.prepareFailed.has(participantID) {
-		return transaction.PrepareFailed
-	}
-	if ss.committed.has(participantID) {
-		return transaction.Committed
-	}
-	if ss.rolledBack.has(participantID) {
-		return transaction.RolledBack
-	}
-	return transaction.NotStarted
-}
-
 type stateSet[ID comparable] map[ID]struct{}
 
 func (s stateSet[ID]) add(participantID ID) {
