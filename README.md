@@ -18,6 +18,7 @@ The library has OTel traces instrumentation implemented.
     - [Configuration options](#configuration-options)
     - [Example implementations](#example-implementations)
     - [Runnable example](#runnable-example)
+- [Architecture](#architecture)
 - [Guarantees](#guarantees)
 - [State transitions](#state-transitions)
 - [OTel](#otel)
@@ -45,7 +46,7 @@ A minimal setup needs three interface implementations:
   durably records state transitions as they happen, asynchronously to coordinator work.
 - [`Client`](https://github.com/mat-sik/two-phase-commit-go/blob/main/twopc/contract.go#L135) (used for each
   participant) - issues prepare/commit/rollback operations to a participant; implementations must be idempotent
-  (see [Guarantees](#guarantees)).
+  (see [Guarantees](#guarantees) and [Architecture](#architecture)).
 
 `ID` is a generic type parameter for however you identify participants (a string
 address, a UUID, etc.) - this example uses `string`.
@@ -202,6 +203,16 @@ Example of a request to the test coordinator
   ]
 }
 ```
+
+## Architecture
+
+The library expects the user to implement the [
+`Client`](https://github.com/mat-sik/two-phase-commit-go/blob/main/twopc/contract.go#L135) interface, which has
+three methods - one for each operation: prepare, commit, rollback.
+
+The [example implementations](#example-implementations) provide REST and gRPC clients: REST exposes three
+endpoints, gRPC exposes three RPC methods. The interface is transport-agnostic though - nothing ties it to HTTP or
+gRPC. You could just as well implement it over a raw TCP socket with a custom wire protocol.
 
 ## Guarantees
 
